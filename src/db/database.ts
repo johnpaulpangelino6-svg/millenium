@@ -786,6 +786,51 @@ class MillenniumDatabase {
     return rows as InventoryPart[];
   }
 
+  async addInventoryPart(part: {
+    id: string;
+    partCode: string;
+    name: string;
+    category: string;
+    stockQuantity: number;
+    minThreshold: number;
+    unitCost: number;
+    status: string;
+    lastRestocked: string;
+  }): Promise<InventoryPart> {
+    const now = new Date().toISOString();
+    
+    sqlite.prepare(`
+      INSERT OR REPLACE INTO inventory_parts 
+        (id, part_code, name, category, stock_quantity, min_threshold, unit_cost, status, last_restocked, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      part.id,
+      part.partCode,
+      part.name,
+      part.category,
+      part.stockQuantity,
+      part.minThreshold,
+      part.unitCost,
+      part.status,
+      part.lastRestocked,
+      now
+    );
+
+    const inserted: any = sqlite.prepare('SELECT * FROM inventory_parts WHERE id = ?').get(part.id);
+    return {
+      id: inserted.id,
+      partCode: inserted.part_code,
+      name: inserted.name,
+      category: inserted.category,
+      stockQuantity: inserted.stock_quantity,
+      minThreshold: inserted.min_threshold,
+      unitCost: inserted.unit_cost,
+      status: inserted.status,
+      lastRestocked: inserted.last_restocked,
+      createdAt: inserted.created_at,
+    } as InventoryPart;
+  }
+
   async updatePartStock(id: string, quantity: number): Promise<InventoryPart | null> {
     const part: any = sqlite.prepare('SELECT * FROM inventory_parts WHERE id = ?').get(id);
     if (!part) return null;

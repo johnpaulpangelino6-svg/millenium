@@ -523,6 +523,39 @@ apiRouter.get('/inventory', async (req: Request, res: Response) => {
   }
 });
 
+apiRouter.post('/inventory', async (req: Request, res: Response) => {
+  try {
+    const { partCode, name, category, stockQuantity, minThreshold, unitCost } = req.body;
+    if (!partCode || !name || !category) {
+      return res.status(400).json({ success: false, error: 'Part code, name, and category are required.' });
+    }
+
+    // Generate ID
+    const existingParts = await db.getInventory();
+    const nextNum = existingParts.length + 1;
+    const id = `PART-${String(nextNum).padStart(3, '0')}`;
+
+    const status = (stockQuantity || 0) === 0 ? 'Out of Stock' : 
+                   (stockQuantity || 0) < (minThreshold || 5) ? 'Low Stock' : 'In Stock';
+
+    const newPart = await db.addInventoryPart({
+      id,
+      partCode,
+      name,
+      category,
+      stockQuantity: stockQuantity || 0,
+      minThreshold: minThreshold || 5,
+      unitCost: unitCost || 0,
+      status,
+      lastRestocked: new Date().toISOString().split('T')[0],
+    });
+
+    res.status(201).json({ success: true, data: newPart });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 apiRouter.patch('/inventory/:id/stock', async (req: Request, res: Response) => {
   try {
     const id = getParam(req.params.id);

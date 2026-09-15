@@ -122,10 +122,10 @@ async function seed() {
   let partCount = 0;
   for (const p of parts) {
     try {
-      await db.updatePartStock(p.id, p.stockQuantity);
+      await db.addInventoryPart(p);
       partCount++;
     } catch (err: any) {
-      // Parts might not exist, skip errors
+      // Skip if already exists (INSERT OR REPLACE handles duplicates)
     }
   }
   console.log(`   ✅ ${partCount} inventory parts seeded.\n`);
