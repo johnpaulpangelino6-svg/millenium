@@ -21,6 +21,21 @@ async function seed() {
   console.log('📦 Initializing database schema...');
   db.initSchema();
 
+  // Check if database already has data (idempotent seeding)
+  const existingUsers = await db.getUsers();
+  if (existingUsers.length > 0) {
+    console.log('✅ Database already seeded. Skipping...\n');
+    console.log('============================================');
+    console.log('✅ Database is ready!');
+    console.log('');
+    console.log('   Demo login credentials:');
+    console.log('   Admin      — admin / Admin@2026!');
+    console.log('   Technician — jsantos / Tech@2026!');
+    console.log('   Customer   — abcuniv / School@2026!');
+    console.log('============================================\n');
+    return;
+  }
+
   // ── 2. Seed Users ─────────────────────────────────────────────────────
   console.log('👤 Seeding users...');
   const users = [
