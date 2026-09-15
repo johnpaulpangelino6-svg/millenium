@@ -7,6 +7,7 @@ import { db } from './db/database.js';
 
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+const HOST = process.env.NODE_ENV === 'production' ? '0.0.0.0' : 'localhost';
 
 // Setup CORS & JSON body parsing
 app.use(cors());
@@ -48,13 +49,13 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 // Verify SQLite connection before accepting traffic
 db.testConnection()
   .then(() => {
-    app.listen(PORT, () => {
+    app.listen(PORT, HOST, () => {
       console.log('================================================================');
       console.log('  🌟 MILLENNIUM SMARTBOARD MANAGEMENT SYSTEM');
       console.log('  🏢 Brains Infinite Innovations - Device & Service Platform');
       console.log('================================================================');
-      console.log(`  🌐 Server running at:  http://localhost:${PORT}`);
-      console.log(`  📡 REST API Base:      http://localhost:${PORT}/api`);
+      console.log(`  🌐 Server running at:  http://${HOST}:${PORT}`);
+      console.log(`  📡 REST API Base:      http://${HOST}:${PORT}/api`);
       console.log(`  🗄️  Database Engine:   SQLite (File-based, No XAMPP needed!)`);
       console.log(`  💾 Database File:      data/millennium.db`);
       console.log('================================================================');
