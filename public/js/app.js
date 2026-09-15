@@ -1892,73 +1892,30 @@ function renderMillenniumShowcase() {
             <!-- STANDARD DISPLAY MODES                                     -->
             <!-- ========================================================== -->
 
-            <!-- Mode 1: 4K Ultra High-Definition Home Theater / Forest Scene -->
+            <!-- Mode 1: 4K Ultra High-Definition Home Theater / YouTube Demo -->
             ${curMode === 'theater' && !activeDemo ? `
-              <div class="view-theater ch-${thState.channel}">
-                <div class="theater-sunbeam"></div>
-                <div class="theater-birds-anim" title="3D Visual Realism">🦅🕊️</div>
-
-                <!-- Top Badges Row -->
-                <div style="display:flex;justify-content:space-between;align-items:center;z-index:10;">
-                  <div style="display:flex;gap:8px;align-items:center;">
-                    <span class="theater-badge">${thState.resolution} · 60Hz</span>
-                    <span class="theater-badge" style="color:#34d399;">Dolby Atmos 3D · 98% Voice Clarity</span>
-                  </div>
-
-                  <!-- Optical Anti-Glare Glass Split View Comparison -->
-                  <div class="antiglare-compare-wrap" title="Zero-Bonding Anti-Glare Glass comparison">
-                    <span style="color:#94a3b8;">Anti-Glare:</span>
-                    <input type="range" min="0" max="100" value="${thState.antiGlareSplit}" oninput="setAntiGlareSplit(this.value)" style="width:70px;accent-color:var(--neon-cyan);cursor:pointer;" />
-                    <span style="color:var(--neon-cyan);font-weight:700;">Zero-Gap</span>
-                  </div>
-                </div>
-
-                <!-- Embedded YouTube Demo Video - Full Screen -->
-                <div style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;padding:0;margin:0;">
-                  <iframe 
-                    width="100%" 
-                    height="100%" 
-                    src="https://www.youtube.com/embed/FwzdLd3bSx8?autoplay=1&mute=0&controls=1&rel=0&modestbranding=1" 
-                    title="Millennium Interactive SmartBoard Demo" 
-                    frameborder="0" 
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
-                    allowfullscreen
-                    style="border:none;display:block;">
-                  </iframe>
-                </div>
+              <div class="view-theater ch-${thState.channel}" style="position:relative;width:100%;height:100%;overflow:hidden;">
                 
-                <!-- Video Info Overlay -->
-                <div style="position:absolute;bottom:20px;left:20px;z-index:10;background:rgba(0,0,0,0.75);backdrop-filter:blur(10px);padding:12px 20px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);">
-                  <h3 style="font-family:'Cinzel',serif;font-size:1.2rem;letter-spacing:0.05em;color:#00f2fe;margin:0 0 4px 0;">
+                <!-- Embedded YouTube Demo Video - Full Screen -->
+                <iframe 
+                  width="100%" 
+                  height="100%" 
+                  src="https://www.youtube.com/embed/FwzdLd3bSx8?autoplay=1&mute=0&controls=1&rel=0&modestbranding=1" 
+                  title="Millennium Interactive SmartBoard Demo" 
+                  frameborder="0" 
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+                  allowfullscreen
+                  style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;display:block;object-fit:cover;">
+                </iframe>
+                
+                <!-- Video Info Overlay (Optional - can be hidden) -->
+                <div style="position:absolute;bottom:30px;left:30px;z-index:1000;background:rgba(0,0,0,0.85);backdrop-filter:blur(12px);padding:16px 24px;border-radius:10px;border:1px solid rgba(0,242,254,0.3);box-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                  <h3 style="font-family:'Cinzel',serif;font-size:1.3rem;letter-spacing:0.05em;color:#00f2fe;margin:0 0 6px 0;text-shadow:0 2px 8px rgba(0,242,254,0.5);">
                     MILLENNIUM 4K ULTRA-HD
                   </h3>
-                  <p style="font-size:0.8rem;color:#e2e8f0;margin:0;max-width:400px;">
-                    Watch our official demo: 4K display, wireless casting, interactive touch, and dual OS capabilities.
+                  <p style="font-size:0.85rem;color:#e2e8f0;margin:0;max-width:450px;line-height:1.4;">
+                    Official Demo: 4K display, wireless casting, interactive touch, and dual OS capabilities.
                   </p>
-                </div>
-
-                <!-- Floating Video Player Controls Bar -->
-                <div class="theater-controls-bar">
-                  <button class="play-pause-btn" onclick="toggleTheaterPlay()" title="${thState.playing ? 'Pause' : 'Play'}">
-                    ${thState.playing ? '⏸' : '▶'}
-                  </button>
-
-                  <div class="theater-scrubber-track" onclick="setTheaterScrub(50)">
-                    <div class="theater-scrubber-fill" style="width:${Math.round((thState.timeSeconds / thState.totalSeconds) * 100)}%;"></div>
-                  </div>
-
-                  <span class="theater-timecode" id="theaterTimecode">02:22 / 06:00</span>
-
-                  <div class="theater-channel-pills">
-                    <button class="ch-pill ${thState.channel === 'nature' ? 'active' : ''}" onclick="setTheaterChannel('nature')">🌲 Forest</button>
-                    <button class="ch-pill ${thState.channel === 'anatomy' ? 'active' : ''}" onclick="setTheaterChannel('anatomy')">🔬 Biology</button>
-                    <button class="ch-pill ${thState.channel === 'space' ? 'active' : ''}" onclick="setTheaterChannel('space')">🚀 Nebula</button>
-                  </div>
-
-                  <!-- Audio Spectrum Visualizer Canvas -->
-                  <div class="theater-visualizer-box" title="Real-time Dolby Audio Visualizer">
-                    <canvas id="theaterVisualizerCanvas" width="70" height="18"></canvas>
-                  </div>
                 </div>
 
               </div>
