@@ -122,17 +122,12 @@ async function seed() {
   let partCount = 0;
   for (const p of parts) {
     try {
-      await db.addInventoryPart(p);
+      await db.updatePartStock(p.id, p.stockQuantity);
       partCount++;
     } catch (err: any) {
-      if (err.message?.includes('UNIQUE') || err.code === 'SQLITE_CONSTRAINT_UNIQUE' || err.code === 'SQLITE_CONSTRAINT_PRIMARYKEY') {
-        // Skip duplicate
-      } else {
-        throw err;
-      }
+      // Parts might not exist, skip errors
     }
   }
-  console.log(`   ✅ ${partCount} inventory parts seeded.\n`);
   console.log(`   ✅ ${partCount} inventory parts seeded.\n`);
 
   // ── 6. Seed Service Tickets ───────────────────────────────────────────

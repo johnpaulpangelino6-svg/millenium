@@ -58,7 +58,9 @@ db.testConnection()
       console.log(`  📡 REST API Base:      http://${HOST}:${PORT}/api`);
       console.log(`  🗄️  Database Engine:   SQLite (File-based, No XAMPP needed!)`);
       console.log(`  💾 Database File:      data/millennium.db`);
+       console.log('  * code File:      http://localhost:3000');
       console.log('================================================================');
+      
     });
   })
   .catch((err) => {
