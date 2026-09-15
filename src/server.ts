@@ -7,7 +7,7 @@ import { db } from './db/database.js';
 
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
-const HOST = process.env.NODE_ENV === 'production' ? '0.0.0.0' : 'localhost';
+const HOST = '0.0.0.0'; // Always bind to 0.0.0.0 for deployment
 
 // Setup CORS & JSON body parsing
 app.use(cors());
