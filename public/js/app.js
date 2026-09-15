@@ -1913,13 +1913,27 @@ function renderMillenniumShowcase() {
                   </div>
                 </div>
 
-                <!-- Center Title / Theater Showcase -->
-                <div style="text-align:center;margin:auto 0;z-index:2;">
-                  <h3 style="font-family:'Cinzel',serif;font-size:1.7rem;letter-spacing:0.08em;text-shadow:0 2px 10px rgba(0,0,0,0.8);color:#ffffff;">
+                <!-- Embedded YouTube Demo Video -->
+                <div style="position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center;">
+                  <iframe 
+                    width="95%" 
+                    height="85%" 
+                    src="https://www.youtube.com/embed/FwzdLd3bSx8?autoplay=1&mute=0&controls=1&rel=0&modestbranding=1" 
+                    title="Millennium Interactive SmartBoard Demo" 
+                    frameborder="0" 
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+                    allowfullscreen
+                    style="border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,0.6);">
+                  </iframe>
+                </div>
+                
+                <!-- Video Info Overlay -->
+                <div style="position:absolute;bottom:20px;left:20px;z-index:10;background:rgba(0,0,0,0.75);backdrop-filter:blur(10px);padding:12px 20px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);">
+                  <h3 style="font-family:'Cinzel',serif;font-size:1.2rem;letter-spacing:0.05em;color:#00f2fe;margin:0 0 4px 0;">
                     MILLENNIUM 4K ULTRA-HD
                   </h3>
-                  <p style="font-size:0.85rem;color:#e2e8f0;text-shadow:0 1px 4px rgba(0,0,0,0.9);max-width:460px;margin:6px auto 0;">
-                    4K Ultra High-Definition display for Home theater and classrooms. Zero-gap optical bonding anti-glare glass.
+                  <p style="font-size:0.8rem;color:#e2e8f0;margin:0;max-width:400px;">
+                    Watch our official demo: 4K display, wireless casting, interactive touch, and dual OS capabilities.
                   </p>
                 </div>
 
@@ -3484,14 +3498,9 @@ function renderInventoryView() {
               <span style="font-size: 0.8rem; color: var(--text-muted);">units remaining (Min: ${part.minThreshold})</span>
             </div>
 
-            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; gap: 8px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem;">
               <span>Unit Cost: <strong>₱${part.unitCost.toLocaleString()}</strong></span>
-              ${isAdmin ? `
-                <div style="display: flex; gap: 6px;">
-                  <button class="btn btn-secondary btn-sm" onclick="quickRestockPart('${part.id}', 5)" title="Quick add 5 units">+5</button>
-                  <button class="btn btn-primary btn-sm" onclick="openRestockModal('${part.id}')" title="Choose quantity">📦 Restock</button>
-                </div>
-              ` : `<span class="status-pill ${part.status === 'In Stock' ? 'status-online' : 'status-warning'}" style="font-size:0.72rem;">${part.status}</span>`}
+              ${isAdmin ? `<button class="btn btn-secondary btn-sm" onclick="quickAdjustStock('${part.id}', ${part.stockQuantity + 5})">+5 Restock</button>` : `<span class="status-pill ${part.status === 'In Stock' ? 'status-online' : 'status-warning'}" style="font-size:0.72rem;">${part.status}</span>`}
             </div>
             ${isAdmin ? `
               <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border-subtle,rgba(255,255,255,0.08));">
@@ -6336,132 +6345,3 @@ window.addEventListener('DOMContentLoaded', () => {
   }, 30000);
 });
 
-
-
-// ========================================================================
-// INVENTORY RESTOCK FUNCTIONS
-// ========================================================================
-
-async function openRestockModal(partId) {
-  const part = state.inventory.find(p => p.id === partId);
-  if (!part) {
-    showToast('Part not found', 'error');
-    return;
-  }
-
-  showModal({
-    title: `📦 Restock ${part.name}`,
-    body: `
-      <div style="background: var(--bg-hover); padding: 16px; border-radius: 10px; margin-bottom: 16px; border: 1px solid var(--border-subtle);">
-        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-          <span style="color: var(--text-secondary);">Part Code:</span>
-          <strong>${part.partCode}</strong>
-        </div>
-        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-          <span style="color: var(--text-secondary);">Current Stock:</span>
-          <strong style="color: ${part.stockQuantity < part.minThreshold ? 'var(--warning)' : 'var(--success)'};">${part.stockQuantity} units</strong>
-        </div>
-        <div style="display: flex; justify-content: space-between;">
-          <span style="color: var(--text-secondary);">Minimum Threshold:</span>
-          <strong>${part.minThreshold} units</strong>
-        </div>
-      </div>
-
-      <div style="margin-bottom: 16px;">
-        <label style="display: block; margin-bottom: 8px; font-weight: 600; color: var(--text-primary);">
-          Quantity to Add:
-        </label>
-        <input 
-          type="number" 
-          id="restockQuantity" 
-          class="form-input" 
-          value="10" 
-          min="1" 
-          max="1000"
-          style="width: 100%;"
-          placeholder="Enter quantity to restock"
-        />
-        <div style="display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap;">
-          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('restockQuantity').value = 5">+5</button>
-          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('restockQuantity').value = 10">+10</button>
-          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('restockQuantity').value = 25">+25</button>
-          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('restockQuantity').value = 50">+50</button>
-          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('restockQuantity').value = 100">+100</button>
-        </div>
-      </div>
-
-      <div style="background: rgba(0, 242, 254, 0.1); padding: 12px; border-radius: 8px; border: 1px solid rgba(0, 242, 254, 0.3);">
-        <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 4px;">New Stock After Restock:</div>
-        <div style="font-size: 1.5rem; font-weight: 800; font-family: 'JetBrains Mono'; color: var(--neon-cyan);" id="newStockPreview">
-          ${part.stockQuantity + 10} units
-        </div>
-      </div>
-    `,
-    confirmText: '✅ Confirm Restock',
-    confirmClass: 'btn-success',
-    onConfirm: async () => {
-      const quantity = parseInt(document.getElementById('restockQuantity').value);
-      if (isNaN(quantity) || quantity <= 0) {
-        showToast('Please enter a valid quantity', 'error');
-        return false; // Keep modal open
-      }
-      await restockInventoryPart(partId, quantity);
-      return true; // Close modal
-    }
-  });
-
-  // Add realtime preview update
-  const input = document.getElementById('restockQuantity');
-  if (input) {
-    input.addEventListener('input', () => {
-      const qty = parseInt(input.value) || 0;
-      const preview = document.getElementById('newStockPreview');
-      if (preview) {
-        preview.textContent = `${part.stockQuantity + qty} units`;
-      }
-    });
-  }
-}
-
-async function restockInventoryPart(partId, quantity) {
-  try {
-    const res = await fetch(`${API_BASE}/inventory/${partId}/restock`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ quantity })
-    });
-    const data = await res.json();
-    
-    if (data.success) {
-      showToast(`✅ Successfully restocked ${quantity} units!`, 'success');
-      await fetchAllData();
-      navigateTo('inventory'); // Refresh the inventory view
-    } else {
-      showToast(`❌ ${data.error || 'Failed to restock'}`, 'error');
-    }
-  } catch (e) {
-    showToast('❌ Network error. Could not restock inventory.', 'error');
-    console.error(e);
-  }
-}
-
-async function quickRestockPart(partId, quantity) {
-  try {
-    const res = await fetch(`${API_BASE}/inventory/${partId}/restock`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ quantity })
-    });
-    const data = await res.json();
-    
-    if (data.success) {
-      showToast(`✅ +${quantity} units added!`, 'success');
-      await fetchAllData();
-      navigateTo('inventory');
-    } else {
-      showToast(`❌ ${data.error || 'Failed to restock'}`, 'error');
-    }
-  } catch (e) {
-    showToast('❌ Network error', 'error');
-  }
-}
