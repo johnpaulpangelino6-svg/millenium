@@ -814,6 +814,35 @@ class MillenniumDatabase {
     } as InventoryPart;
   }
 
+  async restockPart(id: string, quantityToAdd: number): Promise<InventoryPart | null> {
+    const part: any = sqlite.prepare('SELECT * FROM inventory_parts WHERE id = ?').get(id);
+    if (!part) return null;
+
+    const newQuantity = part.stock_quantity + quantityToAdd;
+    const status = newQuantity === 0 ? 'Out of Stock' : newQuantity < part.min_threshold ? 'Low Stock' : 'In Stock';
+    const now = new Date().toISOString();
+
+    sqlite.prepare(`
+      UPDATE inventory_parts 
+      SET stock_quantity = ?, status = ?, last_restocked = ?
+      WHERE id = ?
+    `).run(newQuantity, status, now, id);
+
+    const updated: any = sqlite.prepare('SELECT * FROM inventory_parts WHERE id = ?').get(id);
+    return {
+      id: updated.id,
+      partCode: updated.part_code,
+      name: updated.name,
+      category: updated.category,
+      stockQuantity: updated.stock_quantity,
+      minThreshold: updated.min_threshold,
+      unitCost: updated.unit_cost,
+      status: updated.status,
+      lastRestocked: updated.last_restocked,
+      createdAt: updated.created_at,
+    } as InventoryPart;
+  }
+
   async deleteInventoryPart(id: string): Promise<boolean> {
     const result = sqlite.prepare('DELETE FROM inventory_parts WHERE id = ?').run(id);
     return result.changes > 0;

@@ -553,6 +553,23 @@ apiRouter.delete('/inventory/:id', async (req: Request, res: Response) => {
   }
 });
 
+apiRouter.post('/inventory/:id/restock', async (req: Request, res: Response) => {
+  try {
+    const id = getParam(req.params.id);
+    const { quantity } = req.body;
+    if (typeof quantity !== 'number' || quantity <= 0) {
+      return res.status(400).json({ success: false, error: 'Quantity must be a positive number.' });
+    }
+    const updated = await db.restockPart(id, quantity);
+    if (!updated) {
+      return res.status(404).json({ success: false, error: 'Inventory part not found.' });
+    }
+    res.json({ success: true, data: updated, message: `Successfully restocked ${quantity} units.` });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // --- CMS ---
 apiRouter.get('/cms', async (req: Request, res: Response) => {
   try {

@@ -3484,9 +3484,14 @@ function renderInventoryView() {
               <span style="font-size: 0.8rem; color: var(--text-muted);">units remaining (Min: ${part.minThreshold})</span>
             </div>
 
-            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; gap: 8px;">
               <span>Unit Cost: <strong>₱${part.unitCost.toLocaleString()}</strong></span>
-              ${isAdmin ? `<button class="btn btn-secondary btn-sm" onclick="quickAdjustStock('${part.id}', ${part.stockQuantity + 5})">+5 Restock</button>` : `<span class="status-pill ${part.status === 'In Stock' ? 'status-online' : 'status-warning'}" style="font-size:0.72rem;">${part.status}</span>`}
+              ${isAdmin ? `
+                <div style="display: flex; gap: 6px;">
+                  <button class="btn btn-secondary btn-sm" onclick="quickRestockPart('${part.id}', 5)" title="Quick add 5 units">+5</button>
+                  <button class="btn btn-primary btn-sm" onclick="openRestockModal('${part.id}')" title="Choose quantity">📦 Restock</button>
+                </div>
+              ` : `<span class="status-pill ${part.status === 'In Stock' ? 'status-online' : 'status-warning'}" style="font-size:0.72rem;">${part.status}</span>`}
             </div>
             ${isAdmin ? `
               <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border-subtle,rgba(255,255,255,0.08));">
@@ -6331,3 +6336,132 @@ window.addEventListener('DOMContentLoaded', () => {
   }, 30000);
 });
 
+
+
+// ========================================================================
+// INVENTORY RESTOCK FUNCTIONS
+// ========================================================================
+
+async function openRestockModal(partId) {
+  const part = state.inventory.find(p => p.id === partId);
+  if (!part) {
+    showToast('Part not found', 'error');
+    return;
+  }
+
+  showModal({
+    title: `📦 Restock ${part.name}`,
+    body: `
+      <div style="background: var(--bg-hover); padding: 16px; border-radius: 10px; margin-bottom: 16px; border: 1px solid var(--border-subtle);">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+          <span style="color: var(--text-secondary);">Part Code:</span>
+          <strong>${part.partCode}</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+          <span style="color: var(--text-secondary);">Current Stock:</span>
+          <strong style="color: ${part.stockQuantity < part.minThreshold ? 'var(--warning)' : 'var(--success)'};">${part.stockQuantity} units</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between;">
+          <span style="color: var(--text-secondary);">Minimum Threshold:</span>
+          <strong>${part.minThreshold} units</strong>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 16px;">
+        <label style="display: block; margin-bottom: 8px; font-weight: 600; color: var(--text-primary);">
+          Quantity to Add:
+        </label>
+        <input 
+          type="number" 
+          id="restockQuantity" 
+          class="form-input" 
+          value="10" 
+          min="1" 
+          max="1000"
+          style="width: 100%;"
+          placeholder="Enter quantity to restock"
+        />
+        <div style="display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap;">
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('restockQuantity').value = 5">+5</button>
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('restockQuantity').value = 10">+10</button>
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('restockQuantity').value = 25">+25</button>
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('restockQuantity').value = 50">+50</button>
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('restockQuantity').value = 100">+100</button>
+        </div>
+      </div>
+
+      <div style="background: rgba(0, 242, 254, 0.1); padding: 12px; border-radius: 8px; border: 1px solid rgba(0, 242, 254, 0.3);">
+        <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 4px;">New Stock After Restock:</div>
+        <div style="font-size: 1.5rem; font-weight: 800; font-family: 'JetBrains Mono'; color: var(--neon-cyan);" id="newStockPreview">
+          ${part.stockQuantity + 10} units
+        </div>
+      </div>
+    `,
+    confirmText: '✅ Confirm Restock',
+    confirmClass: 'btn-success',
+    onConfirm: async () => {
+      const quantity = parseInt(document.getElementById('restockQuantity').value);
+      if (isNaN(quantity) || quantity <= 0) {
+        showToast('Please enter a valid quantity', 'error');
+        return false; // Keep modal open
+      }
+      await restockInventoryPart(partId, quantity);
+      return true; // Close modal
+    }
+  });
+
+  // Add realtime preview update
+  const input = document.getElementById('restockQuantity');
+  if (input) {
+    input.addEventListener('input', () => {
+      const qty = parseInt(input.value) || 0;
+      const preview = document.getElementById('newStockPreview');
+      if (preview) {
+        preview.textContent = `${part.stockQuantity + qty} units`;
+      }
+    });
+  }
+}
+
+async function restockInventoryPart(partId, quantity) {
+  try {
+    const res = await fetch(`${API_BASE}/inventory/${partId}/restock`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ quantity })
+    });
+    const data = await res.json();
+    
+    if (data.success) {
+      showToast(`✅ Successfully restocked ${quantity} units!`, 'success');
+      await fetchAllData();
+      navigateTo('inventory'); // Refresh the inventory view
+    } else {
+      showToast(`❌ ${data.error || 'Failed to restock'}`, 'error');
+    }
+  } catch (e) {
+    showToast('❌ Network error. Could not restock inventory.', 'error');
+    console.error(e);
+  }
+}
+
+async function quickRestockPart(partId, quantity) {
+  try {
+    const res = await fetch(`${API_BASE}/inventory/${partId}/restock`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ quantity })
+    });
+    const data = await res.json();
+    
+    if (data.success) {
+      showToast(`✅ +${quantity} units added!`, 'success');
+      await fetchAllData();
+      navigateTo('inventory');
+    } else {
+      showToast(`❌ ${data.error || 'Failed to restock'}`, 'error');
+    }
+  } catch (e) {
+    showToast('❌ Network error', 'error');
+  }
+}
