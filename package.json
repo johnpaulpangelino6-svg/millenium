@@ -7,8 +7,7 @@
     "start": "node dist/server.js",
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
-    "db:seed": "node --import tsx/esm src/db/seed.ts",
-    "postinstall": "npm run build"
+    "db:seed": "node --import tsx/esm src/db/seed.ts"
   },
   "dependencies": {
     "@types/better-sqlite3": "^9.6.0",
