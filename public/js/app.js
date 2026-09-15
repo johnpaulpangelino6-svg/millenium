@@ -1913,17 +1913,17 @@ function renderMillenniumShowcase() {
                   </div>
                 </div>
 
-                <!-- Embedded YouTube Demo Video -->
-                <div style="position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center;">
+                <!-- Embedded YouTube Demo Video - Full Screen -->
+                <div style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;padding:0;margin:0;">
                   <iframe 
-                    width="95%" 
-                    height="85%" 
+                    width="100%" 
+                    height="100%" 
                     src="https://www.youtube.com/embed/FwzdLd3bSx8?autoplay=1&mute=0&controls=1&rel=0&modestbranding=1" 
                     title="Millennium Interactive SmartBoard Demo" 
                     frameborder="0" 
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
                     allowfullscreen
-                    style="border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,0.6);">
+                    style="border:none;display:block;">
                   </iframe>
                 </div>
                 
