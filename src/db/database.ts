@@ -946,7 +946,7 @@ class MillenniumDatabase {
       temperatureC: alert.temperature_c,
       uptimeHours: alert.uptime_hours,
       recommendedAction: alert.recommended_action,
-      createdAt: alert.created_at,
+      timestamp: alert.created_at,
     } as PredictiveAlert;
   }
 
@@ -979,21 +979,52 @@ class MillenniumDatabase {
   async getDashboardStats(): Promise<DashboardStats> {
     const devices = await this.getDevices();
     const tickets = await this.getTickets();
-    const inventory = await this.getInventory();
-    const alerts = await this.getPredictiveAlerts();
+    const customers = await this.getCustomers();
+
+    const onlineDevices = devices.filter((d) => d.status === 'online').length;
+    const offlineDevices = devices.filter((d) => d.status === 'offline').length;
+    const problemDevices = devices.filter((d) => d.status === 'warning' || d.status === 'maintenance').length;
+    const pendingRepairs = tickets.filter((t) => t.status !== 'Resolved' && t.status !== 'Closed').length;
+
+    // Count devices by model
+    const modelCounts: Record<string, number> = {};
+    devices.forEach(d => {
+      modelCounts[d.model] = (modelCounts[d.model] || 0) + 1;
+    });
+
+    const popularModels = Object.entries(modelCounts).map(([model, count]) => ({
+      model,
+      count,
+      percentage: parseFloat(((count / devices.length) * 100).toFixed(1))
+    })).sort((a, b) => b.count - a.count);
+
+    // Count ticket categories
+    const categoryCounts: Record<string, number> = {};
+    tickets.forEach(t => {
+      categoryCounts[t.category] = (categoryCounts[t.category] || 0) + 1;
+    });
+
+    const commonProblems = Object.entries(categoryCounts).map(([category, count]) => ({
+      category,
+      percentage: parseFloat(((count / Math.max(tickets.length, 1)) * 100).toFixed(0))
+    })).sort((a, b) => b.percentage - a.percentage);
+
+    // Calculate fleet health score (simplified)
+    const healthScore = devices.length > 0 
+      ? parseFloat((((onlineDevices / devices.length) * 100)).toFixed(1))
+      : 100;
 
     return {
-      totalDevices: devices.length,
-      onlineDevices: devices.filter((d) => d.status === 'online').length,
-      offlineDevices: devices.filter((d) => d.status === 'offline').length,
-      warningDevices: devices.filter((d) => d.status === 'warning').length,
-      openTickets: tickets.filter((t) => t.status !== 'Resolved' && t.status !== 'Closed').length,
-      resolvedTickets: tickets.filter((t) => t.status === 'Resolved' || t.status === 'Closed').length,
-      criticalTickets: tickets.filter((t) => t.priority === 'Critical' && t.status !== 'Resolved').length,
-      lowStockParts: inventory.filter((i) => i.status === 'Low Stock' || i.status === 'Out of Stock').length,
-      predictiveAlerts: alerts.length,
-      avgResponseTime: '4.2 hours',
-      warrantyExpiringCount: 2,
+      onlineDevices,
+      offlineDevices,
+      problemDevices,
+      pendingRepairs,
+      unitsSold: devices.length,
+      schoolsCount: customers.filter(c => c.clientType === 'school').length,
+      corporateCount: customers.filter(c => c.clientType === 'corporate').length,
+      fleetHealthScore: healthScore,
+      popularModels,
+      commonProblems,
     };
   }
 }
