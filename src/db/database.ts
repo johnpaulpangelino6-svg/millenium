@@ -157,6 +157,8 @@ class MillenniumDatabase {
         status TEXT DEFAULT 'Under Warranty',
         coverage_type TEXT DEFAULT 'Standard Warranty',
         days_remaining INTEGER DEFAULT 730,
+        created_by_user_id TEXT DEFAULT '',
+        created_by_user_name TEXT DEFAULT '',
         created_at TEXT DEFAULT (datetime('now')),
         FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE
       );
@@ -177,7 +179,10 @@ class MillenniumDatabase {
         priority TEXT DEFAULT 'Medium' CHECK(priority IN ('Low', 'Medium', 'High', 'Critical')),
         status TEXT DEFAULT 'Received' CHECK(status IN ('Received', 'Diagnosing', 'Repairing', 'Resolved', 'Closed')),
         assigned_technician TEXT DEFAULT 'Unassigned',
+        assigned_technician_id TEXT DEFAULT '',
         technician_notes TEXT DEFAULT '',
+        created_by_user_id TEXT DEFAULT '',
+        created_by_user_name TEXT DEFAULT '',
         warranty_covered INTEGER DEFAULT 1,
         created_at TEXT DEFAULT (datetime('now')),
         updated_at TEXT DEFAULT (datetime('now')),
@@ -536,14 +541,17 @@ class MillenniumDatabase {
 
     sqlite.prepare(`
       INSERT INTO warranties (id, device_id, device_model, customer_name, purchase_date, 
-                              warranty_years, expiry_date, status, coverage_type, days_remaining)
-      VALUES (?,?,?,?,?,2,?,?,?,?)
+                              warranty_years, expiry_date, status, coverage_type, days_remaining,
+                              created_by_user_id, created_by_user_name)
+      VALUES (?,?,?,?,?,2,?,?,?,?,?,?)
     `).run(
       warrantyId, data.id, data.model, data.customerName, purchaseDate,
       expiryDate.toISOString().split('T')[0],
       daysRemaining > 0 ? 'Under Warranty' : 'Warranty Expired',
       'Comprehensive On-Site Hardware & OPS Coverage',
-      daysRemaining
+      daysRemaining,
+      data.createdByUserId || '',
+      data.createdByUserName || 'System'
     );
 
     return this.getDeviceById(data.id) as Promise<Device>;
@@ -627,7 +635,9 @@ class MillenniumDatabase {
       SELECT id, ticket_number as ticketNumber, device_id as deviceId, device_model as deviceModel,
              customer_id as customerId, customer_name as customerName, title, description,
              category, priority, status, assigned_technician as assignedTechnician,
+             assigned_technician_id as assignedTechnicianId,
              technician_notes as technicianNotes, warranty_covered as warrantyCovered,
+             created_by_user_id as createdByUserId, created_by_user_name as createdByUserName,
              created_at as createdAt, updated_at as updatedAt, resolved_at as resolvedAt
       FROM service_tickets
       ORDER BY created_at DESC
@@ -685,14 +695,19 @@ class MillenniumDatabase {
     sqlite.prepare(`
       INSERT INTO service_tickets (
         id, ticket_number, device_id, device_model, customer_id, customer_name,
-        title, description, category, priority, status, assigned_technician,
-        technician_notes, warranty_covered, created_at, updated_at
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        title, description, category, priority, status, assigned_technician, assigned_technician_id,
+        technician_notes, warranty_covered, created_by_user_id, created_by_user_name,
+        created_at, updated_at
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `).run(
       id, ticketNumber, data.deviceId, data.deviceModel, data.customerId, data.customerName,
       data.title, data.description, data.category, data.priority, data.status || 'Received',
-      data.assignedTechnician || 'Unassigned', data.technicianNotes || 'Ticket logged.',
-      data.warrantyCovered ? 1 : 0, now, now
+      data.assignedTechnician || 'Unassigned', data.assignedTechnicianId || '',
+      data.technicianNotes || 'Ticket logged.',
+      data.warrantyCovered ? 1 : 0,
+      data.createdByUserId || '',
+      data.createdByUserName || 'System',
+      now, now
     );
 
     return this.getTicketById(id) as Promise<ServiceTicket>;
@@ -750,7 +765,9 @@ class MillenniumDatabase {
     const rows = sqlite.prepare(`
       SELECT id, device_id as deviceId, device_model as deviceModel, customer_name as customerName,
              purchase_date as purchaseDate, warranty_years as warrantyYears, expiry_date as expiryDate,
-             status, coverage_type as coverageType, days_remaining as daysRemaining, created_at as createdAt
+             status, coverage_type as coverageType, days_remaining as daysRemaining,
+             created_by_user_id as createdByUserId, created_by_user_name as createdByUserName,
+             created_at as createdAt
       FROM warranties
       ORDER BY expiry_date DESC
     `).all();
@@ -762,6 +779,9 @@ class MillenniumDatabase {
     const row = sqlite.prepare(`
       SELECT id, device_id as deviceId, device_model as deviceModel, customer_name as customerName,
              purchase_date as purchaseDate, warranty_years as warrantyYears, expiry_date as expiryDate,
+             status, coverage_type as coverageType, days_remaining as daysRemaining,
+             created_by_user_id as createdByUserId, created_by_user_name as createdByUserName,
+             created_at as createdAt
              status, coverage_type as coverageType, days_remaining as daysRemaining, created_at as createdAt
       FROM warranties
       WHERE device_id = ?
