@@ -21,10 +21,64 @@
   </div>
 
   <!-- ============================================================ -->
+  <!-- DEVICE SELECTION LANDING PAGE -->
+  <!-- ============================================================ -->
+  <div class="device-selection-overlay" id="deviceSelectionOverlay">
+    <div class="device-selection-container">
+      <!-- Logo and Title -->
+      <div class="device-selection-header">
+        <div class="brains-emblem-box-large" title="Brains Infinite Innovations Inc.">
+          <img src="/images/brains-logo.svg" alt="Brains Infinite Innovations" style="width: 100%; height: 100%; object-fit: contain; padding: 8px;" />
+        </div>
+        <h1 class="device-selection-title">
+          <span class="device-title-brand">MILLENNIUM</span>
+          <span class="device-title-model">SMARTBOARD</span>
+        </h1>
+        <p class="device-selection-subtitle">Choose Your Device Layout</p>
+      </div>
+
+      <!-- Device Options -->
+      <div class="device-options-grid">
+        <!-- Desktop Option -->
+        <button class="device-option-card" onclick="selectDevice('desktop')">
+          <div class="device-option-icon desktop-icon">
+            <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+              <line x1="8" y1="21" x2="16" y2="21"/>
+              <line x1="12" y1="17" x2="12" y2="21"/>
+            </svg>
+          </div>
+          <h2 class="device-option-title">Desktop</h2>
+          <p class="device-option-desc">Full-featured dashboard with advanced controls and multi-panel layout</p>
+          <div class="device-option-badge">Recommended</div>
+        </button>
+
+        <!-- Mobile Option -->
+        <button class="device-option-card" onclick="selectDevice('mobile')">
+          <div class="device-option-icon mobile-icon">
+            <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
+              <line x1="12" y1="18" x2="12.01" y2="18"/>
+            </svg>
+          </div>
+          <h2 class="device-option-title">Mobile</h2>
+          <p class="device-option-desc">Optimized touch interface for smartphones and tablets</p>
+          <div class="device-option-badge mobile-badge">Touch-Friendly</div>
+        </button>
+      </div>
+
+      <!-- Footer Info -->
+      <div class="device-selection-footer">
+        <p>Powered by <strong>Brains Infinite Innovations Inc.</strong></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
   <!-- ============================================================ -->
   <!-- AUTH PORTAL OVERLAY — Modern Scrollable Portal with Top Nav -->
   <!-- ============================================================ -->
-  <div class="auth-portal-overlay" id="authPortalOverlay">
+  <div class="auth-portal-overlay" id="authPortalOverlay" style="display: none;">
     <!-- Futuristic Ambient Light Grid & Cyber Accents -->
     <div class="auth-ambient-grid" aria-hidden="true"></div>
 
