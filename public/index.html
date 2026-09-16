@@ -88,21 +88,176 @@
     <!-- Scrollable Content Container -->
     <div class="auth-scrollable-container">
       
-      <!-- Interactive Board Demo Section -->
-      <section class="auth-demo-section">
-        <div class="auth-demo-header">
-          <h2 class="auth-demo-title">Experience the Millennium Interactive SmartBoard</h2>
-          <p class="auth-demo-subtitle">Watch our 4K demonstration of the world's most advanced collaboration technology</p>
+      <!-- Hardware Showcase & System Information Section -->
+      <section class="auth-showcase-section">
+        <!-- Brand Header with Neural Emblem & Company Pill -->
+        <div class="auth-showcase-brand-row">
+          <div class="auth-showcase-emblem" title="Brains Infinite Innovations Inc.">
+            <svg width="44" height="44" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <linearGradient id="showcaseBrainsGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#00f2fe"/>
+                  <stop offset="50%" stop-color="#a855f7"/>
+                  <stop offset="100%" stop-color="#ec4899"/>
+                </linearGradient>
+                <filter id="showcaseBrainsGlow" x="-25%" y="-25%" width="150%" height="150%">
+                  <feGaussianBlur stdDeviation="4" result="blur"/>
+                  <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+                </filter>
+              </defs>
+              <line x1="30" y1="50" x2="50" y2="30" stroke="url(#showcaseBrainsGrad)" stroke-width="3.5" stroke-opacity="0.85"/>
+              <line x1="50" y1="30" x2="70" y2="45" stroke="url(#showcaseBrainsGrad)" stroke-width="3.5" stroke-opacity="0.85"/>
+              <line x1="30" y1="50" x2="45" y2="70" stroke="url(#showcaseBrainsGrad)" stroke-width="3.5" stroke-opacity="0.85"/>
+              <line x1="45" y1="70" x2="70" y2="65" stroke="url(#showcaseBrainsGrad)" stroke-width="3.5" stroke-opacity="0.85"/>
+              <line x1="70" y1="45" x2="70" y2="65" stroke="url(#showcaseBrainsGrad)" stroke-width="3.5" stroke-opacity="0.85"/>
+              <line x1="50" y1="30" x2="45" y2="70" stroke="url(#showcaseBrainsGrad)" stroke-width="2" stroke-dasharray="4 4" stroke-opacity="0.5"/>
+              <line x1="30" y1="50" x2="70" y2="65" stroke="url(#showcaseBrainsGrad)" stroke-width="2" stroke-dasharray="4 4" stroke-opacity="0.5"/>
+              <circle cx="30" cy="50" r="8" fill="#00f2fe" filter="url(#showcaseBrainsGlow)"/>
+              <circle cx="50" cy="30" r="9" fill="#a855f7" filter="url(#showcaseBrainsGlow)"/>
+              <circle cx="70" cy="45" r="8.5" fill="#ec4899" filter="url(#showcaseBrainsGlow)"/>
+              <circle cx="45" cy="70" r="7.5" fill="#00f2fe" filter="url(#showcaseBrainsGlow)"/>
+              <circle cx="70" cy="65" r="7" fill="#a855f7" filter="url(#showcaseBrainsGlow)"/>
+              <circle cx="52" cy="52" r="5" fill="#ffffff" filter="url(#showcaseBrainsGlow)"/>
+            </svg>
+          </div>
+          <div class="auth-corp-pill">
+            <span class="auth-corp-dot"></span>
+            <span>Brains Infinite Innovations Inc.</span>
+          </div>
         </div>
-        <div class="auth-demo-video-wrapper">
-          <iframe 
-            src="https://www.youtube.com/embed/FwzdLd3bSx8?autoplay=0&mute=0&controls=1&modestbranding=1&rel=0" 
-            title="Millennium SmartBoard Interactive Demo" 
-            frameborder="0" 
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
-            allowfullscreen
-            class="auth-demo-iframe">
-          </iframe>
+
+        <!-- Name Title of Millennium & Tagline -->
+        <div class="auth-hero-title-group">
+          <div class="auth-kicker-tag">FLAGSHIP INSTITUTIONAL ECOSYSTEM</div>
+          <h1 class="auth-hero-title">
+            <span class="auth-title-brand">MILLENNIUM</span>
+            <span class="auth-title-model">INTERACTIVE SMARTBOARD</span>
+          </h1>
+          <div class="auth-hero-tagline">
+            The Start <span class="script-of">of</span> Modern Day Technology
+          </div>
+          <p class="auth-hero-desc">
+            Next-generation enterprise collaboration, 4K digital pedagogy, and centralized IoT fleet intelligence. Engineered for universities, hospitals, corporate boardrooms, and smart schools.
+          </p>
+        </div>
+
+        <!-- 4 Core Millennium Feature Highlight Cards -->
+        <div class="auth-features-grid">
+          <div class="auth-feat-card">
+            <div class="auth-feat-icon-box cyan">
+              <span>🖥️</span>
+            </div>
+            <div class="auth-feat-body">
+              <div class="auth-feat-title">4K Ultra HD Anti-Glare Display</div>
+              <div class="auth-feat-desc">86", 75", 65" 3840×2160 native panel, 99% DCI-P3 color gamut, zero-gap optical bonding &amp; 4mm toughened safety glass.</div>
+            </div>
+          </div>
+
+          <div class="auth-feat-card">
+            <div class="auth-feat-icon-box purple">
+              <span>⚡</span>
+            </div>
+            <div class="auth-feat-body">
+              <div class="auth-feat-title">Modular Intel Core i7 OPS (Dual OS)</div>
+              <div class="auth-feat-title-sub">Windows 11 Pro + Android 13 Millennium OS</div>
+              <div class="auth-feat-desc">Hot-swappable JAE 80-pin Intel Core i7-12700 CPU, 16GB DDR4 RAM, and 512GB NVMe PCIe SSD architecture.</div>
+            </div>
+          </div>
+
+          <div class="auth-feat-card">
+            <div class="auth-feat-icon-box emerald">
+              <span>🎙️</span>
+            </div>
+            <div class="auth-feat-body">
+              <div class="auth-feat-title">8-Meter Sensitive Audio Pickup Radar</div>
+              <div class="auth-feat-desc">360° omnidirectional microphone array with AI acoustic echo cancellation &amp; ambient room noise suppression.</div>
+            </div>
+          </div>
+
+          <div class="auth-feat-card">
+            <div class="auth-feat-icon-box magenta">
+              <span>📡</span>
+            </div>
+            <div class="auth-feat-body">
+              <div class="auth-feat-title">4-Split Screen Wireless Casting &amp; Touch</div>
+              <div class="auth-feat-desc">Simultaneous wireless screen projection from Windows, Mac, iPad, and Android with ultra-low &lt;6ms touch response.</div>
+            </div>
+          </div>
+
+          <div class="auth-feat-card">
+            <div class="auth-feat-icon-box gold">
+              <span>✍️</span>
+            </div>
+            <div class="auth-feat-body">
+              <div class="auth-feat-title">Dual-Tip Magnetic Passive Stylus</div>
+              <div class="auth-feat-desc">2mm ultra-fine tip precision writing and drawing. Pressure-sensitive with palm rejection technology for natural note-taking experience.</div>
+            </div>
+          </div>
+
+          <div class="auth-feat-card">
+            <div class="auth-feat-icon-box blue">
+              <span>🎥</span>
+            </div>
+            <div class="auth-feat-body">
+              <div class="auth-feat-title">4K AI Auto-Framing Camera</div>
+              <div class="auth-feat-desc">Intelligent face tracking and speaker detection for video conferencing. Works seamlessly with Zoom, Teams, and Google Meet.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Hardware Telemetry HUD Strip -->
+        <div class="auth-telemetry-strip">
+          <div class="auth-tele-item">
+            <span class="auth-tele-label">SYSTEM UPTIME</span>
+            <span class="auth-tele-val text-cyan">99.85% SLA</span>
+          </div>
+          <div class="auth-tele-item">
+            <span class="auth-tele-label">FLEET STATUS</span>
+            <span class="auth-tele-val text-emerald">● ALL NODES OK</span>
+          </div>
+          <div class="auth-tele-item">
+            <span class="auth-tele-label">NETWORK</span>
+            <span class="auth-tele-val text-purple">Wi-Fi 6 · BT 5.2</span>
+          </div>
+          <div class="auth-tele-item">
+            <span class="auth-tele-label">OPS CPU</span>
+            <span class="auth-tele-val text-gold">i7 12-Core 4.9GHz</span>
+          </div>
+        </div>
+
+        <!-- Demo Video -->
+        <div class="auth-demo-video-section">
+          <div class="auth-demo-video-header">
+            <h3 class="auth-demo-video-title">Watch Interactive Demo</h3>
+            <p class="auth-demo-video-subtitle">See the Millennium SmartBoard in action</p>
+          </div>
+          <div class="auth-demo-video-wrapper">
+            <iframe 
+              src="https://www.youtube.com/embed/FwzdLd3bSx8?autoplay=0&mute=0&controls=1&modestbranding=1&rel=0" 
+              title="Millennium SmartBoard Interactive Demo" 
+              frameborder="0" 
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+              allowfullscreen
+              class="auth-demo-iframe">
+            </iframe>
+          </div>
+        </div>
+
+        <!-- Philippine Headquarters Details & Contacts -->
+        <div class="auth-showcase-footer">
+          <div class="auth-contact-row">
+            <span class="auth-contact-icon">📍</span>
+            <span>Suite 1004 Atlanta Center, 31 Annapolis St., Greenhills, San Juan City Philippines</span>
+          </div>
+          <div class="auth-contact-row">
+            <span class="auth-contact-icon">✉️</span>
+            <a href="mailto:info@brains.asia">info@brains.asia</a>
+            <span class="auth-contact-sep">·</span>
+            <span class="auth-contact-icon">📞</span>
+            <a href="tel:+639755826830">+63 975 582 6830</a>
+            <span class="auth-contact-sep">·</span>
+            <a href="tel:+639815409835">+63 981 540 9835</a>
+          </div>
         </div>
       </section>
 
@@ -111,6 +266,143 @@
 
       <!-- ============================================================ -->
       <!-- CENTERED LOGIN & REGISTRATION FORM                           -->
+      <!-- ============================================================ -->
+      <section class="auth-showcase-panel" aria-label="Millennium Interactive SmartBoard Overview">
+        <!-- Brand Header with Neural Emblem & Company Pill -->
+        <div class="auth-showcase-brand-row">
+          <div class="auth-showcase-emblem" title="Brains Infinite Innovations Inc.">
+            <svg width="44" height="44" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <linearGradient id="authBrainsGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#00f2fe"/>
+                  <stop offset="50%" stop-color="#a855f7"/>
+                  <stop offset="100%" stop-color="#ec4899"/>
+                </linearGradient>
+                <filter id="authBrainsGlow" x="-25%" y="-25%" width="150%" height="150%">
+                  <feGaussianBlur stdDeviation="4" result="blur"/>
+                  <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+                </filter>
+              </defs>
+              <line x1="30" y1="50" x2="50" y2="30" stroke="url(#authBrainsGrad)" stroke-width="3.5" stroke-opacity="0.85"/>
+              <line x1="50" y1="30" x2="70" y2="45" stroke="url(#authBrainsGrad)" stroke-width="3.5" stroke-opacity="0.85"/>
+              <line x1="30" y1="50" x2="45" y2="70" stroke="url(#authBrainsGrad)" stroke-width="3.5" stroke-opacity="0.85"/>
+              <line x1="45" y1="70" x2="70" y2="65" stroke="url(#authBrainsGrad)" stroke-width="3.5" stroke-opacity="0.85"/>
+              <line x1="70" y1="45" x2="70" y2="65" stroke="url(#authBrainsGrad)" stroke-width="3.5" stroke-opacity="0.85"/>
+              <line x1="50" y1="30" x2="45" y2="70" stroke="url(#authBrainsGrad)" stroke-width="2" stroke-dasharray="4 4" stroke-opacity="0.5"/>
+              <line x1="30" y1="50" x2="70" y2="65" stroke="url(#authBrainsGrad)" stroke-width="2" stroke-dasharray="4 4" stroke-opacity="0.5"/>
+              <circle cx="30" cy="50" r="8" fill="#00f2fe" filter="url(#authBrainsGlow)"/>
+              <circle cx="50" cy="30" r="9" fill="#a855f7" filter="url(#authBrainsGlow)"/>
+              <circle cx="70" cy="45" r="8.5" fill="#ec4899" filter="url(#authBrainsGlow)"/>
+              <circle cx="45" cy="70" r="7.5" fill="#00f2fe" filter="url(#authBrainsGlow)"/>
+              <circle cx="70" cy="65" r="7" fill="#a855f7" filter="url(#authBrainsGlow)"/>
+              <circle cx="52" cy="52" r="5" fill="#ffffff" filter="url(#authBrainsGlow)"/>
+            </svg>
+          </div>
+          <div class="auth-corp-pill">
+            <span class="auth-corp-dot"></span>
+            <span>Brains Infinite Innovations Inc.</span>
+          </div>
+        </div>
+
+        <!-- Name Title of Millennium & Tagline -->
+        <div class="auth-hero-title-group">
+          <div class="auth-kicker-tag">FLAGSHIP INSTITUTIONAL ECOSYSTEM</div>
+          <h1 class="auth-hero-title">
+            <span class="auth-title-brand">MILLENNIUM</span>
+            <span class="auth-title-model">INTERACTIVE SMARTBOARD</span>
+          </h1>
+          <div class="auth-hero-tagline">
+            The Start <span class="script-of">of</span> Modern Day Technology
+          </div>
+          <p class="auth-hero-desc">
+            Next-generation enterprise collaboration, 4K digital pedagogy, and centralized IoT fleet intelligence. Engineered for universities, hospitals, corporate boardrooms, and smart schools.
+          </p>
+        </div>
+
+        <!-- 4 Core Millennium Feature Highlight Cards -->
+        <div class="auth-features-grid">
+          <div class="auth-feat-card">
+            <div class="auth-feat-icon-box cyan">
+              <span>🖥️</span>
+            </div>
+            <div class="auth-feat-body">
+              <div class="auth-feat-title">4K Ultra HD Anti-Glare Display</div>
+              <div class="auth-feat-desc">86", 75", 65" 3840×2160 native panel, 99% DCI-P3 color gamut, zero-gap optical bonding &amp; 4mm toughened safety glass.</div>
+            </div>
+          </div>
+
+          <div class="auth-feat-card">
+            <div class="auth-feat-icon-box purple">
+              <span>⚡</span>
+            </div>
+            <div class="auth-feat-body">
+              <div class="auth-feat-title">Modular Intel Core i7 OPS (Dual OS)</div>
+              <div class="auth-feat-title-sub">Windows 11 Pro + Android 13 Millennium OS</div>
+              <div class="auth-feat-desc">Hot-swappable JAE 80-pin Intel Core i7-12700 CPU, 16GB DDR4 RAM, and 512GB NVMe PCIe SSD architecture.</div>
+            </div>
+          </div>
+
+          <div class="auth-feat-card">
+            <div class="auth-feat-icon-box emerald">
+              <span>🎙️</span>
+            </div>
+            <div class="auth-feat-body">
+              <div class="auth-feat-title">8-Meter Sensitive Audio Pickup Radar</div>
+              <div class="auth-feat-desc">360° omnidirectional microphone array with AI acoustic echo cancellation &amp; ambient room noise suppression.</div>
+            </div>
+          </div>
+
+          <div class="auth-feat-card">
+            <div class="auth-feat-icon-box magenta">
+              <span>📡</span>
+            </div>
+            <div class="auth-feat-body">
+              <div class="auth-feat-title">4-Split Screen Wireless Casting &amp; Touch</div>
+              <div class="auth-feat-desc">Simultaneous wireless screen projection from Windows, Mac, iPad, and Android with ultra-low &lt;6ms touch response.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Hardware Telemetry HUD Strip -->
+        <div class="auth-telemetry-strip">
+          <div class="auth-tele-item">
+            <span class="auth-tele-label">SYSTEM UPTIME</span>
+            <span class="auth-tele-val text-cyan">99.85% SLA</span>
+          </div>
+          <div class="auth-tele-item">
+            <span class="auth-tele-label">FLEET STATUS</span>
+            <span class="auth-tele-val text-emerald">● ALL NODES OK</span>
+          </div>
+          <div class="auth-tele-item">
+            <span class="auth-tele-label">NETWORK</span>
+            <span class="auth-tele-val text-purple">Wi-Fi 6 · BT 5.2</span>
+          </div>
+          <div class="auth-tele-item">
+            <span class="auth-tele-label">OPS CPU</span>
+            <span class="auth-tele-val text-gold">i7 12-Core 4.9GHz</span>
+          </div>
+        </div>
+
+        <!-- Philippine Headquarters Details & Contacts -->
+        <div class="auth-showcase-footer">
+          <div class="auth-contact-row">
+            <span class="auth-contact-icon">📍</span>
+            <span>Suite 1004 Atlanta Center, 31 Annapolis St., Greenhills, San Juan City Philippines</span>
+          </div>
+          <div class="auth-contact-row">
+            <span class="auth-contact-icon">✉️</span>
+            <a href="mailto:info@brains.asia">info@brains.asia</a>
+            <span class="auth-contact-sep">·</span>
+            <span class="auth-contact-icon">📞</span>
+            <a href="tel:+639755826830">+63 975 582 6830</a>
+            <span class="auth-contact-sep">·</span>
+            <a href="tel:+639815409835">+63 981 540 9835</a>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================ -->
+      <!-- RIGHT SIDE: LOGIN & REGISTRATION ACCESS CARD                   -->
       <!-- ============================================================ -->
       <div class="auth-portal-card" id="authPortalCard">
 
