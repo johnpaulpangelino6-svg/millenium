@@ -6798,34 +6798,290 @@ body.layout-mobile .app-sidebar {
 body.layout-mobile .app-main {
   margin-left: 0;
   width: 100%;
+  padding: 0;
 }
 
 body.layout-mobile .app-header {
   left: 0;
   width: 100%;
+  position: relative;
+  height: auto;
+  padding: 12px 16px;
+}
+
+body.layout-mobile .brand-text-container {
+  flex-direction: column;
+  gap: 4px;
+}
+
+body.layout-mobile .millennium-word {
+  font-size: 1.2rem;
+  letter-spacing: 2px;
+}
+
+body.layout-mobile .brand-tagline {
+  font-size: 0.7rem;
+}
+
+body.layout-mobile .hw-specs-pill,
+body.layout-mobile .system-status-pill {
+  display: none;
+}
+
+body.layout-mobile .role-switcher-box {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+body.layout-mobile .role-switcher-box select {
+  font-size: 0.85rem;
+  padding: 6px 10px;
+}
+
+body.layout-mobile .theme-toggle-btn {
+  width: 32px;
+  height: 32px;
 }
 
 body.layout-mobile .stat-cards-grid {
   grid-template-columns: 1fr;
+  gap: 12px;
+  padding: 12px;
+}
+
+body.layout-mobile .stat-card {
+  padding: 16px;
 }
 
 body.layout-mobile .dash-cabinets-grid {
   grid-template-columns: 1fr;
+  padding: 12px;
+  gap: 12px;
+}
+
+body.layout-mobile .cabinet-panel {
+  padding: 12px;
 }
 
 body.layout-mobile .data-table-wrapper {
-  overflow-x: scroll;
+  overflow-x: auto;
   -webkit-overflow-scrolling: touch;
+}
+
+body.layout-mobile .data-table {
+  min-width: 600px;
+  font-size: 0.85rem;
 }
 
 body.layout-mobile .kanban-board {
   grid-template-columns: 1fr;
-  overflow-x: scroll;
+  overflow-x: auto;
+  gap: 12px;
 }
 
 body.layout-mobile .filter-bar {
   flex-direction: column;
   gap: 12px;
+  padding: 12px;
+}
+
+body.layout-mobile .page-header-row {
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  align-items: flex-start;
+}
+
+body.layout-mobile .page-title {
+  font-size: 1.5rem;
+}
+
+body.layout-mobile .btn {
+  width: 100%;
+  justify-content: center;
+}
+
+body.layout-mobile .btn-group {
+  flex-direction: column;
+  width: 100%;
+}
+
+body.layout-mobile .glass-panel {
+  padding: 16px;
+  margin: 12px;
+}
+
+body.layout-mobile .modal-content {
+  width: 95%;
+  max-width: 100%;
+  margin: 20px;
+}
+
+body.layout-mobile .form-group {
+  flex-direction: column;
+}
+
+body.layout-mobile .form-group label {
+  width: 100%;
+}
+
+body.layout-mobile .form-group input,
+body.layout-mobile .form-group select,
+body.layout-mobile .form-group textarea {
+  width: 100%;
+}
+
+/* Mobile Login Page Adjustments */
+body.layout-mobile .auth-portal-overlay {
+  padding: 0;
+}
+
+body.layout-mobile .auth-top-nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+body.layout-mobile .auth-nav-container {
+  padding: 12px 16px;
+  flex-direction: column;
+  gap: 12px;
+}
+
+body.layout-mobile .auth-nav-brand {
+  justify-content: center;
+}
+
+body.layout-mobile .auth-nav-title {
+  font-size: 0.9rem;
+}
+
+body.layout-mobile .auth-nav-subtitle {
+  font-size: 0.7rem;
+}
+
+body.layout-mobile .auth-nav-actions {
+  width: 100%;
+  gap: 8px;
+}
+
+body.layout-mobile .auth-nav-btn {
+  flex: 1;
+  font-size: 0.85rem;
+  padding: 10px 12px;
+}
+
+body.layout-mobile .auth-scrollable-container {
+  padding: 16px 12px;
+}
+
+body.layout-mobile .auth-showcase-section {
+  gap: 20px;
+}
+
+body.layout-mobile .auth-hero-title-group {
+  gap: 12px;
+}
+
+body.layout-mobile .auth-title-brand {
+  font-size: 2rem;
+  letter-spacing: 3px;
+}
+
+body.layout-mobile .auth-title-model {
+  font-size: 0.9rem;
+}
+
+body.layout-mobile .auth-features-grid {
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+body.layout-mobile .auth-feat-card {
+  padding: 16px;
+}
+
+body.layout-mobile .auth-telemetry-strip {
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  font-size: 0.8rem;
+}
+
+body.layout-mobile .auth-split-layout {
+  grid-template-columns: 1fr;
+  padding: 16px;
+}
+
+body.layout-mobile .auth-card {
+  max-width: 100%;
+}
+
+body.layout-mobile .auth-panel {
+  padding: 16px;
+}
+
+body.layout-mobile .auth-form-row {
+  grid-template-columns: 1fr;
+}
+
+body.layout-mobile .floating-demo-btn {
+  bottom: 16px;
+  right: 16px;
+  padding: 12px 16px;
+  gap: 8px;
+}
+
+body.layout-mobile .floating-demo-icon {
+  width: 40px;
+  height: 40px;
+}
+
+body.layout-mobile .floating-demo-title {
+  font-size: 0.9rem;
+}
+
+body.layout-mobile .floating-demo-subtitle {
+  font-size: 0.75rem;
+}
+
+/* Hide complex features on mobile */
+body.layout-mobile .millennium-showcase-container {
+  padding: 12px;
+}
+
+body.layout-mobile .board-mode-tabs {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+body.layout-mobile .showcase-demo-bar {
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px;
+}
+
+/* Ensure proper scaling on mobile devices */
+body.layout-mobile {
+  font-size: 14px;
+  overflow-x: hidden;
+}
+
+body.layout-mobile * {
+  max-width: 100%;
+}
+
+/* Touch-friendly tap targets */
+body.layout-mobile button,
+body.layout-mobile a,
+body.layout-mobile input,
+body.layout-mobile select {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+body.layout-mobile .nav-item {
+  padding: 12px 16px;
+  font-size: 0.95rem;
 }
 
 /* Responsive Design for Device Selection */
