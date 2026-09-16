@@ -5,84 +5,6 @@
 
 const API_BASE = '/api';
 
-// --- Device Selection State ---
-let selectedDeviceLayout = null; // 'desktop' | 'mobile'
-
-// Device Selection Function
-function selectDevice(deviceType) {
-  selectedDeviceLayout = deviceType;
-  localStorage.setItem('millennium-device-layout', deviceType);
-  
-  // Hide device selection overlay
-  const deviceOverlay = document.getElementById('deviceSelectionOverlay');
-  const authOverlay = document.getElementById('authPortalOverlay');
-  
-  if (deviceOverlay) {
-    deviceOverlay.style.display = 'none';
-  }
-  
-  if (authOverlay) {
-    authOverlay.style.display = 'flex';
-  }
-  
-  // Apply device-specific class to body
-  document.body.classList.remove('layout-desktop', 'layout-mobile');
-  document.body.classList.add(`layout-${deviceType}`);
-  
-  console.log(`✅ Device layout selected: ${deviceType}`);
-}
-
-// Check if device was already selected
-function checkDeviceSelection() {
-  const savedLayout = localStorage.getItem('millennium-device-layout');
-  
-  if (savedLayout) {
-    // Auto-select saved layout
-    selectDevice(savedLayout);
-  } else {
-    // Show device selection overlay
-    const deviceOverlay = document.getElementById('deviceSelectionOverlay');
-    const authOverlay = document.getElementById('authPortalOverlay');
-    
-    if (deviceOverlay) {
-      deviceOverlay.style.display = 'flex';
-    }
-    if (authOverlay) {
-      authOverlay.style.display = 'none';
-    }
-  }
-}
-
-// Change Layout - Go back to device selection
-function changeLayout() {
-  // Clear saved layout preference
-  localStorage.removeItem('millennium-device-layout');
-  
-  // Hide login page, show device selection
-  const deviceOverlay = document.getElementById('deviceSelectionOverlay');
-  const authOverlay = document.getElementById('authPortalOverlay');
-  
-  if (deviceOverlay) {
-    deviceOverlay.style.display = 'flex';
-  }
-  
-  if (authOverlay) {
-    authOverlay.style.display = 'none';
-  }
-  
-  // Remove layout classes
-  document.body.classList.remove('layout-desktop', 'layout-mobile');
-  
-  console.log('🔄 Returning to device selection...');
-}
-
-// Run on page load
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', checkDeviceSelection);
-} else {
-  checkDeviceSelection();
-}
-
 // --- Role Access Configuration ---
 // Defines which tabs each role can access
 const ROLE_ACCESS = {
@@ -1563,44 +1485,7 @@ function renderMillenniumShowcase() {
         </div>
       </div>
 
-      <!-- Quick Feature Demonstration Switchboard Bar -->
-      <div class="showcase-demo-bar">
-        <div class="demo-bar-label">
-          <span>🚀 9 Official Brochure Features — Click to Demo:</span>
-        </div>
-        <div class="demo-pills-row">
-          <button class="demo-pill-btn ${activeDemo === 'uhd' ? 'active' : ''}" onclick="startFeatureDemo('uhd')" title="4K UHD Display for Home Theater">
-            📺 1. 4K UHD
-          </button>
-          <button class="demo-pill-btn ${activeDemo === 'audio' ? 'active' : ''}" onclick="startFeatureDemo('audio')" title="Sensitive Audio Input — max voice clarity">
-            🎙️ 2. Audio Input
-          </button>
-          <button class="demo-pill-btn ${activeDemo === 'stylus' ? 'active' : ''}" onclick="startFeatureDemo('stylus')" title="Draw, sketch, layout & delete with stylus">
-            ✍️ 3. Stylus & Gesture
-          </button>
-          <button class="demo-pill-btn ${activeDemo === 'cast' ? 'active' : ''}" onclick="startFeatureDemo('cast')" title="Project your laptop & cellphone on screen">
-            📲 4. Screen Cast
-          </button>
-          <button class="demo-pill-btn ${activeDemo === 'wireless' ? 'active' : ''}" onclick="startFeatureDemo('wireless')" title="Bluetooth, Hotspot, Cast & WiFi ready">
-            📡 5. Wireless
-          </button>
-          <button class="demo-pill-btn ${activeDemo === 'ops' ? 'active' : ''}" onclick="startFeatureDemo('ops')" title="Scalable Computing via Modular OPS">
-            ⚡ 6. Modular OPS
-          </button>
-          <button class="demo-pill-btn ${activeDemo === 'dualos' ? 'active' : ''}" onclick="startFeatureDemo('dualos')" title="Windows 11 + Android 13 Dual OS">
-            🪟 7. Dual OS
-          </button>
-          <button class="demo-pill-btn ${activeDemo === 'camera' ? 'active' : ''}" onclick="startFeatureDemo('camera')" title="Ultrawide 120° Camera for online meetings">
-            📹 8. Camera
-          </button>
-          <button class="demo-pill-btn ${activeDemo === 'dongle' ? 'active' : ''}" onclick="startFeatureDemo('dongle')" title="Screen transfer without network via Dongle">
-            🔘 9. Dongle
-          </button>
-        </div>
-        <button class="demo-tour-btn" onclick="toggleDemoTour()">
-          ${state.demoTourActive ? '⏹️ Stop Tour' : '▶ Auto-Tour All 9 Features'}
-        </button>
-      </div>
+      
 
       <!-- Active Demonstration Spotlight Banner (Displayed when a feature demo is running) -->
       ${activeDemo ? `
