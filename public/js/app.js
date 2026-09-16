@@ -118,15 +118,25 @@ function clearAuthSession() {
   localStorage.removeItem(AUTH_SESSION_KEY);
 }
 
-/** Show / hide the auth overlay */
-function showAuthOverlay() {
-  const overlay = document.getElementById('authPortalOverlay');
-  if (overlay) overlay.classList.remove('auth-hidden');
+/** Show / hide the auth modal */
+function showAuthModal() {
+  const overlay = document.getElementById('authModalOverlay');
+  if (overlay) overlay.classList.add('active');
 }
 
-function hideAuthOverlay() {
-  const overlay = document.getElementById('authPortalOverlay');
-  if (overlay) overlay.classList.add('auth-hidden');
+function closeAuthModal(event) {
+  // Only close if clicking overlay background or close button
+  if (event && event.target.id !== 'authModalOverlay') return;
+  const overlay = document.getElementById('authModalOverlay');
+  if (overlay) overlay.classList.remove('active');
+}
+
+function hideAuthModal() {
+  const overlay = document.getElementById('authModalOverlay');
+  if (overlay) {
+    overlay.classList.remove('active');
+    overlay.classList.add('auth-hidden');
+  }
 }
 
 /** Update the header user chip after login */
@@ -134,9 +144,30 @@ function updateAuthChip(user) {
   const nameEl = document.getElementById('authUserName');
   const locEl  = document.getElementById('authUserLoc');
   const avatarEl = document.getElementById('authUserAvatar');
+  const authChip = document.getElementById('authUserChip');
+  const loginBtn = document.getElementById('headerLoginBtn');
+  const registerBtn = document.getElementById('headerRegisterBtn');
+  
   if (nameEl)   nameEl.textContent  = user.fullName || user.username;
   if (locEl)    locEl.textContent   = user.location || 'All Locations';
   if (avatarEl) avatarEl.textContent = (user.fullName || user.username).charAt(0).toUpperCase();
+  
+  // Show auth chip, hide login/register buttons
+  if (authChip) authChip.style.display = 'flex';
+  if (loginBtn) loginBtn.style.display = 'none';
+  if (registerBtn) registerBtn.style.display = 'none';
+}
+
+/** Show login/register buttons (when not authenticated) */
+function showAuthButtons() {
+  const authChip = document.getElementById('authUserChip');
+  const loginBtn = document.getElementById('headerLoginBtn');
+  const registerBtn = document.getElementById('headerRegisterBtn');
+  
+  // Hide auth chip, show login/register buttons
+  if (authChip) authChip.style.display = 'none';
+  if (loginBtn) loginBtn.style.display = 'inline-flex';
+  if (registerBtn) registerBtn.style.display = 'inline-flex';
 }
 
 /** Switch between login and register tabs */
@@ -164,13 +195,10 @@ function switchAuthTab(tab) {
   }
 }
 
-/** Show auth form section and scroll to it */
+/** Show auth form in modal and switch tab */
 function showAuthForm(formType) {
-  // Scroll to the auth split layout section
-  const authSplitLayout = document.getElementById('authSplitLayout');
-  if (authSplitLayout) {
-    authSplitLayout.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }
+  // Show the modal
+  showAuthModal();
   
   // Switch to the appropriate tab after a short delay
   setTimeout(() => {
@@ -184,7 +212,7 @@ function showAuthForm(formType) {
       const regFullName = document.getElementById('regFullName');
       if (regFullName) regFullName.focus();
     }
-  }, 600);
+  }, 300);
 }
 
 /** One-click demo login — fills credentials AND auto-submits immediately */
@@ -227,7 +255,7 @@ async function quickDemoLogin(username, password, roleLabel) {
     state.currentRole = user.role;
     updateAuthChip(user);
     updateSidebarRole(user.role);
-    hideAuthOverlay();
+    hideAuthModal();
     applyRoleUI();
     fetchAllData();
     showToast(`Welcome, ${user.fullName || user.username}! Signed in as ${roleLabel} 🌟`, 'success');
@@ -310,7 +338,7 @@ async function handleLogin(event) {
 
     updateAuthChip(user);
     updateSidebarRole(user.role);
-    hideAuthOverlay();
+    hideAuthModal();
     applyRoleUI();
     fetchAllData();
     showToast(`Welcome back, ${user.fullName || user.username}! 🌟`, 'success');
@@ -413,7 +441,8 @@ function handleLogout() {
   clearAuthSession();
   state.currentUser = null;
   state.currentRole = 'admin';
-  showAuthOverlay();
+  showAuthButtons(); // Show login/register buttons
+  showAuthModal();
   switchAuthTab('login');
   // Clear the login form
   const uInput = document.getElementById('loginUsername');
@@ -6299,8 +6328,9 @@ window.addEventListener('DOMContentLoaded', () => {
     applyRoleUI();
     fetchAllData();
   } else {
-    // Show login overlay, don't load data yet
-    showAuthOverlay();
+    // Show login modal and buttons, don't load data yet
+    showAuthButtons();
+    showAuthModal();
   }
 
   // Navigation Links — guard against disallowed tabs
