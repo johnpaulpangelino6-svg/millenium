@@ -164,6 +164,29 @@ function switchAuthTab(tab) {
   }
 }
 
+/** Show auth form section and scroll to it */
+function showAuthForm(formType) {
+  // Scroll to the auth split layout section
+  const authSplitLayout = document.getElementById('authSplitLayout');
+  if (authSplitLayout) {
+    authSplitLayout.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  
+  // Switch to the appropriate tab after a short delay
+  setTimeout(() => {
+    switchAuthTab(formType);
+    
+    // Focus on the first input
+    if (formType === 'login') {
+      const loginUsername = document.getElementById('loginUsername');
+      if (loginUsername) loginUsername.focus();
+    } else {
+      const regFullName = document.getElementById('regFullName');
+      if (regFullName) regFullName.focus();
+    }
+  }, 600);
+}
+
 /** One-click demo login — fills credentials AND auto-submits immediately */
 async function quickDemoLogin(username, password, roleLabel) {
   const uInput = document.getElementById('loginUsername');
