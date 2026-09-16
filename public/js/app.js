@@ -4552,24 +4552,11 @@ async function submitTicketForm(e) {
   const category = document.getElementById('ticketCategorySelect').value;
   const priority = document.getElementById('ticketPrioritySelect').value;
 
-  // Include current user information
-  const currentUser = state.currentUser || {};
-  const createdByUserId = currentUser.id || '';
-  const createdByUserName = currentUser.fullName || currentUser.username || 'Unknown User';
-
   try {
     const res = await fetch(`${API_BASE}/tickets`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        deviceId, 
-        title, 
-        description, 
-        category, 
-        priority,
-        createdByUserId,
-        createdByUserName
-      }),
+      body: JSON.stringify({ deviceId, title, description, category, priority }),
     });
     const data = await res.json();
     if (data.success) {

@@ -197,7 +197,7 @@ apiRouter.get('/devices/:id', async (req: Request, res: Response) => {
 
 apiRouter.post('/devices', async (req: Request, res: Response) => {
   try {
-    const { model, customerName, customerId, clientType, location, city, osVersion, opsSpec, createdByUserId, createdByUserName } = req.body;
+    const { model, customerName, customerId, clientType, location, city, osVersion, opsSpec } = req.body;
     if (!model || (!customerName && !customerId) || !location) {
       return res.status(400).json({ success: false, error: 'Model, customer, and location are required.' });
     }
@@ -267,8 +267,6 @@ apiRouter.post('/devices', async (req: Request, res: Response) => {
       ramUsagePct: 40,
       storageUsagePct: 25,
       touchLatencyMs: 4.0,
-      createdByUserId: createdByUserId || '',
-      createdByUserName: createdByUserName || 'System',
     });
 
     res.status(201).json({ success: true, data: newDevice });
@@ -413,7 +411,7 @@ apiRouter.get('/tickets', async (req: Request, res: Response) => {
 
 apiRouter.post('/tickets', async (req: Request, res: Response) => {
   try {
-    const { deviceId, title, description, category, priority, assignedTechnician, assignedTechnicianId, createdByUserId, createdByUserName } = req.body;
+    const { deviceId, title, description, category, priority, assignedTechnician } = req.body;
     if (!deviceId || !title || !description) {
       return res.status(400).json({ success: false, error: 'Device ID, title, and description are required.' });
     }
@@ -434,12 +432,9 @@ apiRouter.post('/tickets', async (req: Request, res: Response) => {
       priority: priority || 'Medium',
       status: 'Received',
       assignedTechnician: assignedTechnician || 'Unassigned',
-      assignedTechnicianId: assignedTechnicianId || '',
       technicianNotes: 'Ticket logged. Awaiting technician assignment.',
       partsUsed: [],
       warrantyCovered: true,
-      createdByUserId: createdByUserId || '',
-      createdByUserName: createdByUserName || 'System',
     });
 
     res.status(201).json({ success: true, data: newTicket });
