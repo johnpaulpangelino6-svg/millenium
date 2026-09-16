@@ -53,6 +53,29 @@ function checkDeviceSelection() {
   }
 }
 
+// Change Layout - Go back to device selection
+function changeLayout() {
+  // Clear saved layout preference
+  localStorage.removeItem('millennium-device-layout');
+  
+  // Hide login page, show device selection
+  const deviceOverlay = document.getElementById('deviceSelectionOverlay');
+  const authOverlay = document.getElementById('authPortalOverlay');
+  
+  if (deviceOverlay) {
+    deviceOverlay.style.display = 'flex';
+  }
+  
+  if (authOverlay) {
+    authOverlay.style.display = 'none';
+  }
+  
+  // Remove layout classes
+  document.body.classList.remove('layout-desktop', 'layout-mobile');
+  
+  console.log('🔄 Returning to device selection...');
+}
+
 // Run on page load
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', checkDeviceSelection);

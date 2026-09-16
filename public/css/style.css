@@ -3476,6 +3476,25 @@ body::before {
   border-color: rgba(0, 242, 254, 0.6);
 }
 
+/* Layout Change Button */
+.auth-nav-btn-layout {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.15) 0%, rgba(236, 72, 153, 0.15) 100%);
+  border: 2px solid rgba(168, 85, 247, 0.4);
+  box-shadow: 0 4px 12px rgba(168, 85, 247, 0.2);
+  transition: all 0.3s ease;
+}
+
+.auth-nav-btn-layout:hover {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.25) 0%, rgba(236, 72, 153, 0.25) 100%);
+  border-color: rgba(168, 85, 247, 0.7);
+  box-shadow: 0 6px 20px rgba(168, 85, 247, 0.4);
+  transform: translateY(-2px);
+}
+
+.auth-nav-btn-layout svg {
+  stroke: #a855f7;
+}
+
 /* Scrollable Container */
 .auth-scrollable-container {
   flex: 1;
