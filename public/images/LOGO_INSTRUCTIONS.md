@@ -1,19 +1,22 @@
 # Add Brains Logo Image
 
+## Current Logo
+The official Brains Infinite Innovations logo is now active at:
+- **File**: `brains-logo.png`
+- **Location**: `public/images/brains-logo.png`
+- **URL Path**: `/images/brains-logo.png`
+
 ## Instructions
 
-1. **Download the logo** from: https://i.imgur.com/9X8ZQJm.png
-   - Right-click and "Save Image As..."
-   - Or use the provided logo file
+The logo is already integrated and displays in 4 locations:
+1. Top navigation bar (login page)
+2. Showcase section header (login form)
+3. Showcase section header (register form)
+4. Main application header (after login)
 
-2. **Save the logo** to this directory as:
-   - `brains-logo.png`
+## Update Logo
 
-3. **Location**: `public/images/brains-logo.png`
-
-## Alternative: Use PowerShell to Download
-
-Run this command in PowerShell from the project root:
+To replace with a different logo:
 
 ```powershell
 Invoke-WebRequest -Uri "https://i.imgur.com/9X8ZQJm.png" -OutFile "public/images/brains-logo.png"
