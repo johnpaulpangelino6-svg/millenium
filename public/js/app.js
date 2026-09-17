@@ -6351,3 +6351,215 @@ window.addEventListener('DOMContentLoaded', () => {
   }, 30000);
 });
 
+
+
+// ==========================================================================
+// PROFILE SETTINGS MODULE
+// ==========================================================================
+
+let currentProfilePicture = null;
+
+function openProfileSettings() {
+  const user = state.currentUser;
+  if (!user) return;
+
+  // Populate form with current user data
+  document.getElementById('profileFullName').value = user.fullName || '';
+  document.getElementById('profileEmail').value = user.email || '';
+  document.getElementById('profileUsername').value = user.username || '';
+  document.getElementById('profileLocation').value = user.location || '';
+  document.getElementById('profileOrganization').value = user.organization || '';
+
+  // Clear password fields
+  document.getElementById('profileCurrentPassword').value = '';
+  document.getElementById('profileNewPassword').value = '';
+  document.getElementById('profileConfirmPassword').value = '';
+
+  // Set profile picture
+  if (user.avatar) {
+    const preview = document.getElementById('profilePicturePreview');
+    const initials = document.getElementById('profileInitialsPreview');
+    preview.src = user.avatar;
+    preview.style.display = 'block';
+    initials.style.display = 'none';
+    document.getElementById('removePictureBtn').style.display = 'inline-block';
+  } else {
+    const initials = user.fullName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+    document.getElementById('profileInitialsPreview').textContent = initials;
+    document.getElementById('profilePicturePreview').style.display = 'none';
+    document.getElementById('profileInitialsPreview').style.display = 'block';
+    document.getElementById('removePictureBtn').style.display = 'none';
+  }
+
+  // Show modal
+  document.getElementById('profileSettingsModal').classList.add('active');
+}
+
+function closeProfileSettings() {
+  document.getElementById('profileSettingsModal').classList.remove('active');
+  currentProfilePicture = null;
+}
+
+function handleProfilePictureChange(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  // Validate file type
+  if (!file.type.startsWith('image/')) {
+    showToast('Please select an image file', 'error');
+    return;
+  }
+
+  // Validate file size (max 5MB)
+  if (file.size > 5 * 1024 * 1024) {
+    showToast('Image size must be less than 5MB', 'error');
+    return;
+  }
+
+  // Read and preview image
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const preview = document.getElementById('profilePicturePreview');
+    const initials = document.getElementById('profileInitialsPreview');
+    preview.src = e.target.result;
+    preview.style.display = 'block';
+    initials.style.display = 'none';
+    document.getElementById('removePictureBtn').style.display = 'inline-block';
+    currentProfilePicture = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function removeProfilePicture() {
+  const preview = document.getElementById('profilePicturePreview');
+  const initials = document.getElementById('profileInitialsPreview');
+  const user = state.currentUser;
+  
+  preview.src = '';
+  preview.style.display = 'none';
+  initials.style.display = 'block';
+  initials.textContent = user.fullName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+  document.getElementById('removePictureBtn').style.display = 'none';
+  currentProfilePicture = '';
+  document.getElementById('profilePictureInput').value = '';
+}
+
+async function saveProfileSettings(event) {
+  event.preventDefault();
+
+  const fullName = document.getElementById('profileFullName').value.trim();
+  const email = document.getElementById('profileEmail').value.trim();
+  const location = document.getElementById('profileLocation').value.trim();
+  const organization = document.getElementById('profileOrganization').value.trim();
+  const currentPassword = document.getElementById('profileCurrentPassword').value;
+  const newPassword = document.getElementById('profileNewPassword').value;
+  const confirmPassword = document.getElementById('profileConfirmPassword').value;
+
+  // Validate
+  if (!fullName || !email) {
+    showToast('Full name and email are required', 'error');
+    return;
+  }
+
+  // Validate password change if attempted
+  if (newPassword || confirmPassword) {
+    if (!currentPassword) {
+      showToast('Please enter your current password', 'error');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      showToast('New passwords do not match', 'error');
+      return;
+    }
+    if (newPassword.length < 6) {
+      showToast('New password must be at least 6 characters', 'error');
+      return;
+    }
+  }
+
+  showLoadingIndicator();
+
+  try {
+    const updateData = {
+      fullName,
+      email,
+      location,
+      organization,
+    };
+
+    // Include avatar if changed
+    if (currentProfilePicture !== null) {
+      updateData.avatar = currentProfilePicture;
+    }
+
+    // Include password change if provided
+    if (newPassword) {
+      updateData.currentPassword = currentPassword;
+      updateData.newPassword = newPassword;
+    }
+
+    const response = await fetch(`${API_BASE}/users/${state.currentUser.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updateData),
+    });
+
+    const data = await response.json();
+
+    if (data.success) {
+      // Update local state
+      Object.assign(state.currentUser, {
+        fullName,
+        email,
+        location,
+        organization,
+        avatar: updateData.avatar !== undefined ? updateData.avatar : state.currentUser.avatar,
+      });
+
+      // Update session storage
+      localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(state.currentUser));
+
+      // Update UI
+      updateHeaderUserInfo();
+      
+      showToast('Profile updated successfully!', 'success');
+      closeProfileSettings();
+      currentProfilePicture = null;
+    } else {
+      showToast(data.error || 'Failed to update profile', 'error');
+    }
+  } catch (error) {
+    console.error('Profile update error:', error);
+    showToast('An error occurred while updating profile', 'error');
+  }
+
+  hideLoadingIndicator();
+}
+
+function updateHeaderUserInfo() {
+  const user = state.currentUser;
+  if (!user) return;
+
+  // Update name
+  const nameEl = document.getElementById('authUserName');
+  if (nameEl) nameEl.textContent = user.fullName;
+
+  // Update location
+  const locEl = document.getElementById('authUserLoc');
+  if (locEl) locEl.textContent = user.location || 'All Locations';
+
+  // Update avatar
+  const avatarEl = document.getElementById('authUserAvatar');
+  if (avatarEl) {
+    if (user.avatar) {
+      avatarEl.style.backgroundImage = `url(${user.avatar})`;
+      avatarEl.style.backgroundSize = 'cover';
+      avatarEl.style.backgroundPosition = 'center';
+      avatarEl.textContent = '';
+    } else {
+      avatarEl.style.backgroundImage = 'none';
+      const initials = user.fullName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+      avatarEl.textContent = initials;
+    }
+  }
+}

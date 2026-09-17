@@ -153,6 +153,69 @@ apiRouter.patch('/auth/users/:id', async (req: Request, res: Response) => {
   }
 });
 
+// PUT /api/users/:id (user self-update profile)
+apiRouter.put('/users/:id', async (req: Request, res: Response) => {
+  try {
+    const id = getParam(req.params.id);
+    const { fullName, email, location, organization, avatar, currentPassword, newPassword } = req.body;
+    
+    // If password change is requested, verify current password
+    if (newPassword) {
+      if (!currentPassword) {
+        return res.status(400).json({ success: false, error: 'Current password is required to change password.' });
+      }
+      
+      // Get user and verify current password
+      const user = await db.getUserById(id);
+      if (!user) {
+        return res.status(404).json({ success: false, error: 'User not found.' });
+      }
+      
+      // Simple hash check (you should use bcrypt in production)
+      function hashPassword(plaintext: string): string {
+        let hash = 5381;
+        for (let i = 0; i < plaintext.length; i++) {
+          hash = ((hash << 5) + hash) ^ plaintext.charCodeAt(i);
+        }
+        return 'MHASH_' + Math.abs(hash).toString(16).padStart(8, '0');
+      }
+      
+      if (user.passwordHash !== hashPassword(currentPassword)) {
+        return res.status(401).json({ success: false, error: 'Current password is incorrect.' });
+      }
+      
+      // Update with new password
+      const updatedUser = await db.updateUser(id, {
+        fullName,
+        email,
+        location,
+        organization,
+        avatar,
+        passwordHash: hashPassword(newPassword),
+      });
+      
+      return res.json({ success: true, data: updatedUser });
+    }
+    
+    // Update without password change
+    const updatedUser = await db.updateUser(id, {
+      fullName,
+      email,
+      location,
+      organization,
+      avatar,
+    });
+    
+    if (!updatedUser) {
+      return res.status(404).json({ success: false, error: 'User not found.' });
+    }
+    
+    res.json({ success: true, data: updatedUser });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // DELETE /api/auth/users/:id (admin delete user)
 apiRouter.delete('/auth/users/:id', async (req: Request, res: Response) => {
   try {
