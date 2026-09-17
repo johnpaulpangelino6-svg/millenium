@@ -25,12 +25,9 @@ async function seed() {
   // ── 2. Seed Users ─────────────────────────────────────────────────────
   console.log('👤 Seeding users...');
   const users = [
-    { id: 'USR-ADMIN-001', username: 'admin', email: 'admin@brains.asia', password: 'Admin@2026!', fullName: 'System Administrator', role: 'admin', location: 'All Locations', organization: 'Brains Infinite Innovations Inc.' },
-    { id: 'USR-ADMIN-002', username: 'manager', email: 'manager@brains.asia', password: 'Manager@2026!', fullName: 'Operations Manager', role: 'admin', location: 'Quezon City', organization: 'Brains Infinite Innovations Inc.' },
-    { id: 'USR-TECH-001', username: 'jsantos', email: 'john.santos@brains.asia', password: 'Tech@2026!', fullName: 'John Santos', role: 'technician', location: 'Taguig (BGC)', organization: 'Brains Infinite Innovations Inc.' },
-    { id: 'USR-TECH-002', username: 'amendoza', email: 'arnel.mendoza@brains.asia', password: 'Tech@2026!', fullName: 'Arnel Mendoza', role: 'technician', location: 'Quezon City', organization: 'Brains Infinite Innovations Inc.' },
-    { id: 'USR-CUST-001', username: 'abcuniv', email: 'it@abcuniversity.edu.ph', password: 'School@2026!', fullName: 'ABC University IT Office', role: 'customer', location: 'Quezon City', organization: 'ABC University' },
-    { id: 'USR-CUST-002', username: 'ayalaland', email: 'smartroom@ayalaland.com.ph', password: 'Corp@2026!', fullName: 'Ayala Land Facilities', role: 'customer', location: 'Makati', organization: 'Ayala Land Inc.' },
+    { id: 'USR-1789436546536', username: 'admin',       email: 'admin@gmail.com',       password: '123123', fullName: 'System Administrator', role: 'admin',       location: 'HYT bldg',    organization: 'Brains Infinite Innovations Inc.' },
+    { id: 'USR-1789442461016', username: 'orgen',       email: 'customer@gmail.com',    password: '123123', fullName: 'Customer',             role: 'customer',    location: 'Quezon City', organization: 'qcu' },
+    { id: 'USR-1789548949131', username: 'hello',       email: 'technician@gmail.com',  password: '123123', fullName: 'blink',                role: 'technician',  location: 'Quezon City', organization: 'qcu' },
   ];
 
   let userCount = 0;
