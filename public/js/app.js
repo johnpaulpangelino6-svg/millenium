@@ -3314,7 +3314,35 @@ function renderCustomerPortalView() {
 function renderWarrantyView() {
   const isCustomer = state.currentRole === 'customer';
   const filteredWarranties = isCustomer
-    ? state.warranties.filter(w => w.customerName.includes('ABC') || w.customerName.includes('University'))
+    ? (() => {
+        const user = state.currentUser;
+        if (!user) return [];
+        const userOrg = (user.organization || '').trim().toLowerCase();
+        const userCustId = (user.customerId || '').trim().toLowerCase();
+
+        // Find the matched customer record by org name or customerId
+        const matchedCustomer = (state.customers || []).find(c =>
+          (userCustId && c.id.toLowerCase() === userCustId) ||
+          (userOrg && c.organizationName.toLowerCase() === userOrg)
+        );
+
+        // Get IDs of devices assigned to this customer
+        const customerDeviceIds = new Set(
+          (state.devices || [])
+            .filter(d => {
+              const devCustId = (d.customerId || '').trim().toLowerCase();
+              const devCustName = (d.customerName || '').trim().toLowerCase();
+              if (matchedCustomer && devCustId === matchedCustomer.id.toLowerCase()) return true;
+              if (userCustId && devCustId === userCustId) return true;
+              if (userOrg && devCustName === userOrg) return true;
+              return false;
+            })
+            .map(d => d.id)
+        );
+
+        // Return only warranties for those devices
+        return state.warranties.filter(w => customerDeviceIds.has(w.deviceId));
+      })()
     : state.warranties;
 
   return `
