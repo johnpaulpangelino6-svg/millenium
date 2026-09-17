@@ -6354,212 +6354,161 @@ window.addEventListener('DOMContentLoaded', () => {
 
 
 // ==========================================================================
-// PROFILE SETTINGS MODULE
+// MOBILE RESPONSIVE MODULE
 // ==========================================================================
 
-let currentProfilePicture = null;
-
-function openProfileSettings() {
-  const user = state.currentUser;
-  if (!user) return;
-
-  // Populate form with current user data
-  document.getElementById('profileFullName').value = user.fullName || '';
-  document.getElementById('profileEmail').value = user.email || '';
-  document.getElementById('profileUsername').value = user.username || '';
-  document.getElementById('profileLocation').value = user.location || '';
-  document.getElementById('profileOrganization').value = user.organization || '';
-
-  // Clear password fields
-  document.getElementById('profileCurrentPassword').value = '';
-  document.getElementById('profileNewPassword').value = '';
-  document.getElementById('profileConfirmPassword').value = '';
-
-  // Set profile picture
-  if (user.avatar) {
-    const preview = document.getElementById('profilePicturePreview');
-    const initials = document.getElementById('profileInitialsPreview');
-    preview.src = user.avatar;
-    preview.style.display = 'block';
-    initials.style.display = 'none';
-    document.getElementById('removePictureBtn').style.display = 'inline-block';
-  } else {
-    const initials = user.fullName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
-    document.getElementById('profileInitialsPreview').textContent = initials;
-    document.getElementById('profilePicturePreview').style.display = 'none';
-    document.getElementById('profileInitialsPreview').style.display = 'block';
-    document.getElementById('removePictureBtn').style.display = 'none';
-  }
-
-  // Show modal
-  document.getElementById('profileSettingsModal').classList.add('active');
-}
-
-function closeProfileSettings() {
-  document.getElementById('profileSettingsModal').classList.remove('active');
-  currentProfilePicture = null;
-}
-
-function handleProfilePictureChange(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-
-  // Validate file type
-  if (!file.type.startsWith('image/')) {
-    showToast('Please select an image file', 'error');
-    return;
-  }
-
-  // Validate file size (max 5MB)
-  if (file.size > 5 * 1024 * 1024) {
-    showToast('Image size must be less than 5MB', 'error');
-    return;
-  }
-
-  // Read and preview image
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const preview = document.getElementById('profilePicturePreview');
-    const initials = document.getElementById('profileInitialsPreview');
-    preview.src = e.target.result;
-    preview.style.display = 'block';
-    initials.style.display = 'none';
-    document.getElementById('removePictureBtn').style.display = 'inline-block';
-    currentProfilePicture = e.target.result;
-  };
-  reader.readAsDataURL(file);
-}
-
-function removeProfilePicture() {
-  const preview = document.getElementById('profilePicturePreview');
-  const initials = document.getElementById('profileInitialsPreview');
-  const user = state.currentUser;
+// Mobile menu toggle
+function toggleMobileMenu() {
+  const sidebar = document.querySelector('.app-sidebar');
+  const backdrop = document.querySelector('.mobile-backdrop');
   
-  preview.src = '';
-  preview.style.display = 'none';
-  initials.style.display = 'block';
-  initials.textContent = user.fullName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
-  document.getElementById('removePictureBtn').style.display = 'none';
-  currentProfilePicture = '';
-  document.getElementById('profilePictureInput').value = '';
+  if (sidebar) {
+    sidebar.classList.toggle('mobile-open');
+  }
+  
+  // Create backdrop if doesn't exist
+  if (!backdrop) {
+    const newBackdrop = document.createElement('div');
+    newBackdrop.className = 'mobile-backdrop';
+    newBackdrop.onclick = closeMobileMenu;
+    document.body.appendChild(newBackdrop);
+    setTimeout(() => newBackdrop.classList.add('active'), 10);
+  } else {
+    backdrop.classList.toggle('active');
+  }
 }
 
-async function saveProfileSettings(event) {
-  event.preventDefault();
-
-  const fullName = document.getElementById('profileFullName').value.trim();
-  const email = document.getElementById('profileEmail').value.trim();
-  const location = document.getElementById('profileLocation').value.trim();
-  const organization = document.getElementById('profileOrganization').value.trim();
-  const currentPassword = document.getElementById('profileCurrentPassword').value;
-  const newPassword = document.getElementById('profileNewPassword').value;
-  const confirmPassword = document.getElementById('profileConfirmPassword').value;
-
-  // Validate
-  if (!fullName || !email) {
-    showToast('Full name and email are required', 'error');
-    return;
+function closeMobileMenu() {
+  const sidebar = document.querySelector('.app-sidebar');
+  const backdrop = document.querySelector('.mobile-backdrop');
+  
+  if (sidebar) {
+    sidebar.classList.remove('mobile-open');
   }
-
-  // Validate password change if attempted
-  if (newPassword || confirmPassword) {
-    if (!currentPassword) {
-      showToast('Please enter your current password', 'error');
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      showToast('New passwords do not match', 'error');
-      return;
-    }
-    if (newPassword.length < 6) {
-      showToast('New password must be at least 6 characters', 'error');
-      return;
-    }
+  
+  if (backdrop) {
+    backdrop.classList.remove('active');
+    setTimeout(() => backdrop.remove(), 300);
   }
+}
 
-  showLoadingIndicator();
-
-  try {
-    const updateData = {
-      fullName,
-      email,
-      location,
-      organization,
-    };
-
-    // Include avatar if changed
-    if (currentProfilePicture !== null) {
-      updateData.avatar = currentProfilePicture;
-    }
-
-    // Include password change if provided
-    if (newPassword) {
-      updateData.currentPassword = currentPassword;
-      updateData.newPassword = newPassword;
-    }
-
-    const response = await fetch(`${API_BASE}/users/${state.currentUser.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updateData),
+// Close mobile menu when clicking a tab
+document.addEventListener('DOMContentLoaded', () => {
+  const tabButtons = document.querySelectorAll('.tab-btn');
+  tabButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (window.innerWidth <= 767) {
+        closeMobileMenu();
+      }
     });
-
-    const data = await response.json();
-
-    if (data.success) {
-      // Update local state
-      Object.assign(state.currentUser, {
-        fullName,
-        email,
-        location,
-        organization,
-        avatar: updateData.avatar !== undefined ? updateData.avatar : state.currentUser.avatar,
-      });
-
-      // Update session storage
-      localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(state.currentUser));
-
-      // Update UI
-      updateHeaderUserInfo();
-      
-      showToast('Profile updated successfully!', 'success');
-      closeProfileSettings();
-      currentProfilePicture = null;
-    } else {
-      showToast(data.error || 'Failed to update profile', 'error');
+  });
+  
+  // Close menu on window resize if screen becomes large
+  window.addEventListener('resize', () => {
+    if (window.innerWidth > 767) {
+      closeMobileMenu();
     }
-  } catch (error) {
-    console.error('Profile update error:', error);
-    showToast('An error occurred while updating profile', 'error');
-  }
+  });
+});
 
-  hideLoadingIndicator();
+// Detect device type
+function isMobileDevice() {
+  return window.innerWidth <= 767;
 }
 
-function updateHeaderUserInfo() {
-  const user = state.currentUser;
-  if (!user) return;
+function isTabletDevice() {
+  return window.innerWidth > 767 && window.innerWidth <= 1023;
+}
 
-  // Update name
-  const nameEl = document.getElementById('authUserName');
-  if (nameEl) nameEl.textContent = user.fullName;
+function isDesktopDevice() {
+  return window.innerWidth > 1023;
+}
 
-  // Update location
-  const locEl = document.getElementById('authUserLoc');
-  if (locEl) locEl.textContent = user.location || 'All Locations';
+// Responsive table handling
+function makeTablesResponsive() {
+  const tables = document.querySelectorAll('.data-table');
+  tables.forEach(table => {
+    if (!table.parentElement.classList.contains('table-container')) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'table-container';
+      table.parentNode.insertBefore(wrapper, table);
+      wrapper.appendChild(table);
+    }
+  });
+}
 
-  // Update avatar
-  const avatarEl = document.getElementById('authUserAvatar');
-  if (avatarEl) {
-    if (user.avatar) {
-      avatarEl.style.backgroundImage = `url(${user.avatar})`;
-      avatarEl.style.backgroundSize = 'cover';
-      avatarEl.style.backgroundPosition = 'center';
-      avatarEl.textContent = '';
-    } else {
-      avatarEl.style.backgroundImage = 'none';
-      const initials = user.fullName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
-      avatarEl.textContent = initials;
+// Call on page load
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', makeTablesResponsive);
+} else {
+  makeTablesResponsive();
+}
+
+// Touch swipe for mobile sidebar
+let touchStartX = 0;
+let touchEndX = 0;
+
+document.addEventListener('touchstart', (e) => {
+  touchStartX = e.changedTouches[0].screenX;
+});
+
+document.addEventListener('touchend', (e) => {
+  touchEndX = e.changedTouches[0].screenX;
+  handleSwipe();
+});
+
+function handleSwipe() {
+  if (!isMobileDevice()) return;
+  
+  const swipeThreshold = 50;
+  const diff = touchEndX - touchStartX;
+  
+  // Swipe right to open menu (from left edge)
+  if (diff > swipeThreshold && touchStartX < 50) {
+    const sidebar = document.querySelector('.app-sidebar');
+    if (sidebar && !sidebar.classList.contains('mobile-open')) {
+      toggleMobileMenu();
+    }
+  }
+  
+  // Swipe left to close menu
+  if (diff < -swipeThreshold && touchStartX > 200) {
+    const sidebar = document.querySelector('.app-sidebar');
+    if (sidebar && sidebar.classList.contains('mobile-open')) {
+      closeMobileMenu();
     }
   }
 }
+
+// Viewport height fix for mobile browsers
+function setVH() {
+  const vh = window.innerHeight * 0.01;
+  document.documentElement.style.setProperty('--vh', `${vh}px`);
+}
+
+setVH();
+window.addEventListener('resize', setVH);
+window.addEventListener('orientationchange', setVH);
+
+// Detect if running as PWA
+function isStandalone() {
+  return window.matchMedia('(display-mode: standalone)').matches || 
+         window.navigator.standalone === true;
+}
+
+// Add device class to body for CSS targeting
+document.body.classList.add(
+  isMobileDevice() ? 'mobile-device' :
+  isTabletDevice() ? 'tablet-device' :
+  'desktop-device'
+);
+
+// Update on resize
+window.addEventListener('resize', () => {
+  document.body.classList.remove('mobile-device', 'tablet-device', 'desktop-device');
+  document.body.classList.add(
+    isMobileDevice() ? 'mobile-device' :
+    isTabletDevice() ? 'tablet-device' :
+    'desktop-device'
+  );
+});

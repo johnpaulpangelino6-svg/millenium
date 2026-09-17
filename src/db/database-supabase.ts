@@ -105,15 +105,8 @@ class MillenniumDatabase {
           location TEXT DEFAULT 'All Locations',
           allowed_locations JSONB DEFAULT '[]'::jsonb,
           organization TEXT DEFAULT '',
-          avatar TEXT DEFAULT NULL,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
-      `);
-
-      // Add avatar column if it doesn't exist (migration)
-      await client.query(`
-        ALTER TABLE users 
-        ADD COLUMN IF NOT EXISTS avatar TEXT DEFAULT NULL;
       `);
 
       // Customers table
