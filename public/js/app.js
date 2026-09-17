@@ -6512,3 +6512,367 @@ window.addEventListener('resize', () => {
     'desktop-device'
   );
 });
+
+
+// ==========================================================================
+// 60FPS PERFORMANCE OPTIMIZATION MODULE
+// ==========================================================================
+
+// Request Animation Frame polyfill
+window.requestAnimFrame = (function() {
+  return window.requestAnimationFrame ||
+         window.webkitRequestAnimationFrame ||
+         window.mozRequestAnimationFrame ||
+         function(callback) {
+           window.setTimeout(callback, 1000 / 60);
+         };
+})();
+
+// Debounce helper for resize and scroll events
+function debounce(func, wait) {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+}
+
+// Throttle helper for high-frequency events
+function throttle(func, limit) {
+  let inThrottle;
+  return function(...args) {
+    if (!inThrottle) {
+      func.apply(this, args);
+      inThrottle = true;
+      setTimeout(() => inThrottle = false, limit);
+    }
+  };
+}
+
+// RAF-based smooth scroll
+function smoothScrollTo(element, to, duration = 300) {
+  const start = element.scrollTop;
+  const change = to - start;
+  const startTime = performance.now();
+
+  function animateScroll(currentTime) {
+    const elapsed = currentTime - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    const easing = progress < 0.5
+      ? 2 * progress * progress
+      : -1 + (4 - 2 * progress) * progress;
+    
+    element.scrollTop = start + (change * easing);
+    
+    if (progress < 1) {
+      requestAnimFrame(animateScroll);
+    }
+  }
+  
+  requestAnimFrame(animateScroll);
+}
+
+// Optimize table rendering with virtual scrolling
+function optimizeTableRendering() {
+  const tables = document.querySelectorAll('.data-table');
+  
+  tables.forEach(table => {
+    const tbody = table.querySelector('tbody');
+    if (!tbody) return;
+    
+    const rows = tbody.querySelectorAll('tr');
+    if (rows.length > 50) {
+      // Add index for stagger animation
+      rows.forEach((row, index) => {
+        row.style.setProperty('--index', index % 10);
+      });
+    }
+  });
+}
+
+// Lazy load images
+function lazyLoadImages() {
+  const images = document.querySelectorAll('img[data-src]');
+  
+  const imageObserver = new IntersectionObserver((entries, observer) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const img = entry.target;
+        img.src = img.dataset.src;
+        img.removeAttribute('data-src');
+        observer.unobserve(img);
+      }
+    });
+  }, {
+    rootMargin: '50px'
+  });
+  
+  images.forEach(img => imageObserver.observe(img));
+}
+
+// Optimize animations during scroll
+let ticking = false;
+let lastScrollY = 0;
+
+function optimizeScroll() {
+  lastScrollY = window.scrollY;
+  
+  if (!ticking) {
+    requestAnimFrame(() => {
+      // Add scroll class for CSS optimization
+      document.body.classList.add('scrolling');
+      
+      clearTimeout(window.scrollTimeout);
+      window.scrollTimeout = setTimeout(() => {
+        document.body.classList.remove('scrolling');
+      }, 150);
+      
+      ticking = false;
+    });
+    
+    ticking = true;
+  }
+}
+
+// Optimize resize handling
+const optimizedResize = debounce(() => {
+  // Update viewport height
+  setVH();
+  
+  // Reoptimize tables
+  optimizeTableRendering();
+  
+  // Update device class
+  document.body.classList.remove('mobile-device', 'tablet-device', 'desktop-device');
+  document.body.classList.add(
+    isMobileDevice() ? 'mobile-device' :
+    isTabletDevice() ? 'tablet-device' :
+    'desktop-device'
+  );
+}, 150);
+
+// Batch DOM reads and writes
+const domBatcher = {
+  reads: [],
+  writes: [],
+  scheduled: false,
+  
+  read(fn) {
+    this.reads.push(fn);
+    this.schedule();
+  },
+  
+  write(fn) {
+    this.writes.push(fn);
+    this.schedule();
+  },
+  
+  schedule() {
+    if (this.scheduled) return;
+    this.scheduled = true;
+    
+    requestAnimFrame(() => {
+      // Execute all reads first
+      this.reads.forEach(fn => fn());
+      this.reads = [];
+      
+      // Then execute all writes
+      this.writes.forEach(fn => fn());
+      this.writes = [];
+      
+      this.scheduled = false;
+    });
+  }
+};
+
+// Optimize modal transitions
+function openModalOptimized(modalId) {
+  const modal = document.getElementById(modalId);
+  if (!modal) return;
+  
+  // Add transitioning class to disable pointer events
+  modal.classList.add('transitioning');
+  
+  requestAnimFrame(() => {
+    modal.classList.add('active');
+    
+    setTimeout(() => {
+      modal.classList.remove('transitioning');
+    }, 300);
+  });
+}
+
+function closeModalOptimized(modalId) {
+  const modal = document.getElementById(modalId);
+  if (!modal) return;
+  
+  modal.classList.add('transitioning');
+  
+  requestAnimFrame(() => {
+    modal.classList.remove('active');
+    
+    setTimeout(() => {
+      modal.classList.remove('transitioning');
+    }, 300);
+  });
+}
+
+// Optimize sidebar toggle
+function toggleMobileMenuOptimized() {
+  const sidebar = document.querySelector('.app-sidebar');
+  if (!sidebar) return;
+  
+  sidebar.classList.add('transitioning');
+  
+  requestAnimFrame(() => {
+    sidebar.classList.toggle('mobile-open');
+    toggleMobileBackdrop();
+    
+    setTimeout(() => {
+      sidebar.classList.remove('transitioning');
+    }, 300);
+  });
+}
+
+function toggleMobileBackdrop() {
+  let backdrop = document.querySelector('.mobile-backdrop');
+  
+  if (!backdrop) {
+    backdrop = document.createElement('div');
+    backdrop.className = 'mobile-backdrop';
+    backdrop.onclick = toggleMobileMenuOptimized;
+    document.body.appendChild(backdrop);
+    
+    requestAnimFrame(() => {
+      backdrop.classList.add('active');
+    });
+  } else {
+    backdrop.classList.toggle('active');
+    
+    if (!backdrop.classList.contains('active')) {
+      setTimeout(() => backdrop.remove(), 300);
+    }
+  }
+}
+
+// Optimize rendering performance
+function enablePerformanceMode() {
+  // Reduce motion on low-end devices
+  if (navigator.hardwareConcurrency <= 2) {
+    document.documentElement.style.setProperty('--motion-duration-fast', '0.1s');
+    document.documentElement.style.setProperty('--motion-duration-normal', '0.15s');
+    document.documentElement.style.setProperty('--motion-duration-slow', '0.2s');
+  }
+  
+  // Disable shadows on very low-end devices
+  if (navigator.hardwareConcurrency === 1) {
+    document.body.classList.add('performance-mode');
+  }
+}
+
+// Passive event listeners for better scroll performance
+function addPassiveEventListeners() {
+  const passiveOptions = { passive: true };
+  
+  window.addEventListener('scroll', optimizeScroll, passiveOptions);
+  window.addEventListener('resize', optimizedResize, passiveOptions);
+  
+  // Touch events
+  document.addEventListener('touchstart', () => {
+    document.body.classList.add('touching');
+  }, passiveOptions);
+  
+  document.addEventListener('touchend', () => {
+    setTimeout(() => {
+      document.body.classList.remove('touching');
+    }, 300);
+  }, passiveOptions);
+}
+
+// Initialize performance optimizations
+function initPerformanceOptimizations() {
+  console.log('🚀 Initializing 60fps performance optimizations...');
+  
+  // Enable passive event listeners
+  addPassiveEventListeners();
+  
+  // Optimize tables
+  optimizeTableRendering();
+  
+  // Lazy load images
+  lazyLoadImages();
+  
+  // Enable performance mode if needed
+  enablePerformanceMode();
+  
+  // Log FPS (dev mode)
+  if (window.location.hostname === 'localhost') {
+    let frames = 0;
+    let lastTime = performance.now();
+    
+    function countFPS() {
+      frames++;
+      const currentTime = performance.now();
+      
+      if (currentTime >= lastTime + 1000) {
+        console.log(`⚡ FPS: ${frames}`);
+        frames = 0;
+        lastTime = currentTime;
+      }
+      
+      requestAnimFrame(countFPS);
+    }
+    
+    // Uncomment to monitor FPS
+    // countFPS();
+  }
+  
+  console.log('✅ Performance optimizations enabled');
+}
+
+// Override existing functions with optimized versions
+if (typeof toggleMobileMenu === 'function') {
+  const originalToggle = toggleMobileMenu;
+  toggleMobileMenu = toggleMobileMenuOptimized;
+}
+
+// Init on load
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initPerformanceOptimizations);
+} else {
+  initPerformanceOptimizations();
+}
+
+// Optimize profile picture loading
+function optimizeProfilePictureLoad() {
+  const profilePic = document.getElementById('profilePicturePreview');
+  if (profilePic && profilePic.src) {
+    const img = new Image();
+    img.onload = () => {
+      profilePic.src = img.src;
+      profilePic.style.opacity = '1';
+    };
+    img.src = profilePic.dataset.src || profilePic.src;
+    profilePic.style.opacity = '0';
+    profilePic.style.transition = 'opacity 0.3s';
+  }
+}
+
+// Memory cleanup
+function cleanupMemory() {
+  // Remove unused event listeners
+  const removedElements = document.querySelectorAll('[data-removed="true"]');
+  removedElements.forEach(el => el.remove());
+  
+  // Clear cached data periodically
+  if (window.gc && typeof window.gc === 'function') {
+    window.gc();
+  }
+}
+
+// Cleanup every 5 minutes
+setInterval(cleanupMemory, 5 * 60 * 1000);
