@@ -3062,8 +3062,43 @@ function renderTicketsView() {
 
   // Customer only sees their own tickets
   if (isCustomer) {
-    const myTickets = state.tickets; // in real system filter by customer ID
-    const open = myTickets.filter(t => t.status !== 'Resolved' && t.status !== 'Closed');
+    const user = state.currentUser;
+    const userOrg   = (user?.organization || '').trim().toLowerCase();
+    const userCustId = (user?.customerId  || '').trim().toLowerCase();
+
+    // Find matched customer record by org name or customerId
+    const matchedCustomer = (state.customers || []).find(c =>
+      (userCustId && c.id.toLowerCase() === userCustId) ||
+      (userOrg   && c.organizationName.toLowerCase() === userOrg)
+    );
+
+    // Filter tickets: match by customerName (org) or by devices assigned to this customer
+    const customerDeviceIds = new Set(
+      (state.devices || [])
+        .filter(d => {
+          const devCustId   = (d.customerId  || '').trim().toLowerCase();
+          const devCustName = (d.customerName || '').trim().toLowerCase();
+          if (matchedCustomer && devCustId === matchedCustomer.id.toLowerCase()) return true;
+          if (userCustId && devCustId === userCustId) return true;
+          if (userOrg   && devCustName === userOrg)   return true;
+          return false;
+        })
+        .map(d => d.id)
+    );
+
+    const myTickets = state.tickets.filter(t => {
+      const tCustName = (t.customerName || '').trim().toLowerCase();
+      // Match by customerName on the ticket matching user org
+      if (userOrg   && tCustName === userOrg)   return true;
+      // Match by device assigned to this customer
+      if (customerDeviceIds.has(t.deviceId))     return true;
+      // Match by submitting user's username / id
+      if (user && t.reportedBy && t.reportedBy.toLowerCase() === (user.username || '').toLowerCase()) return true;
+      if (user && t.userId     && t.userId === user.id) return true;
+      return false;
+    });
+
+    const open   = myTickets.filter(t => t.status !== 'Resolved' && t.status !== 'Closed');
     const closed = myTickets.filter(t => t.status === 'Resolved' || t.status === 'Closed');
     return `
       <div class="page-header-row">
