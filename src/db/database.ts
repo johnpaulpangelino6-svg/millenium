@@ -1091,6 +1091,15 @@ class MillenniumDatabase {
     return rows as AuditLog[];
   }
 
+  async addAuditLog(userName: string, action: string, details: string = '', deviceId: string | null = null): Promise<void> {
+    const id = `LOG-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const now = new Date().toISOString();
+    await dbClient.run(`
+      INSERT INTO audit_logs (id, device_id, user_name, action, details, timestamp)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `, id, deviceId, userName, action, details, now);
+  }
+
   // -------------------------------------------------------------------------
   // DASHBOARD STATS
   // -------------------------------------------------------------------------

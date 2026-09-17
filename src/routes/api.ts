@@ -32,31 +32,55 @@ apiRouter.post('/auth/login', async (req: Request, res: Response) => {
 // POST /api/auth/register
 apiRouter.post('/auth/register', async (req: Request, res: Response) => {
   try {
-    const { username, email, password, fullName, role, location, organization } = req.body;
-    if (!username || !email || !password || !fullName || !role || !location) {
-      return res.status(400).json({ success: false, error: 'All fields are required.' });
+    let { username, email, password, fullName, role, location, organization } = req.body;
+    if (!username || !email || !password || !fullName || !role) {
+      return res.status(400).json({ success: false, error: 'All required fields must be filled.' });
     }
+
+    username = String(username).trim().toLowerCase();
+    email = String(email).trim().toLowerCase();
+    fullName = String(fullName).trim();
+    location = (location && String(location).trim()) || 'Quezon City';
+
     if (!['technician', 'customer'].includes(role)) {
       return res.status(400).json({ success: false, error: 'Invalid role. Only technician or customer accounts can self-register.' });
     }
     if (password.length < 6) {
       return res.status(400).json({ success: false, error: 'Password must be at least 6 characters.' });
     }
-    const result = await db.registerUser({ username, email, password, fullName, role, location, organization });
+
+    // Determine organization automatically so customer accounts are never orphaned
+    let orgName = (organization && String(organization).trim()) || '';
+    if (role === 'customer' && !orgName) {
+      orgName = `${fullName}'s Organization`;
+    } else if (role === 'technician' && !orgName) {
+      orgName = 'Brains Infinite Innovations';
+    }
+
+    const result = await db.registerUser({
+      username,
+      email,
+      password,
+      fullName,
+      role,
+      location,
+      organization: orgName,
+    });
+
     if (!result.success) {
       return res.status(409).json({ success: false, error: result.error });
     }
 
-    // If role is customer, ensure customer organization exists in customers table
-    if (role === 'customer' && organization && organization.trim()) {
+    // If role is customer, automatically ensure customer organization exists in customers table
+    if (role === 'customer' && orgName) {
       const allCustomers = await db.getCustomers();
       const match = allCustomers.find(
-        (c) => c.organizationName.toLowerCase() === organization.trim().toLowerCase()
+        (c) => c.organizationName.toLowerCase() === orgName.toLowerCase()
       );
       if (!match) {
         await db.addCustomer({
-          organizationName: organization.trim(),
-          clientType: organization.toLowerCase().includes('inc') || organization.toLowerCase().includes('corp') || organization.toLowerCase().includes('bank') ? 'corporate' : 'school',
+          organizationName: orgName,
+          clientType: orgName.toLowerCase().includes('inc') || orgName.toLowerCase().includes('corp') || orgName.toLowerCase().includes('bank') ? 'corporate' : 'school',
           contactPerson: fullName,
           email: email,
           city: location && location !== 'All Locations' ? location : 'Metro Manila',
@@ -64,8 +88,17 @@ apiRouter.post('/auth/register', async (req: Request, res: Response) => {
       }
     }
 
+    // Automatically record in audit log
+    await db.addAuditLog(
+      fullName,
+      'User Self-Registered',
+      `New ${role} account created for ${fullName} (${email}) - Organization: ${orgName}`
+    );
+
+    console.log(`  ✅ Registered new ${role}: ${username} (${email}) -> Automatically stored to database.`);
     res.status(201).json({ success: true, user: result.user });
   } catch (error: any) {
+    console.error('Registration Error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
