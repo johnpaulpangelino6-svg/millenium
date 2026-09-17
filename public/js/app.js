@@ -5785,16 +5785,16 @@ function generateWarrantyBarcode(warranty, device) {
     // Generate barcode using device serial number or ID
     const barcodeValue = device.serialNumber || device.id;
     
-    // Generate barcode using JsBarcode
+    // Generate barcode using JsBarcode with reduced width for better fit
     JsBarcode("#warrantyBarcode", barcodeValue, {
       format: "CODE128",
-      width: 2,
-      height: 80,
+      width: 1.5,
+      height: 70,
       displayValue: true,
-      fontSize: 16,
+      fontSize: 14,
       fontOptions: "bold",
-      textMargin: 8,
-      margin: 10,
+      textMargin: 6,
+      margin: 5,
       background: "#ffffff",
       lineColor: "#000000"
     });
@@ -5977,7 +5977,7 @@ function printWarrantyBarcode() {
       <script>
         JsBarcode("#printBarcode", "${barcodeValue}", {
           format: "CODE128",
-          width: 2,
+          width: 1.5,
           height: 60,
           displayValue: true,
           fontSize: 12,

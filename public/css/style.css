@@ -6010,7 +6010,7 @@ body::before {
 /* Barcode sticker styling for preview */
 .barcode-sticker-preview {
   background: white;
-  padding: 16px;
+  padding: 12px;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   border: 1px solid #e0e0e0;
@@ -6018,27 +6018,32 @@ body::before {
   max-width: 100%;
   box-sizing: border-box;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 /* Warranty Barcode Modal - Wider for barcode */
 #warrantyBarcodeModal .modal-content {
-  max-width: 700px;
+  max-width: 650px;
   width: 95%;
   padding: 0;
 }
 
 #warrantyBarcodeModal .modal-body {
-  padding: 20px;
+  padding: 16px;
   overflow: hidden;
 }
 
 #warrantyBarcodeModal .barcode-sticker-preview {
   margin: 0 auto;
+  padding: 16px 12px;
 }
 
 /* Barcode SVG container fix */
 .barcode-sticker-preview svg {
   max-width: 100%;
+  width: 100%;
   height: auto;
   display: block;
   margin: 0 auto;
