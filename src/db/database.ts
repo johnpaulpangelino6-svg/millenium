@@ -1,10 +1,13 @@
 // ==========================================================================
 // Millennium SmartBoard Management System
-// SQLite Database Layer (File-based, No external server needed!)
-// Database stored in: data/millennium.db
+// Universal Database Layer (Cloud External Database + Local SQLite Fallback)
+//
+// Supports:
+// 1. External Cloud Database (Turso / LibSQL) via DATABASE_URL & DATABASE_AUTH_TOKEN
+// 2. Local File SQLite (data/millennium.db) when no cloud credentials provided
 // ==========================================================================
 
-import Database from 'better-sqlite3';
+import { createClient, Client } from '@libsql/client';
 import path from 'node:path';
 import fs from 'node:fs';
 import {
@@ -23,25 +26,75 @@ import {
 } from '../types/index.js';
 
 // ---------------------------------------------------------------------------
-// Database Connection - Creates file if doesn't exist
+// Database Connection Setup
 // ---------------------------------------------------------------------------
-const dataDir = path.resolve(process.cwd(), 'data');
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
+const databaseUrl = process.env.DATABASE_URL || process.env.TURSO_DATABASE_URL;
+const authToken = process.env.DATABASE_AUTH_TOKEN || process.env.TURSO_AUTH_TOKEN;
+
+const isExternal = Boolean(databaseUrl && databaseUrl.trim() !== '');
+
+let client: Client;
+
+if (isExternal) {
+  const cleanUrl = databaseUrl!.trim();
+  const maskedUrl = cleanUrl.replace(/:\/\/.*@/, '://***@');
+  console.log(`🌐 External Database: CONNECTING to ${maskedUrl}`);
+  console.log(`  ☁️ Mode: Cloud Synchronized (Shared between localhost and web hosting)`);
+  client = createClient({
+    url: cleanUrl,
+    authToken: authToken ? authToken.trim() : undefined,
+  });
+} else {
+  const dataDir = path.resolve(process.cwd(), 'data');
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+  const dbPath = path.join(dataDir, 'millennium.db');
+  console.log(`📁 Local SQLite Database: ${dbPath}`);
+  console.log(`  💾 Auto-save: ENABLED (local mode)`);
+  client = createClient({
+    url: `file:${dbPath}`,
+  });
 }
 
-const dbPath = path.join(dataDir, 'millennium.db');
-const sqlite = new Database(dbPath);
+// ---------------------------------------------------------------------------
+// Query Adapter (Unified async interface for both Cloud and Local)
+// ---------------------------------------------------------------------------
+export const dbClient = {
+  async get<T = any>(sql: string, ...params: any[]): Promise<T | null> {
+    const flat = params.length === 1 && Array.isArray(params[0]) ? params[0] : params;
+    const res = await client.execute({ sql, args: flat });
+    if (!res.rows || res.rows.length === 0) return null;
+    return res.rows[0] as unknown as T;
+  },
 
-// Enable foreign keys and optimize performance
-sqlite.pragma('foreign_keys = ON');
-sqlite.pragma('journal_mode = WAL');
-sqlite.pragma('synchronous = NORMAL'); // Balance between speed and safety
-sqlite.pragma('cache_size = 10000'); // Increase cache for better performance
+  async all<T = any>(sql: string, ...params: any[]): Promise<T[]> {
+    const flat = params.length === 1 && Array.isArray(params[0]) ? params[0] : params;
+    const res = await client.execute({ sql, args: flat });
+    return (res.rows || []) as unknown as T[];
+  },
 
-console.log(`📁 SQLite Database: ${dbPath}`);
-console.log(`  💾 Auto-save: ENABLED (all data writes are immediate)`);
-console.log(`  🔄 Write-Ahead Logging: ENABLED (better concurrency)`);
+  async run(sql: string, ...params: any[]): Promise<{ changes: number; lastInsertRowid?: number | bigint }> {
+    const flat = params.length === 1 && Array.isArray(params[0]) ? params[0] : params;
+    const res = await client.execute({ sql, args: flat });
+    return {
+      changes: res.rowsAffected,
+      lastInsertRowid: res.lastInsertRowid,
+    };
+  },
+
+  async exec(sql: string): Promise<void> {
+    await client.executeMultiple(sql);
+  },
+
+  getClient(): Client {
+    return client;
+  },
+
+  isCloud(): boolean {
+    return isExternal;
+  },
+};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -74,16 +127,16 @@ class MillenniumDatabase {
 
   async testConnection(): Promise<void> {
     try {
-      sqlite.prepare('SELECT 1').get();
-      console.log('  ✅ SQLite database connection successful.');
+      await client.execute('SELECT 1');
+      console.log(`  ✅ Database connection successful (${isExternal ? 'Cloud External Database' : 'Local SQLite'}).`);
     } catch (err: any) {
-      throw new Error(`SQLite connection failed: ${err.message}`);
+      throw new Error(`Database connection failed: ${err.message}`);
     }
   }
 
-  initSchema(): void {
+  async initSchema(): Promise<void> {
     // Users table
-    sqlite.exec(`
+    await dbClient.exec(`
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
         username TEXT UNIQUE NOT NULL,
@@ -99,7 +152,7 @@ class MillenniumDatabase {
     `);
 
     // Customers table
-    sqlite.exec(`
+    await dbClient.exec(`
       CREATE TABLE IF NOT EXISTS customers (
         id TEXT PRIMARY KEY,
         organization_name TEXT NOT NULL,
@@ -114,7 +167,7 @@ class MillenniumDatabase {
     `);
 
     // Devices table
-    sqlite.exec(`
+    await dbClient.exec(`
       CREATE TABLE IF NOT EXISTS devices (
         id TEXT PRIMARY KEY,
         serial_number TEXT UNIQUE NOT NULL,
@@ -149,7 +202,7 @@ class MillenniumDatabase {
     `);
 
     // Warranties table
-    sqlite.exec(`
+    await dbClient.exec(`
       CREATE TABLE IF NOT EXISTS warranties (
         id TEXT PRIMARY KEY,
         device_id TEXT UNIQUE NOT NULL,
@@ -167,7 +220,7 @@ class MillenniumDatabase {
     `);
 
     // Service Tickets table
-    sqlite.exec(`
+    await dbClient.exec(`
       CREATE TABLE IF NOT EXISTS service_tickets (
         id TEXT PRIMARY KEY,
         ticket_number TEXT UNIQUE NOT NULL,
@@ -191,7 +244,7 @@ class MillenniumDatabase {
     `);
 
     // Ticket Parts Used (join table)
-    sqlite.exec(`
+    await dbClient.exec(`
       CREATE TABLE IF NOT EXISTS ticket_parts_used (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         ticket_id TEXT NOT NULL,
@@ -205,7 +258,7 @@ class MillenniumDatabase {
     `);
 
     // Inventory Parts table
-    sqlite.exec(`
+    await dbClient.exec(`
       CREATE TABLE IF NOT EXISTS inventory_parts (
         id TEXT PRIMARY KEY,
         part_code TEXT UNIQUE NOT NULL,
@@ -221,7 +274,7 @@ class MillenniumDatabase {
     `);
 
     // CMS Content table
-    sqlite.exec(`
+    await dbClient.exec(`
       CREATE TABLE IF NOT EXISTS cms_content (
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
@@ -237,7 +290,7 @@ class MillenniumDatabase {
     `);
 
     // Predictive Alerts table
-    sqlite.exec(`
+    await dbClient.exec(`
       CREATE TABLE IF NOT EXISTS predictive_alerts (
         id TEXT PRIMARY KEY,
         device_id TEXT NOT NULL,
@@ -255,7 +308,7 @@ class MillenniumDatabase {
     `);
 
     // Audit Logs table
-    sqlite.exec(`
+    await dbClient.exec(`
       CREATE TABLE IF NOT EXISTS audit_logs (
         id TEXT PRIMARY KEY,
         device_id TEXT,
@@ -266,7 +319,7 @@ class MillenniumDatabase {
       );
     `);
 
-    console.log('  ✅ SQLite schema initialized.');
+    console.log('  ✅ Database schema initialized.');
   }
 
   // -------------------------------------------------------------------------
@@ -275,19 +328,21 @@ class MillenniumDatabase {
 
   async loginUser(username: string, password: string): Promise<{ success: boolean; user?: any; error?: string }> {
     const hash = hashPassword(password);
-    const user = sqlite.prepare(`
+    const user = await dbClient.get(`
       SELECT id, username, email, full_name as fullName, role, location, 
              allowed_locations as allowedLocations, organization
       FROM users 
       WHERE (username = ? OR email = ?) AND password_hash = ?
-    `).get(username, username, hash);
+    `, username, username, hash);
 
     if (!user) {
       return { success: false, error: 'Invalid credentials' };
     }
 
     const u = user as any;
-    u.allowedLocations = JSON.parse(u.allowedLocations || '[]');
+    u.allowedLocations = typeof u.allowedLocations === 'string'
+      ? JSON.parse(u.allowedLocations || '[]')
+      : (u.allowedLocations || []);
     return { success: true, user: u };
   }
 
@@ -304,10 +359,10 @@ class MillenniumDatabase {
       const id = `USR-${Date.now()}`;
       const hash = hashPassword(data.password);
       
-      const result = sqlite.prepare(`
+      const result = await dbClient.run(`
         INSERT INTO users (id, username, email, password_hash, full_name, role, location, organization, allowed_locations)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
+      `,
         id,
         data.username,
         data.email,
@@ -345,16 +400,18 @@ class MillenniumDatabase {
   }
 
   async getUsers(): Promise<any[]> {
-    const rows = sqlite.prepare(`
+    const rows = await dbClient.all(`
       SELECT id, username, email, full_name as fullName, role, location, 
              allowed_locations as allowedLocations, organization, created_at as createdAt
       FROM users
       ORDER BY created_at DESC
-    `).all();
+    `);
 
     return rows.map((u: any) => ({
       ...u,
-      allowedLocations: JSON.parse(u.allowedLocations || '[]'),
+      allowedLocations: typeof u.allowedLocations === 'string'
+        ? JSON.parse(u.allowedLocations || '[]')
+        : (u.allowedLocations || []),
     }));
   }
 
@@ -379,9 +436,9 @@ class MillenniumDatabase {
       }
 
       values.push(id);
-      sqlite.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+      await dbClient.run(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, values);
 
-      const user = sqlite.prepare('SELECT * FROM users WHERE id = ?').get(id);
+      const user = await dbClient.get('SELECT * FROM users WHERE id = ?', id);
       return { success: true, user };
     } catch (err: any) {
       return { success: false, error: err.message };
@@ -389,7 +446,7 @@ class MillenniumDatabase {
   }
 
   async deleteUser(id: string): Promise<boolean> {
-    const result = sqlite.prepare('DELETE FROM users WHERE id = ?').run(id);
+    const result = await dbClient.run('DELETE FROM users WHERE id = ?', id);
     return result.changes > 0;
   }
 
@@ -398,23 +455,23 @@ class MillenniumDatabase {
   // -------------------------------------------------------------------------
 
   async getCustomers(): Promise<Customer[]> {
-    const rows = sqlite.prepare(`
+    const rows = await dbClient.all(`
       SELECT id, organization_name as organizationName, client_type as clientType,
              contact_person as contactPerson, email, phone, address, city, created_at as createdAt
       FROM customers
       ORDER BY organization_name
-    `).all();
+    `);
 
     return rows as Customer[];
   }
 
   async getCustomerById(id: string): Promise<Customer | null> {
-    const row = sqlite.prepare(`
+    const row = await dbClient.get(`
       SELECT id, organization_name as organizationName, client_type as clientType,
              contact_person as contactPerson, email, phone, address, city, created_at as createdAt
       FROM customers
       WHERE id = ?
-    `).get(id);
+    `, id);
 
     return row as Customer | null;
   }
@@ -431,10 +488,10 @@ class MillenniumDatabase {
   }): Promise<Customer> {
     const id = data.id || `CUST-${Date.now()}`;
     
-    const result = sqlite.prepare(`
+    await dbClient.run(`
       INSERT OR REPLACE INTO customers (id, organization_name, client_type, contact_person, email, phone, address, city)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
+    `,
       id,
       data.organizationName,
       data.clientType || 'school',
@@ -446,7 +503,7 @@ class MillenniumDatabase {
     );
 
     console.log(`  💾 Customer saved to database: ${data.organizationName} (${id})`);
-    return this.getCustomerById(id) as Promise<Customer>;
+    return (await this.getCustomerById(id)) as Customer;
   }
 
   async updateCustomer(id: string, data: any): Promise<Customer | null> {
@@ -463,14 +520,14 @@ class MillenniumDatabase {
 
     if (updates.length > 0) {
       values.push(id);
-      sqlite.prepare(`UPDATE customers SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+      await dbClient.run(`UPDATE customers SET ${updates.join(', ')} WHERE id = ?`, values);
     }
 
     return this.getCustomerById(id);
   }
 
   async deleteCustomer(id: string): Promise<boolean> {
-    const result = sqlite.prepare('DELETE FROM customers WHERE id = ?').run(id);
+    const result = await dbClient.run('DELETE FROM customers WHERE id = ?', id);
     return result.changes > 0;
   }
 
@@ -479,7 +536,7 @@ class MillenniumDatabase {
   // -------------------------------------------------------------------------
 
   async getDevices(): Promise<Device[]> {
-    const rows = sqlite.prepare(`
+    const rows = await dbClient.all(`
       SELECT id, serial_number as serialNumber, model, customer_id as customerId, customer_name as customerName,
              client_type as clientType, location, city, latitude, longitude, status, os_version as osVersion,
              ops_spec as opsSpec, ip_address as ipAddress, screen_locked as screenLocked,
@@ -490,7 +547,7 @@ class MillenniumDatabase {
              storage_usage_pct as storageUsagePct, touch_latency_ms as touchLatencyMs, created_at as createdAt
       FROM devices
       ORDER BY created_at DESC
-    `).all();
+    `);
 
     return rows.map((r: any) => ({
       ...r,
@@ -499,7 +556,7 @@ class MillenniumDatabase {
   }
 
   async getDeviceById(id: string): Promise<Device | null> {
-    const row = sqlite.prepare(`
+    const row = await dbClient.get(`
       SELECT id, serial_number as serialNumber, model, customer_id as customerId, customer_name as customerName,
              client_type as clientType, location, city, latitude, longitude, status, os_version as osVersion,
              ops_spec as opsSpec, ip_address as ipAddress, screen_locked as screenLocked,
@@ -510,7 +567,7 @@ class MillenniumDatabase {
              storage_usage_pct as storageUsagePct, touch_latency_ms as touchLatencyMs, created_at as createdAt
       FROM devices
       WHERE id = ?
-    `).get(id);
+    `, id);
 
     if (!row) return null;
     const r: any = row;
@@ -523,7 +580,7 @@ class MillenniumDatabase {
   async addDevice(data: any): Promise<Device> {
     const now = new Date().toISOString();
     
-    const result = sqlite.prepare(`
+    await dbClient.run(`
       INSERT INTO devices (
         id, serial_number, model, customer_id, customer_name, client_type, location, city,
         latitude, longitude, status, os_version, ops_spec, ip_address, screen_locked,
@@ -531,7 +588,7 @@ class MillenniumDatabase {
         installed_at, restarts_last_7_days, temperature_c, cpu_usage_pct, ram_usage_pct,
         storage_usage_pct, touch_latency_ms
       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-    `).run(
+    `,
       data.id, data.serialNumber, data.model, data.customerId, data.customerName, data.clientType,
       data.location, data.city, data.latitude, data.longitude, data.status, data.osVersion,
       data.opsSpec, data.ipAddress, data.screenLocked ? 1 : 0, data.powerScheduleOn,
@@ -549,11 +606,11 @@ class MillenniumDatabase {
     expiryDate.setFullYear(expiryDate.getFullYear() + 2);
     const daysRemaining = Math.max(0, Math.ceil((expiryDate.getTime() - Date.now()) / 86400000));
 
-    const warrantyResult = sqlite.prepare(`
-      INSERT INTO warranties (id, device_id, device_model, customer_name, purchase_date, 
+    await dbClient.run(`
+      INSERT OR REPLACE INTO warranties (id, device_id, device_model, customer_name, purchase_date, 
                               warranty_years, expiry_date, status, coverage_type, days_remaining)
       VALUES (?,?,?,?,?,2,?,?,?,?)
-    `).run(
+    `,
       warrantyId, data.id, data.model, data.customerName, purchaseDate,
       expiryDate.toISOString().split('T')[0],
       daysRemaining > 0 ? 'Under Warranty' : 'Warranty Expired',
@@ -562,11 +619,11 @@ class MillenniumDatabase {
     );
 
     console.log(`  💾 Warranty saved to database: ${warrantyId}`);
-    return this.getDeviceById(data.id) as Promise<Device>;
+    return (await this.getDeviceById(data.id)) as Device;
   }
 
   async deleteDevice(id: string): Promise<boolean> {
-    const result = sqlite.prepare('DELETE FROM devices WHERE id = ?').run(id);
+    const result = await dbClient.run('DELETE FROM devices WHERE id = ?', id);
     return result.changes > 0;
   }
 
@@ -600,15 +657,15 @@ class MillenniumDatabase {
     }
 
     if (updateField) {
-      sqlite.prepare(`UPDATE devices SET ${updateField} = ?, last_ping = ? WHERE id = ?`)
-        .run(updateValue, now, deviceId);
+      await dbClient.run(`UPDATE devices SET ${updateField} = ?, last_ping = ? WHERE id = ?`,
+        updateValue, now, deviceId);
     }
 
     // Log action
-    sqlite.prepare(`
+    await dbClient.run(`
       INSERT INTO audit_logs (id, device_id, user_name, action, details, timestamp)
       VALUES (?, ?, ?, ?, ?, ?)
-    `).run(`LOG-${Date.now()}`, deviceId, 'Admin (Remote)', logAction, '', now);
+    `, `LOG-${Date.now()}`, deviceId, 'Admin (Remote)', logAction, '', now);
 
     return { success: true, message: `${logAction} successfully` };
   }
@@ -617,11 +674,11 @@ class MillenniumDatabase {
     const customer = await this.getCustomerById(customerId);
     if (!customer) return { success: false, error: 'Customer not found' };
 
-    sqlite.prepare(`
+    await dbClient.run(`
       UPDATE devices 
       SET customer_id = ?, customer_name = ?, client_type = ?, city = ?, location = ?
       WHERE id = ?
-    `).run(
+    `,
       customerId,
       customer.organizationName,
       customer.clientType,
@@ -639,7 +696,7 @@ class MillenniumDatabase {
   // -------------------------------------------------------------------------
 
   async getTickets(): Promise<ServiceTicket[]> {
-    const rows = sqlite.prepare(`
+    const rows = await dbClient.all(`
       SELECT id, ticket_number as ticketNumber, device_id as deviceId, device_model as deviceModel,
              customer_id as customerId, customer_name as customerName, title, description,
              category, priority, status, assigned_technician as assignedTechnician,
@@ -647,7 +704,7 @@ class MillenniumDatabase {
              created_at as createdAt, updated_at as updatedAt, resolved_at as resolvedAt
       FROM service_tickets
       ORDER BY created_at DESC
-    `).all();
+    `);
 
     const tickets = rows.map((r: any) => ({
       ...r,
@@ -657,11 +714,11 @@ class MillenniumDatabase {
 
     // Load parts for each ticket
     for (const ticket of tickets) {
-      const parts = sqlite.prepare(`
+      const parts = await dbClient.all(`
         SELECT part_id as partId, part_name as partName, quantity, technician_name as technicianName, used_at as usedAt
         FROM ticket_parts_used
         WHERE ticket_id = ?
-      `).all(ticket.id);
+      `, ticket.id);
       (ticket as any).partsUsed = parts;
     }
 
@@ -669,7 +726,7 @@ class MillenniumDatabase {
   }
 
   async getTicketById(id: string): Promise<ServiceTicket | null> {
-    const ticket: any = sqlite.prepare(`
+    const ticket: any = await dbClient.get(`
       SELECT id, ticket_number as ticketNumber, device_id as deviceId, device_model as deviceModel,
              customer_id as customerId, customer_name as customerName, title, description,
              category, priority, status, assigned_technician as assignedTechnician,
@@ -677,15 +734,15 @@ class MillenniumDatabase {
              created_at as createdAt, updated_at as updatedAt, resolved_at as resolvedAt
       FROM service_tickets
       WHERE id = ?
-    `).get(id);
+    `, id);
 
     if (!ticket) return null;
 
-    const parts = sqlite.prepare(`
+    const parts = await dbClient.all(`
       SELECT part_id as partId, part_name as partName, quantity, technician_name as technicianName, used_at as usedAt
       FROM ticket_parts_used
       WHERE ticket_id = ?
-    `).all(id);
+    `, id);
 
     ticket.warrantyCovered = ticket.warrantyCovered === 1;
     ticket.partsUsed = parts;
@@ -698,13 +755,13 @@ class MillenniumDatabase {
     const ticketNumber = `#M-${10000 + Math.floor(Math.random() * 90000)}`;
     const now = new Date().toISOString();
 
-    const result = sqlite.prepare(`
+    await dbClient.run(`
       INSERT INTO service_tickets (
         id, ticket_number, device_id, device_model, customer_id, customer_name,
         title, description, category, priority, status, assigned_technician,
         technician_notes, warranty_covered, created_at, updated_at
       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-    `).run(
+    `,
       id, ticketNumber, data.deviceId, data.deviceModel, data.customerId, data.customerName,
       data.title, data.description, data.category, data.priority, data.status || 'Received',
       data.assignedTechnician || 'Unassigned', data.technicianNotes || 'Ticket logged.',
@@ -712,11 +769,11 @@ class MillenniumDatabase {
     );
 
     console.log(`  💾 Service ticket saved to database: ${ticketNumber} - ${data.title}`);
-    return this.getTicketById(id) as Promise<ServiceTicket>;
+    return (await this.getTicketById(id)) as ServiceTicket;
   }
 
   async deleteTicket(id: string): Promise<boolean> {
-    const result = sqlite.prepare('DELETE FROM service_tickets WHERE id = ?').run(id);
+    const result = await dbClient.run('DELETE FROM service_tickets WHERE id = ?', id);
     return result.changes > 0;
   }
 
@@ -724,18 +781,18 @@ class MillenniumDatabase {
     const now = new Date().toISOString();
     const resolved = (status === 'Resolved' || status === 'Closed') ? now : null;
 
-    sqlite.prepare(`
+    await dbClient.run(`
       UPDATE service_tickets 
       SET status = ?, technician_notes = COALESCE(?, technician_notes), 
           updated_at = ?, resolved_at = ?
       WHERE id = ?
-    `).run(status, notes, now, resolved, id);
+    `, status, notes, now, resolved, id);
 
     return this.getTicketById(id);
   }
 
   async usePartForTicket(ticketId: string, partId: string, quantity: number, technicianName: string): Promise<any> {
-    const part: any = sqlite.prepare('SELECT * FROM inventory_parts WHERE id = ?').get(partId);
+    const part: any = await dbClient.get('SELECT * FROM inventory_parts WHERE id = ?', partId);
     if (!part) return { success: false, message: 'Part not found' };
 
     if (part.stock_quantity < quantity) {
@@ -744,17 +801,17 @@ class MillenniumDatabase {
 
     // Deduct stock
     const newStock = part.stock_quantity - quantity;
-    sqlite.prepare('UPDATE inventory_parts SET stock_quantity = ? WHERE id = ?').run(newStock, partId);
+    await dbClient.run('UPDATE inventory_parts SET stock_quantity = ? WHERE id = ?', newStock, partId);
 
     // Record usage
-    sqlite.prepare(`
+    await dbClient.run(`
       INSERT INTO ticket_parts_used (ticket_id, part_id, part_name, quantity, technician_name)
       VALUES (?, ?, ?, ?, ?)
-    `).run(ticketId, partId, part.name, quantity, technicianName);
+    `, ticketId, partId, part.name, quantity, technicianName);
 
     // Update part status
     const status = newStock === 0 ? 'Out of Stock' : newStock < part.min_threshold ? 'Low Stock' : 'In Stock';
-    sqlite.prepare('UPDATE inventory_parts SET status = ? WHERE id = ?').run(status, partId);
+    await dbClient.run('UPDATE inventory_parts SET status = ? WHERE id = ?', status, partId);
 
     return { success: true, message: `${quantity}x ${part.name} deducted from inventory.` };
   }
@@ -764,25 +821,25 @@ class MillenniumDatabase {
   // -------------------------------------------------------------------------
 
   async getWarranties(): Promise<Warranty[]> {
-    const rows = sqlite.prepare(`
+    const rows = await dbClient.all(`
       SELECT id, device_id as deviceId, device_model as deviceModel, customer_name as customerName,
              purchase_date as purchaseDate, warranty_years as warrantyYears, expiry_date as expiryDate,
              status, coverage_type as coverageType, days_remaining as daysRemaining, created_at as createdAt
       FROM warranties
       ORDER BY expiry_date DESC
-    `).all();
+    `);
 
     return rows as Warranty[];
   }
 
   async getWarrantyByDevice(deviceId: string): Promise<Warranty | null> {
-    const row = sqlite.prepare(`
+    const row = await dbClient.get(`
       SELECT id, device_id as deviceId, device_model as deviceModel, customer_name as customerName,
              purchase_date as purchaseDate, warranty_years as warrantyYears, expiry_date as expiryDate,
              status, coverage_type as coverageType, days_remaining as daysRemaining, created_at as createdAt
       FROM warranties
       WHERE device_id = ?
-    `).get(deviceId);
+    `, deviceId);
 
     return row as Warranty | null;
   }
@@ -792,13 +849,13 @@ class MillenniumDatabase {
   // -------------------------------------------------------------------------
 
   async getInventory(): Promise<InventoryPart[]> {
-    const rows = sqlite.prepare(`
+    const rows = await dbClient.all(`
       SELECT id, part_code as partCode, name, category, stock_quantity as stockQuantity,
              min_threshold as minThreshold, unit_cost as unitCost, status, 
              last_restocked as lastRestocked, created_at as createdAt
       FROM inventory_parts
       ORDER BY category, name
-    `).all();
+    `);
 
     return rows as InventoryPart[];
   }
@@ -816,11 +873,11 @@ class MillenniumDatabase {
   }): Promise<InventoryPart> {
     const now = new Date().toISOString();
     
-    sqlite.prepare(`
+    await dbClient.run(`
       INSERT OR REPLACE INTO inventory_parts 
         (id, part_code, name, category, stock_quantity, min_threshold, unit_cost, status, last_restocked, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
+    `,
       part.id,
       part.partCode,
       part.name,
@@ -833,7 +890,7 @@ class MillenniumDatabase {
       now
     );
 
-    const inserted: any = sqlite.prepare('SELECT * FROM inventory_parts WHERE id = ?').get(part.id);
+    const inserted: any = await dbClient.get('SELECT * FROM inventory_parts WHERE id = ?', part.id);
     return {
       id: inserted.id,
       partCode: inserted.part_code,
@@ -849,19 +906,19 @@ class MillenniumDatabase {
   }
 
   async updatePartStock(id: string, quantity: number): Promise<InventoryPart | null> {
-    const part: any = sqlite.prepare('SELECT * FROM inventory_parts WHERE id = ?').get(id);
+    const part: any = await dbClient.get('SELECT * FROM inventory_parts WHERE id = ?', id);
     if (!part) return null;
 
     const status = quantity === 0 ? 'Out of Stock' : quantity < part.min_threshold ? 'Low Stock' : 'In Stock';
     const now = new Date().toISOString();
 
-    sqlite.prepare(`
+    await dbClient.run(`
       UPDATE inventory_parts 
       SET stock_quantity = ?, status = ?, last_restocked = ?
       WHERE id = ?
-    `).run(quantity, status, now, id);
+    `, quantity, status, now, id);
 
-    const updated: any = sqlite.prepare('SELECT * FROM inventory_parts WHERE id = ?').get(id);
+    const updated: any = await dbClient.get('SELECT * FROM inventory_parts WHERE id = ?', id);
     return {
       id: updated.id,
       partCode: updated.part_code,
@@ -877,7 +934,7 @@ class MillenniumDatabase {
   }
 
   async deleteInventoryPart(id: string): Promise<boolean> {
-    const result = sqlite.prepare('DELETE FROM inventory_parts WHERE id = ?').run(id);
+    const result = await dbClient.run('DELETE FROM inventory_parts WHERE id = ?', id);
     return result.changes > 0;
   }
 
@@ -886,13 +943,13 @@ class MillenniumDatabase {
   // -------------------------------------------------------------------------
 
   async getCms(): Promise<CmsContent[]> {
-    const rows = sqlite.prepare(`
+    const rows = await dbClient.all(`
       SELECT id, title, type, content, target_audience as targetAudience, 
              target_device_id as targetDeviceId, active, scheduled_from as scheduledFrom,
              scheduled_to as scheduledTo, created_at as createdAt
       FROM cms_content
       ORDER BY created_at DESC
-    `).all();
+    `);
 
     return rows.map((r: any) => ({ ...r, active: r.active === 1 })) as CmsContent[];
   }
@@ -901,16 +958,16 @@ class MillenniumDatabase {
     const id = `CMS-${Date.now()}`;
     const now = new Date().toISOString();
 
-    sqlite.prepare(`
+    await dbClient.run(`
       INSERT INTO cms_content (id, title, type, content, target_audience, target_device_id, 
                                active, scheduled_from, scheduled_to, created_at)
       VALUES (?,?,?,?,?,?,?,?,?,?)
-    `).run(
+    `,
       id, data.title, data.type, data.content, data.targetAudience, data.targetDeviceId || null,
       data.active ? 1 : 0, data.scheduledFrom, data.scheduledTo, now
     );
 
-    const cms: any = sqlite.prepare('SELECT * FROM cms_content WHERE id = ?').get(id);
+    const cms: any = await dbClient.get('SELECT * FROM cms_content WHERE id = ?', id);
     return {
       id: cms.id,
       title: cms.title,
@@ -926,13 +983,13 @@ class MillenniumDatabase {
   }
 
   async toggleCms(id: string): Promise<CmsContent | null> {
-    const cms: any = sqlite.prepare('SELECT active FROM cms_content WHERE id = ?').get(id);
+    const cms: any = await dbClient.get('SELECT active FROM cms_content WHERE id = ?', id);
     if (!cms) return null;
 
     const newActive = cms.active === 1 ? 0 : 1;
-    sqlite.prepare('UPDATE cms_content SET active = ? WHERE id = ?').run(newActive, id);
+    await dbClient.run('UPDATE cms_content SET active = ? WHERE id = ?', newActive, id);
 
-    const updated: any = sqlite.prepare('SELECT * FROM cms_content WHERE id = ?').get(id);
+    const updated: any = await dbClient.get('SELECT * FROM cms_content WHERE id = ?', id);
     return {
       id: updated.id,
       title: updated.title,
@@ -948,7 +1005,7 @@ class MillenniumDatabase {
   }
 
   async deleteCms(id: string): Promise<boolean> {
-    const result = sqlite.prepare('DELETE FROM cms_content WHERE id = ?').run(id);
+    const result = await dbClient.run('DELETE FROM cms_content WHERE id = ?', id);
     return result.changes > 0;
   }
 
@@ -957,14 +1014,14 @@ class MillenniumDatabase {
   // -------------------------------------------------------------------------
 
   async getPredictiveAlerts(): Promise<PredictiveAlert[]> {
-    const rows = sqlite.prepare(`
+    const rows = await dbClient.all(`
       SELECT id, device_id as deviceId, device_model as deviceModel, customer_name as customerName,
              risk_level as riskLevel, risk_factor as riskFactor, unexpected_restarts as unexpectedRestarts,
              temperature_c as temperatureC, uptime_hours as uptimeHours, 
              recommended_action as recommendedAction, created_at as createdAt
       FROM predictive_alerts
       ORDER BY created_at DESC
-    `).all();
+    `);
 
     return rows as PredictiveAlert[];
   }
@@ -974,11 +1031,11 @@ class MillenniumDatabase {
     if (!device) return null;
 
     // Update device telemetry
-    sqlite.prepare(`
+    await dbClient.run(`
       UPDATE devices 
       SET temperature_c = ?, restarts_last_7_days = ?
       WHERE id = ?
-    `).run(tempSpike, restartSpike, deviceId);
+    `, tempSpike, restartSpike, deviceId);
 
     // Create alert
     const id = `PRED-${Date.now()}`;
@@ -986,17 +1043,17 @@ class MillenniumDatabase {
     const riskFactor = `Simulated Anomaly: Temp ${tempSpike}°C, ${restartSpike} restarts`;
     const action = 'Dispatch technician for immediate inspection.';
 
-    sqlite.prepare(`
+    await dbClient.run(`
       INSERT INTO predictive_alerts (
         id, device_id, device_model, customer_name, risk_level, risk_factor,
         unexpected_restarts, temperature_c, uptime_hours, recommended_action
       ) VALUES (?,?,?,?,?,?,?,?,?,?)
-    `).run(
+    `,
       id, deviceId, device.model, device.customerName, riskLevel, riskFactor,
       restartSpike, tempSpike, 0, action
     );
 
-    const alert: any = sqlite.prepare('SELECT * FROM predictive_alerts WHERE id = ?').get(id);
+    const alert: any = await dbClient.get('SELECT * FROM predictive_alerts WHERE id = ?', id);
     return {
       id: alert.id,
       deviceId: alert.device_id,
@@ -1030,7 +1087,7 @@ class MillenniumDatabase {
 
     query += ' ORDER BY timestamp DESC LIMIT 100';
 
-    const rows = sqlite.prepare(query).all(...params);
+    const rows = await dbClient.all(query, params);
     return rows as AuditLog[];
   }
 
@@ -1057,7 +1114,7 @@ class MillenniumDatabase {
     const popularModels = Object.entries(modelCounts).map(([model, count]) => ({
       model,
       count,
-      percentage: parseFloat(((count / devices.length) * 100).toFixed(1))
+      percentage: parseFloat(((count / Math.max(devices.length, 1)) * 100).toFixed(1))
     })).sort((a, b) => b.count - a.count);
 
     // Count ticket categories
@@ -1071,7 +1128,7 @@ class MillenniumDatabase {
       percentage: parseFloat(((count / Math.max(tickets.length, 1)) * 100).toFixed(0))
     })).sort((a, b) => b.percentage - a.percentage);
 
-    // Calculate fleet health score (simplified)
+    // Calculate fleet health score
     const healthScore = devices.length > 0 
       ? parseFloat((((onlineDevices / devices.length) * 100)).toFixed(1))
       : 100;
@@ -1095,4 +1152,3 @@ class MillenniumDatabase {
 // Export singleton instance
 // ---------------------------------------------------------------------------
 export const db = new MillenniumDatabase();
-

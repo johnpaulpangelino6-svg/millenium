@@ -19,8 +19,8 @@ async function seed() {
 
   // ── 1. Initialize Schema ──────────────────────────────────────────────
   console.log('📦 Initializing database schema...');
-  db.initSchema();
-  console.log('  ✅ SQLite schema initialized.\n');
+  await db.initSchema();
+  console.log('  ✅ Database schema initialized.\n');
 
   // ── 2. Seed Users ─────────────────────────────────────────────────────
   console.log('👤 Seeding users...');

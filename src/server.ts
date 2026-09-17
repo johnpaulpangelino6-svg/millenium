@@ -46,27 +46,32 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   });
 });
 
-// Verify SQLite connection before accepting traffic
+// Verify database connection before accepting traffic
 db.testConnection()
-  .then(() => {
+  .then(async () => {
     // Initialize schema to ensure tables exist
-    db.initSchema();
+    await db.initSchema();
     console.log('  ✅ Database schema initialized.');
     
     app.listen(PORT, HOST, () => {
+      const isCloud = Boolean(process.env.DATABASE_URL || process.env.TURSO_DATABASE_URL);
       console.log('================================================================');
       console.log('  🌟 MILLENNIUM SMARTBOARD MANAGEMENT SYSTEM');
       console.log('  🏢 Brains Infinite Innovations - Device & Service Platform');
       console.log('================================================================');
       console.log(`  🌐 Server running at:  http://${HOST}:${PORT}`);
       console.log(`  📡 REST API Base:      http://${HOST}:${PORT}/api`);
-      console.log(`  🗄️  Database Engine:   SQLite (File-based, No XAMPP needed!)`);
-      console.log(`  💾 Database File:      data/millennium.db`);
+      if (isCloud) {
+        console.log(`  🗄️  Database Engine:   External Cloud Database (Turso / LibSQL)`);
+        console.log(`  ☁️  Cloud Sync:        ✅ Real-time sync with Web Hosting`);
+      } else {
+        console.log(`  🗄️  Database Engine:   SQLite (Local Mode)`);
+        console.log(`  💾 Database File:      data/millennium.db`);
+      }
       console.log(`  👥 Multi-User:         ✅ All users share same database`);
-      console.log(`  💾 Data Persistence:   ✅ Saved to disk`);
+      console.log(`  💾 Data Persistence:   ✅ Saved permanently`);
       console.log('  * Local URL:          http://localhost:3000');
       console.log('================================================================');
-      
     });
   })
   .catch((err) => {
