@@ -8,7 +8,7 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "db:seed": "node --import tsx/esm src/db/seed.ts",
-    "postbuild": "echo 'Build complete. Database will be initialized on first server start.'"
+    "postinstall": "npm run db:seed || true"
   },
   "dependencies": {
     "@types/better-sqlite3": "^9.6.0",
