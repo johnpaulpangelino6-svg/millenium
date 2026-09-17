@@ -1,10 +1,26 @@
+# Render.com Configuration
+# Ensures proper database persistence and deployment settings
+
 services:
   - type: web
-    name: millennium-smartboard
+    name: millenium
     env: node
+    region: oregon
     plan: free
     buildCommand: npm install && npm run build
     startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
+      - key: PORT
+        value: 3000
+    disk:
+      name: millennium-data
+      mountPath: /app/data
+      sizeGB: 1
+
+# Persistent Disk Configuration
+# This ensures the SQLite database file persists between deployments
+# Location: /app/data/millennium.db
+# Size: 1 GB (free tier)
+# All data (users, devices, tickets) will be saved permanently

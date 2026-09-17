@@ -49,6 +49,10 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 // Verify SQLite connection before accepting traffic
 db.testConnection()
   .then(() => {
+    // Initialize schema to ensure tables exist
+    db.initSchema();
+    console.log('  ✅ Database schema initialized.');
+    
     app.listen(PORT, HOST, () => {
       console.log('================================================================');
       console.log('  🌟 MILLENNIUM SMARTBOARD MANAGEMENT SYSTEM');
@@ -58,7 +62,9 @@ db.testConnection()
       console.log(`  📡 REST API Base:      http://${HOST}:${PORT}/api`);
       console.log(`  🗄️  Database Engine:   SQLite (File-based, No XAMPP needed!)`);
       console.log(`  💾 Database File:      data/millennium.db`);
-       console.log('  * code File:      http://localhost:3000');
+      console.log(`  👥 Multi-User:         ✅ All users share same database`);
+      console.log(`  💾 Data Persistence:   ✅ Saved to disk`);
+      console.log('  * Local URL:          http://localhost:3000');
       console.log('================================================================');
       
     });
