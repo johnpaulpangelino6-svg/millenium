@@ -367,19 +367,13 @@ body::before {
   font-size: 1.35rem;
   font-weight: 900;
   letter-spacing: 0.12em;
-  background: linear-gradient(180deg, #b3b3b3 0%, #999999 55%, #808080 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: #999999;
   text-shadow: none;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+  filter: none;
 }
 
 [data-theme="light"] .millennium-word {
-  background: linear-gradient(180deg, #b3b3b3 0%, #999999 60%, #808080 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: #999999;
   text-shadow: none;
 }
 
@@ -3194,17 +3188,11 @@ body::before {
   font-size: 1.15rem;
   font-weight: 900;
   letter-spacing: 0.14em;
-  background: linear-gradient(180deg, #b3b3b3 0%, #999999 60%, #808080 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: #999999;
 }
 
 [data-theme="light"] .footer-millennium-logo {
-  background: linear-gradient(180deg, #b3b3b3 0%, #999999 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: #999999;
 }
 
 .footer-tagline {
@@ -3576,12 +3564,9 @@ body::before {
   font-size: 2.8rem;
   font-weight: 900;
   letter-spacing: 0.15em;
-  background: linear-gradient(180deg, #b3b3b3 0%, #999999 55%, #808080 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: #999999;
   text-shadow: none;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.08));
+  filter: none;
 }
 
 .auth-title-model {
