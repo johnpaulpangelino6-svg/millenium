@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { db } from '../db/database.js';
+import { db } from '../db/database-supabase.js';
 
 export const apiRouter = Router();
 
@@ -89,11 +89,11 @@ apiRouter.post('/auth/register', async (req: Request, res: Response) => {
     }
 
     // Automatically record in audit log
-    await db.addAuditLog(
-      fullName,
-      'User Self-Registered',
-      `New ${role} account created for ${fullName} (${email}) - Organization: ${orgName}`
-    );
+    await db.logAudit({
+      userName: fullName,
+      action: 'User Self-Registered',
+      details: `New ${role} account created for ${fullName} (${email}) - Organization: ${orgName}`
+    });
 
     console.log(`  ✅ Registered new ${role}: ${username} (${email}) -> Automatically stored to database.`);
     res.status(201).json({ success: true, user: result.user });
@@ -596,7 +596,7 @@ apiRouter.patch('/inventory/:id/stock', async (req: Request, res: Response) => {
     if (stockQuantity === undefined) {
       return res.status(400).json({ success: false, error: 'stockQuantity is required.' });
     }
-    const updated = await db.updatePartStock(id, Number(stockQuantity));
+    const updated = await db.updateInventoryPart(id, { stockQuantity: Number(stockQuantity) });
     if (!updated) {
       return res.status(404).json({ success: false, error: 'Part not found.' });
     }
@@ -652,10 +652,11 @@ apiRouter.post('/cms', async (req: Request, res: Response) => {
 apiRouter.patch('/cms/:id/toggle', async (req: Request, res: Response) => {
   try {
     const id = getParam(req.params.id);
-    const updated = await db.toggleCms(id);
-    if (!updated) {
+    const cms = await db.getCmsById(id);
+    if (!cms) {
       return res.status(404).json({ success: false, error: 'CMS item not found.' });
     }
+    const updated = await db.updateCms(id, { active: !cms.active });
     res.json({ success: true, data: updated });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
@@ -691,15 +692,13 @@ apiRouter.post('/predictive/simulate-telemetry', async (req: Request, res: Respo
     if (!deviceId) {
       return res.status(400).json({ success: false, error: 'deviceId is required.' });
     }
-    const alert = await db.simulateTelemetryAnomaly(
+    await db.simulateTelemetryAnomaly(
       deviceId,
       Number(temperatureSpike || 85.5),
       Number(restartSpike || 10)
     );
-    if (!alert) {
-      return res.status(404).json({ success: false, error: 'Device not found.' });
-    }
-    res.json({ success: true, data: alert, message: 'Telemetry anomaly injected into AI predictive engine!' });
+    res.json({ success: true, message: 'Telemetry anomaly simulated.' });
+    res.json({ success: true, message: 'Telemetry anomaly simulated.' });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }

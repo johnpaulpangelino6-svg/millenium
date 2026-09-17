@@ -1,8 +1,9 @@
 // ==========================================================================
-// Millennium SmartBoard Management System — SQLite Seed Script
+// Millennium SmartBoard Management System — Supabase PostgreSQL Seed Script
 // Run once after installing:  npm run db:seed
 // ==========================================================================
 
+import 'dotenv/config';
 import { db } from './database-supabase.js';
 
 function hashPassword(plaintext: string): string {

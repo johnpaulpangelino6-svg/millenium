@@ -148,16 +148,21 @@ export interface PredictiveAlert {
 }
 
 export interface DashboardStats {
-  onlineDevices: number;
-  offlineDevices: number;
-  problemDevices: number;
-  pendingRepairs: number;
-  unitsSold: number;
-  schoolsCount: number;
-  corporateCount: number;
-  fleetHealthScore: number;
-  popularModels: { model: string; count: number; percentage: number }[];
-  commonProblems: { category: string; percentage: number }[];
+  totalDevices: number;
+  devicesOnline: number;
+  devicesOffline: number;
+  devicesWarning: number;
+  devicesMaintenance: number;
+  totalCustomers: number;
+  schoolClients: number;
+  corporateClients: number;
+  openTickets: number;
+  resolvedTickets: number;
+  criticalTickets: number;
+  warrantyExpiringSoon: number;
+  lowStockParts: number;
+  recentActivity: string[];
+  avgResponseTime: string;
 }
 
 export type UserRole = 'admin' | 'technician' | 'customer';
