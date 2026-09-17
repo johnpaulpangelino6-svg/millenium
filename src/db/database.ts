@@ -36,8 +36,12 @@ const sqlite = new Database(dbPath);
 // Enable foreign keys and optimize performance
 sqlite.pragma('foreign_keys = ON');
 sqlite.pragma('journal_mode = WAL');
+sqlite.pragma('synchronous = NORMAL'); // Balance between speed and safety
+sqlite.pragma('cache_size = 10000'); // Increase cache for better performance
 
 console.log(`📁 SQLite Database: ${dbPath}`);
+console.log(`  💾 Auto-save: ENABLED (all data writes are immediate)`);
+console.log(`  🔄 Write-Ahead Logging: ENABLED (better concurrency)`);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -300,7 +304,7 @@ class MillenniumDatabase {
       const id = `USR-${Date.now()}`;
       const hash = hashPassword(data.password);
       
-      sqlite.prepare(`
+      const result = sqlite.prepare(`
         INSERT INTO users (id, username, email, password_hash, full_name, role, location, organization, allowed_locations)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
@@ -315,6 +319,13 @@ class MillenniumDatabase {
         JSON.stringify([data.location || 'All Locations'])
       );
 
+      // Verify data was saved to database
+      if (result.changes === 0) {
+        throw new Error('Failed to save user to database');
+      }
+
+      console.log(`  💾 User saved to database: ${data.username} (${data.role})`);
+
       const user = {
         id,
         username: data.username,
@@ -328,6 +339,7 @@ class MillenniumDatabase {
 
       return { success: true, user };
     } catch (err: any) {
+      console.error(`  ❌ Failed to save user: ${err.message}`);
       return { success: false, error: err.message };
     }
   }
@@ -419,7 +431,7 @@ class MillenniumDatabase {
   }): Promise<Customer> {
     const id = data.id || `CUST-${Date.now()}`;
     
-    sqlite.prepare(`
+    const result = sqlite.prepare(`
       INSERT OR REPLACE INTO customers (id, organization_name, client_type, contact_person, email, phone, address, city)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
@@ -433,6 +445,7 @@ class MillenniumDatabase {
       data.city || 'Metro Manila'
     );
 
+    console.log(`  💾 Customer saved to database: ${data.organizationName} (${id})`);
     return this.getCustomerById(id) as Promise<Customer>;
   }
 
@@ -510,7 +523,7 @@ class MillenniumDatabase {
   async addDevice(data: any): Promise<Device> {
     const now = new Date().toISOString();
     
-    sqlite.prepare(`
+    const result = sqlite.prepare(`
       INSERT INTO devices (
         id, serial_number, model, customer_id, customer_name, client_type, location, city,
         latitude, longitude, status, os_version, ops_spec, ip_address, screen_locked,
@@ -527,6 +540,8 @@ class MillenniumDatabase {
       data.storageUsagePct, data.touchLatencyMs
     );
 
+    console.log(`  💾 Device saved to database: ${data.id} - ${data.model}`);
+
     // Auto-create warranty
     const warrantyId = `WAR-${data.id.split('-').pop()}`;
     const purchaseDate = data.installedAt;
@@ -534,7 +549,7 @@ class MillenniumDatabase {
     expiryDate.setFullYear(expiryDate.getFullYear() + 2);
     const daysRemaining = Math.max(0, Math.ceil((expiryDate.getTime() - Date.now()) / 86400000));
 
-    sqlite.prepare(`
+    const warrantyResult = sqlite.prepare(`
       INSERT INTO warranties (id, device_id, device_model, customer_name, purchase_date, 
                               warranty_years, expiry_date, status, coverage_type, days_remaining)
       VALUES (?,?,?,?,?,2,?,?,?,?)
@@ -546,6 +561,7 @@ class MillenniumDatabase {
       daysRemaining
     );
 
+    console.log(`  💾 Warranty saved to database: ${warrantyId}`);
     return this.getDeviceById(data.id) as Promise<Device>;
   }
 
@@ -682,7 +698,7 @@ class MillenniumDatabase {
     const ticketNumber = `#M-${10000 + Math.floor(Math.random() * 90000)}`;
     const now = new Date().toISOString();
 
-    sqlite.prepare(`
+    const result = sqlite.prepare(`
       INSERT INTO service_tickets (
         id, ticket_number, device_id, device_model, customer_id, customer_name,
         title, description, category, priority, status, assigned_technician,
@@ -695,6 +711,7 @@ class MillenniumDatabase {
       data.warrantyCovered ? 1 : 0, now, now
     );
 
+    console.log(`  💾 Service ticket saved to database: ${ticketNumber} - ${data.title}`);
     return this.getTicketById(id) as Promise<ServiceTicket>;
   }
 

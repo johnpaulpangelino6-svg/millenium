@@ -190,9 +190,9 @@ async function seed() {
   console.log('   You can now start the server:  npm run dev');
   console.log('');
   console.log('   Demo login credentials:');
-  console.log('   Admin      — admin / Admin@2026!');
-  console.log('   Technician — jsantos / Tech@2026!');
-  console.log('   Customer   — abcuniv / School@2026!');
+  console.log('   Admin      — admin@gmail.com  / 123123');
+  console.log('   Technician — technician@gmail.com / 123123');
+  console.log('   Customer   — customer@gmail.com  / 123123');
   console.log('============================================\n');
 }
 
