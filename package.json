@@ -8,7 +8,7 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "db:seed": "node --import tsx/esm src/db/seed.ts",
-    "postbuild": "echo 'Build complete. Database will be initialized on first server start.'",
+    "postbuild": "echo 'Build complete. Run npm run db:seed to initialize database.'",
     "sync": "powershell -ExecutionPolicy Bypass -File auto-sync.ps1",
     "auto-watch": "node auto-watch.js",
     "push": "git add . && git commit -m \"Update code\" && git push origin main"
