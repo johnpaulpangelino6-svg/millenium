@@ -3,7 +3,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import path from 'node:path';
 import { apiRouter } from './routes/api.js';
-import { db } from './db/database.js';
+import { db } from './db/database-supabase.js';
 
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
@@ -27,7 +27,7 @@ app.get('/health', (req: Request, res: Response) => {
     status: 'online',
     system: 'Millennium SmartBoard Management System',
     company: 'Brains Infinite Innovations',
-    database: 'MySQL (XAMPP)',
+    database: 'Supabase PostgreSQL',
     timestamp: new Date().toISOString(),
   });
 });
@@ -50,24 +50,21 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 db.testConnection()
   .then(async () => {
     // Initialize schema to ensure tables exist
-    await db.initSchema();
+    await db.initSchemaAsync();
     console.log('  ✅ Database schema initialized.');
     
     app.listen(PORT, HOST, () => {
-      const isCloud = Boolean(process.env.DATABASE_URL || process.env.TURSO_DATABASE_URL);
       console.log('================================================================');
       console.log('  🌟 MILLENNIUM SMARTBOARD MANAGEMENT SYSTEM');
       console.log('  🏢 Brains Infinite Innovations - Device & Service Platform');
       console.log('================================================================');
       console.log(`  🌐 Server running at:  http://${HOST}:${PORT}`);
       console.log(`  📡 REST API Base:      http://${HOST}:${PORT}/api`);
-      if (isCloud) {
-        console.log(`  🗄️  Database Engine:   External Cloud Database (Turso / LibSQL)`);
-        console.log(`  ☁️  Cloud Sync:        ✅ Real-time sync with Web Hosting`);
-      } else {
-        console.log(`  🗄️  Database Engine:   SQLite (Local Mode)`);
-        console.log(`  💾 Database File:      data/millennium.db`);
-      }
+      console.log(`  🗄️  Database Engine:   Supabase PostgreSQL`);
+      console.log(`  ☁️  Cloud Sync:        ✅ Real-time synchronized`);
+      console.log(`  💾 Data Persistence:   ✅ Permanent cloud storage`);
+      console.log(`  👥 Multi-User:         ✅ Shared across all instances`);
+      console.log(`  🔄 Local ↔ Production: ✅ Instant sync`);
       console.log(`  👥 Multi-User:         ✅ All users share same database`);
       console.log(`  💾 Data Persistence:   ✅ Saved permanently`);
       console.log('  * Local URL:          http://localhost:3000');

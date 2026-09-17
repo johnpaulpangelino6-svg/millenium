@@ -3,7 +3,7 @@
 // Run once after installing:  npm run db:seed
 // ==========================================================================
 
-import { db } from './database.js';
+import { db } from './database-supabase.js';
 
 function hashPassword(plaintext: string): string {
   let hash = 5381;
@@ -14,13 +14,13 @@ function hashPassword(plaintext: string): string {
 }
 
 async function seed() {
-  console.log('\n🌱 Millennium SmartBoard — SQLite Seed Script');
+  console.log('\n🌱 Millennium SmartBoard — Supabase PostgreSQL Seed Script');
   console.log('============================================\n');
 
   // ── 1. Initialize Schema ──────────────────────────────────────────────
   console.log('📦 Initializing database schema...');
-  await db.initSchema();
-  console.log('  ✅ Database schema initialized.\n');
+  await db.initSchemaAsync();
+  console.log('  ✅ PostgreSQL schema initialized.\n');
 
   // ── 2. Seed Users ─────────────────────────────────────────────────────
   console.log('👤 Seeding users...');
