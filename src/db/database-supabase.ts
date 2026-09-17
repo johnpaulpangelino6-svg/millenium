@@ -491,61 +491,633 @@ class MillenniumDatabase {
     return (result.rowCount || 0) > 0;
   }
 
-  // Add placeholder methods for other entities
-  // These will be implemented in the next file
+  // -------------------------------------------------------------------------
+  // DEVICES
+  // -------------------------------------------------------------------------
 
-  async getDevices(): Promise<Device[]> { return []; }
-  async getDeviceById(id: string): Promise<Device | null> { return null; }
-  async addDevice(data: any): Promise<Device> { throw new Error('Not implemented'); }
-  async deleteDevice(id: string): Promise<boolean> { return false; }
-  async triggerRemoteAction(deviceId: string, action: string, payload?: any): Promise<any> { return {}; }
-  async assignDeviceToCustomer(deviceId: string, customerId: string, location?: string, city?: string): Promise<any> { return {}; }
-  
-  async getTickets(): Promise<ServiceTicket[]> { return []; }
-  async getTicketById(id: string): Promise<ServiceTicket | null> { return null; }
-  async createTicket(data: any): Promise<ServiceTicket> { throw new Error('Not implemented'); }
-  async deleteTicket(id: string): Promise<boolean> { return false; }
-  async updateTicketStatus(id: string, status: string, notes?: string): Promise<ServiceTicket | null> { return null; }
-  async usePartForTicket(ticketId: string, partId: string, quantity: number, technicianName: string): Promise<any> { return {}; }
-  
-  async getWarranties(): Promise<Warranty[]> { return []; }
-  async getWarrantyByDevice(deviceId: string): Promise<Warranty | null> { return null; }
-  
-  async getInventory(): Promise<InventoryPart[]> { return []; }
-  async getInventoryPartById(id: string): Promise<InventoryPart | null> { return null; }
-  async addInventoryPart(data: any): Promise<InventoryPart> { throw new Error('Not implemented'); }
-  async updateInventoryPart(id: string, data: any): Promise<InventoryPart | null> { return null; }
-  async deleteInventoryPart(id: string): Promise<boolean> { return false; }
-  
-  async getCms(): Promise<CmsContent[]> { return []; }
-  async getCmsById(id: string): Promise<CmsContent | null> { return null; }
-  async addCms(data: any): Promise<CmsContent> { throw new Error('Not implemented'); }
-  async updateCms(id: string, data: any): Promise<CmsContent | null> { return null; }
-  async deleteCms(id: string): Promise<boolean> { return false; }
-  
-  async getPredictiveAlerts(): Promise<PredictiveAlert[]> { return []; }
-  async simulateTelemetryAnomaly(deviceId: string, tempC: number, restarts: number): Promise<void> {}
-  
-  async getAuditLogs(deviceId?: string): Promise<AuditLog[]> { return []; }
-  async logAudit(data: any): Promise<void> {}
-  
+  async getDevices(): Promise<Device[]> {
+    const result = await pool.query(`
+      SELECT id, serial_number as "serialNumber", model, customer_id as "customerId", 
+             customer_name as "customerName", client_type as "clientType", location, city, 
+             latitude, longitude, status, os_version as "osVersion", ops_spec as "opsSpec", 
+             ip_address as "ipAddress", screen_locked as "screenLocked",
+             power_schedule_on as "powerScheduleOn", power_schedule_off as "powerScheduleOff",
+             wallpaper_url as "wallpaperUrl", firmware_version as "firmwareVersion", 
+             last_ping as "lastPing", installed_at as "installedAt", 
+             restarts_last_7_days as "restartsLast7Days", temperature_c as "temperatureC", 
+             cpu_usage_pct as "cpuUsagePct", ram_usage_pct as "ramUsagePct", 
+             storage_usage_pct as "storageUsagePct", touch_latency_ms as "touchLatencyMs", 
+             created_at as "createdAt"
+      FROM devices
+      ORDER BY created_at DESC
+    `);
+
+    return result.rows as Device[];
+  }
+
+  async getDeviceById(id: string): Promise<Device | null> {
+    const result = await pool.query(`
+      SELECT id, serial_number as "serialNumber", model, customer_id as "customerId", 
+             customer_name as "customerName", client_type as "clientType", location, city, 
+             latitude, longitude, status, os_version as "osVersion", ops_spec as "opsSpec", 
+             ip_address as "ipAddress", screen_locked as "screenLocked",
+             power_schedule_on as "powerScheduleOn", power_schedule_off as "powerScheduleOff",
+             wallpaper_url as "wallpaperUrl", firmware_version as "firmwareVersion", 
+             last_ping as "lastPing", installed_at as "installedAt", 
+             restarts_last_7_days as "restartsLast7Days", temperature_c as "temperatureC", 
+             cpu_usage_pct as "cpuUsagePct", ram_usage_pct as "ramUsagePct", 
+             storage_usage_pct as "storageUsagePct", touch_latency_ms as "touchLatencyMs", 
+             created_at as "createdAt"
+      FROM devices
+      WHERE id = $1
+    `, [id]);
+
+    return result.rows[0] as Device | null;
+  }
+
+  async addDevice(data: any): Promise<Device> {
+    const now = new Date().toISOString();
+    
+    await pool.query(
+      `INSERT INTO devices (
+        id, serial_number, model, customer_id, customer_name, client_type, location, city,
+        latitude, longitude, status, os_version, ops_spec, ip_address, screen_locked,
+        power_schedule_on, power_schedule_off, wallpaper_url, firmware_version, last_ping,
+        installed_at, restarts_last_7_days, temperature_c, cpu_usage_pct, ram_usage_pct,
+        storage_usage_pct, touch_latency_ms
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)`,
+      [
+        data.id, data.serialNumber, data.model, data.customerId, data.customerName, data.clientType,
+        data.location, data.city, data.latitude, data.longitude, data.status, data.osVersion,
+        data.opsSpec, data.ipAddress, data.screenLocked, data.powerScheduleOn,
+        data.powerScheduleOff, data.wallpaperUrl, data.firmwareVersion, now, data.installedAt,
+        data.restartsLast7Days, data.temperatureC, data.cpuUsagePct, data.ramUsagePct,
+        data.storageUsagePct, data.touchLatencyMs
+      ]
+    );
+
+    console.log(`  💾 Device saved to Supabase: ${data.id} - ${data.model}`);
+
+    // Auto-create warranty
+    const warrantyId = `WAR-${data.id.split('-').pop()}`;
+    const purchaseDate = data.installedAt;
+    const expiryDate = new Date(purchaseDate);
+    expiryDate.setFullYear(expiryDate.getFullYear() + 2);
+    const daysRemaining = Math.max(0, Math.ceil((expiryDate.getTime() - Date.now()) / 86400000));
+
+    await pool.query(
+      `INSERT INTO warranties (id, device_id, device_model, customer_name, purchase_date, 
+                              warranty_years, expiry_date, status, coverage_type, days_remaining)
+       VALUES ($1,$2,$3,$4,$5,2,$6,$7,$8,$9)`,
+      [
+        warrantyId, data.id, data.model, data.customerName, purchaseDate,
+        expiryDate.toISOString().split('T')[0],
+        daysRemaining > 0 ? 'Under Warranty' : 'Warranty Expired',
+        'Comprehensive On-Site Hardware & OPS Coverage',
+        daysRemaining
+      ]
+    );
+
+    console.log(`  💾 Warranty saved to Supabase: ${warrantyId}`);
+    return (await this.getDeviceById(data.id))!;
+  }
+
+  async deleteDevice(id: string): Promise<boolean> {
+    const result = await pool.query('DELETE FROM devices WHERE id = $1', [id]);
+    return (result.rowCount || 0) > 0;
+  }
+
+  async triggerRemoteAction(deviceId: string, action: string, payload?: any): Promise<any> {
+    const device = await this.getDeviceById(deviceId);
+    if (!device) return { success: false, error: 'Device not found' };
+
+    const now = new Date().toISOString();
+    let updateField = '';
+    let updateValue: any = null;
+    let logAction = '';
+
+    switch (action) {
+      case 'restart':
+        updateField = 'last_ping';
+        updateValue = now;
+        logAction = 'Remote Reboot Triggered';
+        break;
+      case 'lock':
+        updateField = 'screen_locked';
+        updateValue = true;
+        logAction = 'Screen Locked Remotely';
+        break;
+      case 'unlock':
+        updateField = 'screen_locked';
+        updateValue = false;
+        logAction = 'Screen Unlocked Remotely';
+        break;
+      default:
+        return { success: false, error: 'Unknown action' };
+    }
+
+    if (updateField) {
+      await pool.query(
+        `UPDATE devices SET ${updateField} = $1, last_ping = $2 WHERE id = $3`,
+        [updateValue, now, deviceId]
+      );
+    }
+
+    // Log action
+    await pool.query(
+      `INSERT INTO audit_logs (id, device_id, user_name, action, details, timestamp)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [`LOG-${Date.now()}`, deviceId, 'Admin (Remote)', logAction, '', now]
+    );
+
+    return { success: true, message: `${logAction} successfully` };
+  }
+
+  async assignDeviceToCustomer(deviceId: string, customerId: string, location?: string, city?: string): Promise<any> {
+    const customer = await this.getCustomerById(customerId);
+    if (!customer) return { success: false, error: 'Customer not found' };
+
+    await pool.query(
+      `UPDATE devices 
+       SET customer_id = $1, customer_name = $2, client_type = $3, city = $4, location = $5
+       WHERE id = $6`,
+      [
+        customerId,
+        customer.organizationName,
+        customer.clientType,
+        city || customer.city,
+        location || 'Main Building',
+        deviceId
+      ]
+    );
+
+    const device = await this.getDeviceById(deviceId);
+    return { success: true, device };
+  }
+
+  // -------------------------------------------------------------------------
+  // TICKETS
+  // -------------------------------------------------------------------------
+
+  async getTickets(): Promise<ServiceTicket[]> {
+    const result = await pool.query(`
+      SELECT id, ticket_number as "ticketNumber", device_id as "deviceId", 
+             device_model as "deviceModel", customer_id as "customerId", 
+             customer_name as "customerName", title, description, category, priority, status, 
+             assigned_technician as "assignedTechnician", technician_notes as "technicianNotes", 
+             warranty_covered as "warrantyCovered", created_at as "createdAt", 
+             updated_at as "updatedAt", resolved_at as "resolvedAt"
+      FROM service_tickets
+      ORDER BY created_at DESC
+    `);
+
+    const tickets = result.rows;
+
+    // Load parts for each ticket
+    for (const ticket of tickets) {
+      const parts = await pool.query(
+        `SELECT part_id as "partId", part_name as "partName", quantity, 
+                technician_name as "technicianName", used_at as "usedAt"
+         FROM ticket_parts_used
+         WHERE ticket_id = $1`,
+        [ticket.id]
+      );
+      (ticket as any).partsUsed = parts.rows;
+    }
+
+    return tickets as ServiceTicket[];
+  }
+
+  async getTicketById(id: string): Promise<ServiceTicket | null> {
+    const result = await pool.query(`
+      SELECT id, ticket_number as "ticketNumber", device_id as "deviceId", 
+             device_model as "deviceModel", customer_id as "customerId", 
+             customer_name as "customerName", title, description, category, priority, status, 
+             assigned_technician as "assignedTechnician", technician_notes as "technicianNotes", 
+             warranty_covered as "warrantyCovered", created_at as "createdAt", 
+             updated_at as "updatedAt", resolved_at as "resolvedAt"
+      FROM service_tickets
+      WHERE id = $1
+    `, [id]);
+
+    if (result.rows.length === 0) return null;
+
+    const ticket = result.rows[0];
+
+    const parts = await pool.query(
+      `SELECT part_id as "partId", part_name as "partName", quantity, 
+              technician_name as "technicianName", used_at as "usedAt"
+       FROM ticket_parts_used
+       WHERE ticket_id = $1`,
+      [id]
+    );
+
+    (ticket as any).partsUsed = parts.rows;
+
+    return ticket as ServiceTicket;
+  }
+
+  async createTicket(data: any): Promise<ServiceTicket> {
+    const id = `TCK-${Date.now()}`;
+    const ticketNumber = `#M-${10000 + Math.floor(Math.random() * 90000)}`;
+    const now = new Date().toISOString();
+
+    await pool.query(
+      `INSERT INTO service_tickets (
+        id, ticket_number, device_id, device_model, customer_id, customer_name,
+        title, description, category, priority, status, assigned_technician,
+        technician_notes, warranty_covered, created_at, updated_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+      [
+        id, ticketNumber, data.deviceId, data.deviceModel, data.customerId, data.customerName,
+        data.title, data.description, data.category, data.priority, data.status || 'Received',
+        data.assignedTechnician || 'Unassigned', data.technicianNotes || 'Ticket logged.',
+        data.warrantyCovered !== false, now, now
+      ]
+    );
+
+    console.log(`  💾 Service ticket saved to Supabase: ${ticketNumber} - ${data.title}`);
+    return (await this.getTicketById(id))!;
+  }
+
+  async deleteTicket(id: string): Promise<boolean> {
+    const result = await pool.query('DELETE FROM service_tickets WHERE id = $1', [id]);
+    return (result.rowCount || 0) > 0;
+  }
+
+  async updateTicketStatus(id: string, status: string, notes?: string): Promise<ServiceTicket | null> {
+    const now = new Date().toISOString();
+    const resolved = (status === 'Resolved' || status === 'Closed') ? now : null;
+
+    await pool.query(
+      `UPDATE service_tickets 
+       SET status = $1, technician_notes = COALESCE($2, technician_notes), 
+           updated_at = $3, resolved_at = $4
+       WHERE id = $5`,
+      [status, notes, now, resolved, id]
+    );
+
+    return this.getTicketById(id);
+  }
+
+  async usePartForTicket(ticketId: string, partId: string, quantity: number, technicianName: string): Promise<any> {
+    const partResult = await pool.query('SELECT * FROM inventory_parts WHERE id = $1', [partId]);
+    if (partResult.rows.length === 0) return { success: false, message: 'Part not found' };
+
+    const part = partResult.rows[0];
+
+    if (part.stock_quantity < quantity) {
+      return { success: false, message: `Insufficient stock. Only ${part.stock_quantity} available.` };
+    }
+
+    // Deduct stock
+    const newStock = part.stock_quantity - quantity;
+    await pool.query('UPDATE inventory_parts SET stock_quantity = $1 WHERE id = $2', [newStock, partId]);
+
+    // Record usage
+    await pool.query(
+      `INSERT INTO ticket_parts_used (ticket_id, part_id, part_name, quantity, technician_name)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [ticketId, partId, part.name, quantity, technicianName]
+    );
+
+    // Update part status
+    const status = newStock === 0 ? 'Out of Stock' : newStock < part.min_threshold ? 'Low Stock' : 'In Stock';
+    await pool.query('UPDATE inventory_parts SET status = $1 WHERE id = $2', [status, partId]);
+
+    return { success: true, message: `${quantity}x ${part.name} deducted from inventory.` };
+  }
+
+  // -------------------------------------------------------------------------
+  // WARRANTIES
+  // -------------------------------------------------------------------------
+
+  async getWarranties(): Promise<Warranty[]> {
+    const result = await pool.query(`
+      SELECT id, device_id as "deviceId", device_model as "deviceModel", 
+             customer_name as "customerName", purchase_date as "purchaseDate", 
+             warranty_years as "warrantyYears", expiry_date as "expiryDate", status, 
+             coverage_type as "coverageType", days_remaining as "daysRemaining", 
+             created_at as "createdAt"
+      FROM warranties
+      ORDER BY expiry_date DESC
+    `);
+
+    return result.rows as Warranty[];
+  }
+
+  async getWarrantyByDevice(deviceId: string): Promise<Warranty | null> {
+    const result = await pool.query(`
+      SELECT id, device_id as "deviceId", device_model as "deviceModel", 
+             customer_name as "customerName", purchase_date as "purchaseDate", 
+             warranty_years as "warrantyYears", expiry_date as "expiryDate", status, 
+             coverage_type as "coverageType", days_remaining as "daysRemaining", 
+             created_at as "createdAt"
+      FROM warranties
+      WHERE device_id = $1
+    `, [deviceId]);
+
+    return result.rows[0] as Warranty | null;
+  }
+
+  // -------------------------------------------------------------------------
+  // INVENTORY
+  // -------------------------------------------------------------------------
+
+  async getInventory(): Promise<InventoryPart[]> {
+    const result = await pool.query(`
+      SELECT id, part_code as "partCode", name, category, stock_quantity as "stockQuantity", 
+             min_threshold as "minThreshold", unit_cost as "unitCost", status, 
+             last_restocked as "lastRestocked", created_at as "createdAt"
+      FROM inventory_parts
+      ORDER BY name
+    `);
+
+    return result.rows as InventoryPart[];
+  }
+
+  async getInventoryPartById(id: string): Promise<InventoryPart | null> {
+    const result = await pool.query(`
+      SELECT id, part_code as "partCode", name, category, stock_quantity as "stockQuantity", 
+             min_threshold as "minThreshold", unit_cost as "unitCost", status, 
+             last_restocked as "lastRestocked", created_at as "createdAt"
+      FROM inventory_parts
+      WHERE id = $1
+    `, [id]);
+
+    return result.rows[0] as InventoryPart | null;
+  }
+
+  async addInventoryPart(data: any): Promise<InventoryPart> {
+    await pool.query(
+      `INSERT INTO inventory_parts (id, part_code, name, category, stock_quantity, 
+                                     min_threshold, unit_cost, status, last_restocked)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       ON CONFLICT (id) DO UPDATE 
+       SET stock_quantity = EXCLUDED.stock_quantity, 
+           min_threshold = EXCLUDED.min_threshold, 
+           unit_cost = EXCLUDED.unit_cost, 
+           status = EXCLUDED.status`,
+      [
+        data.id, data.partCode, data.name, data.category, data.stockQuantity || 0,
+        data.minThreshold || 5, data.unitCost || 0, data.status || 'In Stock', 
+        data.lastRestocked || new Date().toISOString()
+      ]
+    );
+
+    return (await this.getInventoryPartById(data.id))!;
+  }
+
+  async updateInventoryPart(id: string, data: any): Promise<InventoryPart | null> {
+    const updates: string[] = [];
+    const values: any[] = [];
+    let paramCount = 1;
+
+    if (data.stockQuantity !== undefined) { updates.push(`stock_quantity = $${paramCount++}`); values.push(data.stockQuantity); }
+    if (data.minThreshold !== undefined) { updates.push(`min_threshold = $${paramCount++}`); values.push(data.minThreshold); }
+    if (data.unitCost !== undefined) { updates.push(`unit_cost = $${paramCount++}`); values.push(data.unitCost); }
+    if (data.status) { updates.push(`status = $${paramCount++}`); values.push(data.status); }
+
+    if (updates.length > 0) {
+      values.push(id);
+      await pool.query(`UPDATE inventory_parts SET ${updates.join(', ')} WHERE id = $${paramCount}`, values);
+    }
+
+    return this.getInventoryPartById(id);
+  }
+
+  async deleteInventoryPart(id: string): Promise<boolean> {
+    const result = await pool.query('DELETE FROM inventory_parts WHERE id = $1', [id]);
+    return (result.rowCount || 0) > 0;
+  }
+
+  // -------------------------------------------------------------------------
+  // CMS
+  // -------------------------------------------------------------------------
+
+  async getCms(): Promise<CmsContent[]> {
+    const result = await pool.query(`
+      SELECT id, title, type, content, target_audience as "targetAudience", 
+             target_device_id as "targetDeviceId", active, 
+             scheduled_from as "scheduledFrom", scheduled_to as "scheduledTo", 
+             created_at as "createdAt"
+      FROM cms_content
+      ORDER BY created_at DESC
+    `);
+
+    return result.rows as CmsContent[];
+  }
+
+  async getCmsById(id: string): Promise<CmsContent | null> {
+    const result = await pool.query(`
+      SELECT id, title, type, content, target_audience as "targetAudience", 
+             target_device_id as "targetDeviceId", active, 
+             scheduled_from as "scheduledFrom", scheduled_to as "scheduledTo", 
+             created_at as "createdAt"
+      FROM cms_content
+      WHERE id = $1
+    `, [id]);
+
+    return result.rows[0] as CmsContent | null;
+  }
+
+  async addCms(data: any): Promise<CmsContent> {
+    const id = `CMS-${Date.now()}`;
+    const now = new Date().toISOString();
+
+    await pool.query(
+      `INSERT INTO cms_content (id, title, type, content, target_audience, target_device_id, 
+                                 active, scheduled_from, scheduled_to, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [
+        id, data.title, data.type, data.content, data.targetAudience || 'all',
+        data.targetDeviceId || null, data.active !== false, data.scheduledFrom, 
+        data.scheduledTo, now
+      ]
+    );
+
+    return (await this.getCmsById(id))!;
+  }
+
+  async updateCms(id: string, data: any): Promise<CmsContent | null> {
+    const updates: string[] = [];
+    const values: any[] = [];
+    let paramCount = 1;
+
+    if (data.title) { updates.push(`title = $${paramCount++}`); values.push(data.title); }
+    if (data.content) { updates.push(`content = $${paramCount++}`); values.push(data.content); }
+    if (data.active !== undefined) { updates.push(`active = $${paramCount++}`); values.push(data.active); }
+
+    if (updates.length > 0) {
+      values.push(id);
+      await pool.query(`UPDATE cms_content SET ${updates.join(', ')} WHERE id = $${paramCount}`, values);
+    }
+
+    return this.getCmsById(id);
+  }
+
+  async deleteCms(id: string): Promise<boolean> {
+    const result = await pool.query('DELETE FROM cms_content WHERE id = $1', [id]);
+    return (result.rowCount || 0) > 0;
+  }
+
+  // -------------------------------------------------------------------------
+  // PREDICTIVE ALERTS
+  // -------------------------------------------------------------------------
+
+  async getPredictiveAlerts(): Promise<PredictiveAlert[]> {
+    const result = await pool.query(`
+      SELECT id, device_id as "deviceId", device_model as "deviceModel", 
+             customer_name as "customerName", risk_level as "riskLevel", 
+             risk_factor as "riskFactor", unexpected_restarts as "unexpectedRestarts", 
+             temperature_c as "temperatureC", uptime_hours as "uptimeHours", 
+             recommended_action as "recommendedAction", created_at as "createdAt"
+      FROM predictive_alerts
+      ORDER BY created_at DESC
+    `);
+
+    return result.rows as PredictiveAlert[];
+  }
+
+  async simulateTelemetryAnomaly(deviceId: string, tempC: number, restarts: number): Promise<void> {
+    const device = await this.getDeviceById(deviceId);
+    if (!device) return;
+
+    const id = `ALERT-${Date.now()}`;
+    let riskLevel = 'Low';
+    let riskFactor = 'Normal operation';
+    let recommendedAction = 'Continue monitoring';
+
+    if (tempC > 80 || restarts > 10) {
+      riskLevel = 'Critical';
+      riskFactor = 'Excessive temperature and restarts detected';
+      recommendedAction = 'Immediate on-site inspection required';
+    } else if (tempC > 65 || restarts > 5) {
+      riskLevel = 'High';
+      riskFactor = 'High temperature or frequent restarts';
+      recommendedAction = 'Schedule preventive maintenance';
+    }
+
+    await pool.query(
+      `INSERT INTO predictive_alerts (id, device_id, device_model, customer_name, 
+                                       risk_level, risk_factor, unexpected_restarts, 
+                                       temperature_c, uptime_hours, recommended_action)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [
+        id, deviceId, device.model, device.customerName, riskLevel, riskFactor,
+        restarts, tempC, 168, recommendedAction
+      ]
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // AUDIT LOGS
+  // -------------------------------------------------------------------------
+
+  async getAuditLogs(deviceId?: string): Promise<AuditLog[]> {
+    let query = `
+      SELECT id, device_id as "deviceId", user_name as "userName", action, details, 
+             timestamp
+      FROM audit_logs
+    `;
+    const values: any[] = [];
+
+    if (deviceId) {
+      query += ' WHERE device_id = $1';
+      values.push(deviceId);
+    }
+
+    query += ' ORDER BY timestamp DESC LIMIT 100';
+
+    const result = await pool.query(query, values);
+    return result.rows as AuditLog[];
+  }
+
+  async logAudit(data: any): Promise<void> {
+    await pool.query(
+      `INSERT INTO audit_logs (id, device_id, user_name, action, details, timestamp)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        `LOG-${Date.now()}`,
+        data.deviceId || null,
+        data.userName,
+        data.action,
+        data.details || '',
+        new Date().toISOString()
+      ]
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // DASHBOARD STATS
+  // -------------------------------------------------------------------------
+
   async getDashboardStats(): Promise<DashboardStats> {
+    // Get device counts
+    const deviceStats = await pool.query(`
+      SELECT 
+        COUNT(*) as total,
+        COUNT(*) FILTER (WHERE status = 'online') as online,
+        COUNT(*) FILTER (WHERE status = 'offline') as offline,
+        COUNT(*) FILTER (WHERE status = 'warning') as warning,
+        COUNT(*) FILTER (WHERE status = 'maintenance') as maintenance
+      FROM devices
+    `);
+
+    // Get customer counts
+    const customerStats = await pool.query(`
+      SELECT 
+        COUNT(*) as total,
+        COUNT(*) FILTER (WHERE client_type = 'school') as schools,
+        COUNT(*) FILTER (WHERE client_type = 'corporate') as corporate
+      FROM customers
+    `);
+
+    // Get ticket counts
+    const ticketStats = await pool.query(`
+      SELECT 
+        COUNT(*) FILTER (WHERE status NOT IN ('Resolved', 'Closed')) as open,
+        COUNT(*) FILTER (WHERE status IN ('Resolved', 'Closed')) as resolved,
+        COUNT(*) FILTER (WHERE priority = 'Critical') as critical
+      FROM service_tickets
+    `);
+
+    // Get inventory counts
+    const inventoryStats = await pool.query(`
+      SELECT COUNT(*) FILTER (WHERE stock_quantity < min_threshold) as low_stock
+      FROM inventory_parts
+    `);
+
+    // Get warranty counts
+    const warrantyStats = await pool.query(`
+      SELECT COUNT(*) FILTER (WHERE days_remaining <= 30) as expiring_soon
+      FROM warranties
+    `);
+
+    // Get recent activity
+    const recentActivity = await pool.query(`
+      SELECT action, details, timestamp
+      FROM audit_logs
+      ORDER BY timestamp DESC
+      LIMIT 10
+    `);
+
     return {
-      totalDevices: 0,
-      devicesOnline: 0,
-      devicesOffline: 0,
-      devicesWarning: 0,
-      devicesMaintenance: 0,
-      totalCustomers: 0,
-      schoolClients: 0,
-      corporateClients: 0,
-      openTickets: 0,
-      resolvedTickets: 0,
-      criticalTickets: 0,
-      warrantyExpiringSoon: 0,
-      lowStockParts: 0,
-      recentActivity: [],
-      avgResponseTime: '0h',
+      totalDevices: parseInt(deviceStats.rows[0].total) || 0,
+      devicesOnline: parseInt(deviceStats.rows[0].online) || 0,
+      devicesOffline: parseInt(deviceStats.rows[0].offline) || 0,
+      devicesWarning: parseInt(deviceStats.rows[0].warning) || 0,
+      devicesMaintenance: parseInt(deviceStats.rows[0].maintenance) || 0,
+      totalCustomers: parseInt(customerStats.rows[0].total) || 0,
+      schoolClients: parseInt(customerStats.rows[0].schools) || 0,
+      corporateClients: parseInt(customerStats.rows[0].corporate) || 0,
+      openTickets: parseInt(ticketStats.rows[0].open) || 0,
+      resolvedTickets: parseInt(ticketStats.rows[0].resolved) || 0,
+      criticalTickets: parseInt(ticketStats.rows[0].critical) || 0,
+      warrantyExpiringSoon: parseInt(warrantyStats.rows[0].expiring_soon) || 0,
+      lowStockParts: parseInt(inventoryStats.rows[0].low_stock) || 0,
+      recentActivity: recentActivity.rows.map(r => `${r.action}: ${r.details}`),
+      avgResponseTime: '2.4h',
     };
   }
 }

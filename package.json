@@ -8,12 +8,12 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "db:seed": "node --import tsx/esm src/db/seed.ts",
-    "db:migrate-cloud": "node --import tsx/esm src/db/migrate-to-cloud.ts",
     "postbuild": "echo 'Build complete. Database will be initialized on first server start.'",
+    "sync": "powershell -ExecutionPolicy Bypass -File auto-sync.ps1",
+    "auto-watch": "node auto-watch.js",
     "push": "git add . && git commit -m \"Update code\" && git push origin main"
   },
   "dependencies": {
-    "@libsql/client": "^0.18.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
