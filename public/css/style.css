@@ -4155,9 +4155,105 @@ body::before {
     0 32px 80px rgba(0, 0, 0, 0.65),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
   overflow: hidden;
-  animation: authCardSlideIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
   position: relative;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
+
+/* Only animate when NOT hidden as modal */
+.auth-portal-card:not(.auth-modal-hidden) {
+  animation: authCardSlideIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Modal Mode Styles - Hidden by default */
+#authPortalCard.auth-modal-hidden,
+.auth-portal-card.auth-modal-hidden {
+  position: fixed !important;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.9) !important;
+  z-index: 10000;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  margin-left: 0;
+  display: none !important; /* Ensure it's completely hidden */
+  visibility: hidden !important;
+}
+
+#authPortalCard.auth-modal-visible,
+.auth-portal-card.auth-modal-visible {
+  position: fixed !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) scale(1) !important;
+  z-index: 10000 !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  margin-left: 0 !important;
+  max-height: 90vh;
+  overflow-y: auto;
+  display: block !important; /* Ensure it's visible */
+  visibility: visible !important;
+  animation: modalFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes modalFadeIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+/* Modal Backdrop */
+.auth-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 7, 17, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  z-index: 9999;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.auth-modal-backdrop.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Modal Close Button */
+.auth-modal-close-btn {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #f87171;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+  transition: all 0.25s ease;
+}
+
+.auth-modal-close-btn:hover {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: rgba(239, 68, 68, 0.5);
+  transform: rotate(90deg);
+}
+
+.auth-modal-close-btn:active {
+  transform: rotate(90deg) scale(0.9);
+}
+
 
 .auth-portal-card::before {
   content: '';
@@ -7846,424 +7942,18 @@ body {
 }
 
 
-/* ==========================================================================
-   60FPS PERFORMANCE OPTIMIZATION
-   Hardware acceleration, GPU compositing, smooth animations
-   ========================================================================== */
-
-/* Force GPU acceleration for key elements */
-.app-header,
-.app-sidebar,
-.app-main,
-.modal-backdrop,
-.modal-content,
-.card,
-.tab-content,
-.auth-user-chip,
-.mobile-menu-btn {
-  will-change: transform;
-  transform: translateZ(0);
-  -webkit-transform: translateZ(0);
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-  perspective: 1000px;
-  -webkit-perspective: 1000px;
-}
-
-/* Optimize transitions to use transform and opacity only */
-.btn,
-.tab-btn,
-.card,
-.stat-card,
-.device-card,
-.ticket-card {
-  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-              opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-              box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  will-change: transform, opacity;
-}
-
-/* Hardware-accelerated hover effects */
-.btn:hover,
-.tab-btn:hover,
-.card:hover {
-  transform: translateY(-2px) translateZ(0);
-}
-
-.btn:active,
-.tab-btn:active {
-  transform: translateY(0) translateZ(0);
-}
-
-/* Smooth scrolling with GPU */
-.app-main,
-.tab-content,
-.modal-body,
-.table-container {
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  scroll-behavior: smooth;
-  transform: translateZ(0);
-}
-
-/* Optimize sidebar transitions */
-.app-sidebar {
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  will-change: transform;
-  transform: translate3d(0, 0, 0);
-}
-
-.app-sidebar.mobile-open {
-  transform: translate3d(0, 0, 0);
-}
-
-@media (max-width: 767px) {
-  .app-sidebar:not(.mobile-open) {
-    transform: translate3d(-100%, 0, 0);
-  }
-}
-
-/* Optimize modal animations */
-.modal-backdrop {
-  transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  will-change: opacity;
-}
-
-.modal-content {
-  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
-              opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  will-change: transform, opacity;
-  transform: scale(0.95) translateZ(0);
-}
-
-.modal-backdrop.active .modal-content {
-  transform: scale(1) translateZ(0);
-}
-
-/* Smooth fade animations */
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateZ(0);
-  }
-  to {
-    opacity: 1;
-    transform: translateZ(0);
-  }
-}
-
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translate3d(0, 20px, 0);
-  }
-  to {
-    opacity: 1;
-    transform: translate3d(0, 0, 0);
-  }
-}
-
-/* Stagger animation delays for lists */
-.stat-card:nth-child(1) { animation-delay: 0.05s; }
-.stat-card:nth-child(2) { animation-delay: 0.1s; }
-.stat-card:nth-child(3) { animation-delay: 0.15s; }
-.stat-card:nth-child(4) { animation-delay: 0.2s; }
-
-.device-card:nth-child(n) { 
-  animation: slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1) backwards;
-  animation-delay: calc(0.03s * var(--index, 0));
-}
-
-/* Optimize table rendering */
-.data-table {
-  contain: layout style paint;
-  transform: translateZ(0);
-}
-
-.data-table th,
-.data-table td {
-  contain: layout paint;
-}
-
-/* Reduce repaints for fixed elements */
-.app-header {
-  position: sticky;
-  top: 0;
-  contain: layout style;
-  z-index: 100;
-}
-
-/* Optimize images and media */
-img,
-video,
-canvas {
-  image-rendering: -webkit-optimize-contrast;
-  image-rendering: crisp-edges;
-  transform: translateZ(0);
-}
-
-/* Contain paint for cards */
-.card,
-.stat-card,
-.device-card,
-.ticket-card {
-  contain: layout paint;
-  transform: translateZ(0);
-}
-
-/* Optimize backdrop blur */
-.modal-backdrop,
-.mobile-backdrop {
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  will-change: opacity;
-}
-
-/* Disable expensive CSS during interactions */
-.modal-backdrop.transitioning,
-.app-sidebar.transitioning {
-  pointer-events: none;
-}
-
-/* Optimize animations for 60fps */
-@keyframes spin {
-  to {
-    transform: rotate(360deg) translateZ(0);
-  }
-}
-
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-    transform: scale(1) translateZ(0);
-  }
-  50% {
-    opacity: 0.7;
-    transform: scale(0.95) translateZ(0);
-  }
-}
-
-/* Loading indicator optimization */
-.loading-spinner {
-  animation: spin 1s linear infinite;
-  will-change: transform;
-  transform: translateZ(0);
-}
-
-/* Toast notification optimization */
-#toast-message {
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-              opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  will-change: transform, opacity;
-  transform: translate3d(-50%, 0, 0);
-}
-
-#toast-message.show {
-  transform: translate3d(-50%, 0, 0);
-}
-
-/* Optimize status indicators */
-.status-pulse-dot {
-  animation: pulse 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-  will-change: transform, opacity;
-  transform: translateZ(0);
-}
-
-/* Reduce layout thrashing */
-* {
-  box-sizing: border-box;
-}
-
-/* Optimize text rendering */
-body {
-  text-rendering: optimizeSpeed;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  font-synthesis: none;
-}
-
-/* Optimize for 60fps animations */
-@media (prefers-reduced-motion: no-preference) {
-  * {
-    animation-duration: 0.3s;
-    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  }
-}
-
-/* Layer promotion for frequently animated elements */
-.tab-btn.active::after,
-.auth-user-avatar,
-.mobile-menu-btn svg,
-.modal-close {
-  will-change: transform;
-  transform: translateZ(0);
-}
-
-/* Optimize grid layouts */
-.stats-grid,
-.devices-grid,
-.tickets-grid,
-.dash-panels-row {
-  contain: layout style;
-  transform: translateZ(0);
-}
-
-/* Prevent layout shift */
-.app-container {
-  min-height: 100vh;
-  contain: layout;
-}
-
-/* Optimize for mobile performance */
-@media (max-width: 767px) {
-  /* Reduce animations on mobile for better performance */
-  * {
-    animation-duration: 0.2s !important;
+/* Modal Responsive Styles */
+@media (max-width: 640px) {
+  .auth-portal-card.auth-modal-visible {
+    max-width: 95vw;
+    max-height: 95vh;
+    width: 95vw;
   }
   
-  /* Simpler shadows on mobile */
-  .card,
-  .modal-content,
-  .app-sidebar {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  .auth-modal-close-btn {
+    top: 12px;
+    right: 12px;
+    width: 32px;
+    height: 32px;
   }
-  
-  /* Disable backdrop blur on low-end mobile */
-  @supports not (backdrop-filter: blur(8px)) {
-    .modal-backdrop,
-    .mobile-backdrop {
-      background: rgba(0, 0, 0, 0.7);
-      backdrop-filter: none;
-    }
-  }
-}
-
-/* Throttle expensive effects on slow devices */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
-}
-
-/* Optimize for high refresh rate displays */
-@media (min-resolution: 120dpi) {
-  .btn,
-  .tab-btn,
-  .card {
-    transition-duration: 0.15s;
-  }
-}
-
-/* Content visibility for off-screen elements */
-.tab-content:not(.active) {
-  content-visibility: hidden;
-  contain: strict;
-}
-
-.tab-content.active {
-  content-visibility: visible;
-}
-
-/* Virtual scrolling optimization */
-.large-list {
-  overflow-y: auto;
-  contain: strict;
-  height: 100%;
-}
-
-.large-list-item {
-  contain: layout style paint;
-  transform: translateZ(0);
-}
-
-/* Optimize profile picture */
-.auth-user-avatar,
-#profilePicturePreview {
-  image-rendering: -webkit-optimize-contrast;
-  transform: translateZ(0);
-  will-change: transform;
-}
-
-/* CSS containment for performance */
-.modal-body,
-.card-body,
-.table-container {
-  contain: layout style paint;
-}
-
-/* Optimize barcode rendering */
-#warrantyBarcode,
-.barcode-sticker-preview {
-  contain: layout paint;
-  transform: translateZ(0);
-}
-
-/* Reduce paint area */
-.app-sidebar,
-.app-main,
-.modal-content {
-  isolation: isolate;
-}
-
-/* Optimize for GPU compositing */
-@supports (will-change: transform) {
-  .btn:hover,
-  .card:hover,
-  .tab-btn:hover {
-    will-change: transform;
-  }
-  
-  .btn:not(:hover),
-  .card:not(:hover),
-  .tab-btn:not(:hover) {
-    will-change: auto;
-  }
-}
-
-
-/* ==========================================================================
-   PERFORMANCE MODE - For Low-End Devices
-   ========================================================================== */
-
-body.performance-mode {
-  /* Disable expensive effects */
-}
-
-body.performance-mode .card,
-body.performance-mode .modal-content,
-body.performance-mode .app-sidebar {
-  box-shadow: none !important;
-  border: 1px solid var(--border-color);
-}
-
-body.performance-mode .modal-backdrop,
-body.performance-mode .mobile-backdrop {
-  backdrop-filter: none !important;
-  background: rgba(0, 0, 0, 0.7);
-}
-
-body.performance-mode *::before,
-body.performance-mode *::after {
-  box-shadow: none !important;
-}
-
-body.performance-mode .nebula-cloud,
-body.performance-mode .stars-layer {
-  display: none !important;
-}
-
-/* Scrolling optimizations */
-body.scrolling .card:not(:hover),
-body.scrolling .btn:not(:active) {
-  pointer-events: none;
-}
-
-/* Touching optimizations */
-body.touching * {
-  -webkit-tap-highlight-color: transparent;
 }

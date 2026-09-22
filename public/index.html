@@ -25,6 +25,9 @@
     <div class="stars-layer"></div>
   </div>
 
+  <!-- Modal Backdrop for Auth Card -->
+  <div class="auth-modal-backdrop" id="authModalBackdrop" onclick="closeAuthModal()"></div>
+
   <!-- ============================================================ -->
   <!-- ============================================================ -->
   <!-- AUTH PORTAL OVERLAY — Modern Scrollable Portal with Top Nav -->
@@ -46,7 +49,7 @@
           </div>
         </div>
         <div class="auth-nav-actions">
-          <button class="auth-nav-btn" id="navLoginBtn" onclick="showAuthForm('login')">
+          <button class="auth-nav-btn" id="navLoginBtn" onclick="openAuthModal('login')">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
               <polyline points="10 17 15 12 10 7"/>
@@ -54,7 +57,7 @@
             </svg>
             <span>Login</span>
           </button>
-          <button class="auth-nav-btn auth-nav-btn-outline" id="navRegisterBtn" onclick="showAuthForm('register')">
+          <button class="auth-nav-btn auth-nav-btn-outline" id="navRegisterBtn" onclick="openAuthModal('register')">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
               <circle cx="8.5" cy="7" r="4"/>
@@ -221,122 +224,20 @@
       <!-- Split Layout Container -->
       <div class="auth-split-layout" id="authSplitLayout">
 
-      <!-- ============================================================ -->
-      <!-- CENTERED LOGIN & REGISTRATION FORM                           -->
-      <!-- ============================================================ -->
-      <section class="auth-showcase-panel" aria-label="Millennium Interactive SmartBoard Overview">
-        <!-- Brand Header with Neural Emblem & Company Pill -->
-        <div class="auth-showcase-brand-row">
-          <div class="auth-showcase-emblem" title="Brains Infinite Innovations Inc.">
-            <img src="/images/brains-logo.svg" alt="Brains Infinite Innovations" style="width: 100%; height: 100%; object-fit: contain; padding: 4px;" />
-          </div>
-          <div class="auth-corp-pill">
-            <span class="auth-corp-dot"></span>
-            <span>Brains Infinite Innovations Inc.</span>
-          </div>
-        </div>
-
-        <!-- Name Title of Millennium & Tagline -->
-        <div class="auth-hero-title-group">
-          <div class="auth-kicker-tag">FLAGSHIP INSTITUTIONAL ECOSYSTEM</div>
-          <h1 class="auth-hero-title">
-            <span class="auth-title-brand">MILLENNIUM</span>
-            <span class="auth-title-model">INTERACTIVE SMARTBOARD</span>
-          </h1>
-          <div class="auth-hero-tagline">
-            The Start <span class="script-of">of</span> Modern Day Technology
-          </div>
-          <p class="auth-hero-desc">
-            Next-generation enterprise collaboration, 4K digital pedagogy, and centralized IoT fleet intelligence. Engineered for universities, hospitals, corporate boardrooms, and smart schools.
-          </p>
-        </div>
-
-        <!-- 4 Core Millennium Feature Highlight Cards -->
-        <div class="auth-features-grid">
-          <div class="auth-feat-card">
-            <div class="auth-feat-icon-box cyan">
-              <span>🖥️</span>
-            </div>
-            <div class="auth-feat-body">
-              <div class="auth-feat-title">4K Ultra HD Anti-Glare Display</div>
-              <div class="auth-feat-desc">86", 75", 65" 3840×2160 native panel, 99% DCI-P3 color gamut, zero-gap optical bonding &amp; 4mm toughened safety glass.</div>
-            </div>
-          </div>
-
-          <div class="auth-feat-card">
-            <div class="auth-feat-icon-box purple">
-              <span>⚡</span>
-            </div>
-            <div class="auth-feat-body">
-              <div class="auth-feat-title">Modular Intel Core i7 OPS (Dual OS)</div>
-              <div class="auth-feat-title-sub">Windows 11 Pro + Android 13 Millennium OS</div>
-              <div class="auth-feat-desc">Hot-swappable JAE 80-pin Intel Core i7-12700 CPU, 16GB DDR4 RAM, and 512GB NVMe PCIe SSD architecture.</div>
-            </div>
-          </div>
-
-          <div class="auth-feat-card">
-            <div class="auth-feat-icon-box emerald">
-              <span>🎙️</span>
-            </div>
-            <div class="auth-feat-body">
-              <div class="auth-feat-title">8-Meter Sensitive Audio Pickup Radar</div>
-              <div class="auth-feat-desc">360° omnidirectional microphone array with AI acoustic echo cancellation &amp; ambient room noise suppression.</div>
-            </div>
-          </div>
-
-          <div class="auth-feat-card">
-            <div class="auth-feat-icon-box magenta">
-              <span>📡</span>
-            </div>
-            <div class="auth-feat-body">
-              <div class="auth-feat-title">4-Split Screen Wireless Casting &amp; Touch</div>
-              <div class="auth-feat-desc">Simultaneous wireless screen projection from Windows, Mac, iPad, and Android with ultra-low &lt;6ms touch response.</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Live Hardware Telemetry HUD Strip -->
-        <div class="auth-telemetry-strip">
-          <div class="auth-tele-item">
-            <span class="auth-tele-label">SYSTEM UPTIME</span>
-            <span class="auth-tele-val text-cyan">99.85% SLA</span>
-          </div>
-          <div class="auth-tele-item">
-            <span class="auth-tele-label">FLEET STATUS</span>
-            <span class="auth-tele-val text-emerald">● ALL NODES OK</span>
-          </div>
-          <div class="auth-tele-item">
-            <span class="auth-tele-label">NETWORK</span>
-            <span class="auth-tele-val text-purple">Wi-Fi 6 · BT 5.2</span>
-          </div>
-          <div class="auth-tele-item">
-            <span class="auth-tele-label">OPS CPU</span>
-            <span class="auth-tele-val text-gold">i7 12-Core 4.9GHz</span>
-          </div>
-        </div>
-
-        <!-- Philippine Headquarters Details & Contacts -->
-        <div class="auth-showcase-footer">
-          <div class="auth-contact-row">
-            <span class="auth-contact-icon">📍</span>
-            <span>Suite 1004 Atlanta Center, 31 Annapolis St., Greenhills, San Juan City Philippines</span>
-          </div>
-          <div class="auth-contact-row">
-            <span class="auth-contact-icon">✉️</span>
-            <a href="mailto:info@brains.asia">info@brains.asia</a>
-            <span class="auth-contact-sep">·</span>
-            <span class="auth-contact-icon">📞</span>
-            <a href="tel:+639755826830">+63 975 582 6830</a>
-            <span class="auth-contact-sep">·</span>
-            <a href="tel:+639815409835">+63 981 540 9835</a>
-          </div>
-        </div>
-      </section>
+  
 
       <!-- ============================================================ -->
-      <!-- RIGHT SIDE: LOGIN & REGISTRATION ACCESS CARD                   -->
+      <!-- RIGHT SIDE: LOGIN & REGISTRATION ACCESS CARD (MODAL)           -->
       <!-- ============================================================ -->
-      <div class="auth-portal-card" id="authPortalCard">
+      <div class="auth-portal-card auth-modal-hidden" id="authPortalCard">
+
+        <!-- Close Button for Modal -->
+        <button class="auth-modal-close-btn" onclick="closeAuthModal()" aria-label="Close login modal">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
 
         <!-- Auth Card Top Header -->
         <div class="auth-card-top-header">
