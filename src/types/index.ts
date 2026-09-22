@@ -78,12 +78,23 @@ export interface ServiceTicket {
   priority: TicketPriority;
   status: TicketStatus;
   assignedTechnician: string;
+  assignedTechnicianId?: string | null;
   technicianNotes: string;
   partsUsed: TicketPartUsed[];
   warrantyCovered: boolean;
   createdAt: string;
   updatedAt: string;
   resolvedAt?: string;
+}
+
+export interface TicketMessage {
+  id: string;
+  ticketId: string;
+  senderId: string;
+  senderName: string;
+  senderRole: UserRole;
+  message: string;
+  createdAt: string;
 }
 
 export interface Warranty {

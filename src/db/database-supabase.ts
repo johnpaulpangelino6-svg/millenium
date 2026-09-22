@@ -192,12 +192,14 @@ class MillenniumDatabase {
           priority TEXT DEFAULT 'Medium' CHECK(priority IN ('Low', 'Medium', 'High', 'Critical')),
           status TEXT DEFAULT 'Received' CHECK(status IN ('Received', 'Diagnosing', 'Repairing', 'Resolved', 'Closed')),
           assigned_technician TEXT DEFAULT 'Unassigned',
+          assigned_technician_id TEXT DEFAULT NULL,
           technician_notes TEXT DEFAULT '',
           warranty_covered BOOLEAN DEFAULT true,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           resolved_at TIMESTAMP,
-          FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE
+          FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE,
+          FOREIGN KEY (assigned_technician_id) REFERENCES users(id) ON DELETE SET NULL
         );
       `);
 
@@ -214,6 +216,23 @@ class MillenniumDatabase {
           FOREIGN KEY (ticket_id) REFERENCES service_tickets(id) ON DELETE CASCADE
         );
       `);
+
+      // Ticket Messages table (Private chat between admin and technician)
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS ticket_messages (
+          id TEXT PRIMARY KEY,
+          ticket_id TEXT NOT NULL,
+          sender_id TEXT NOT NULL,
+          sender_name TEXT NOT NULL,
+          sender_role TEXT NOT NULL,
+          message TEXT NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (ticket_id) REFERENCES service_tickets(id) ON DELETE CASCADE,
+          FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_ticket_messages_ticket_id ON ticket_messages(ticket_id);`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_ticket_messages_created_at ON ticket_messages(created_at);`);
 
       // Inventory Parts table
       await client.query(`
@@ -664,7 +683,8 @@ class MillenniumDatabase {
       SELECT id, ticket_number as "ticketNumber", device_id as "deviceId", 
              device_model as "deviceModel", customer_id as "customerId", 
              customer_name as "customerName", title, description, category, priority, status, 
-             assigned_technician as "assignedTechnician", technician_notes as "technicianNotes", 
+             assigned_technician as "assignedTechnician", assigned_technician_id as "assignedTechnicianId",
+             technician_notes as "technicianNotes", 
              warranty_covered as "warrantyCovered", created_at as "createdAt", 
              updated_at as "updatedAt", resolved_at as "resolvedAt"
       FROM service_tickets
@@ -693,7 +713,8 @@ class MillenniumDatabase {
       SELECT id, ticket_number as "ticketNumber", device_id as "deviceId", 
              device_model as "deviceModel", customer_id as "customerId", 
              customer_name as "customerName", title, description, category, priority, status, 
-             assigned_technician as "assignedTechnician", technician_notes as "technicianNotes", 
+             assigned_technician as "assignedTechnician", assigned_technician_id as "assignedTechnicianId",
+             technician_notes as "technicianNotes", 
              warranty_covered as "warrantyCovered", created_at as "createdAt", 
              updated_at as "updatedAt", resolved_at as "resolvedAt"
       FROM service_tickets
@@ -786,6 +807,47 @@ class MillenniumDatabase {
     await pool.query('UPDATE inventory_parts SET status = $1 WHERE id = $2', [status, partId]);
 
     return { success: true, message: `${quantity}x ${part.name} deducted from inventory.` };
+  }
+
+  // Assign ticket to technician
+  async assignTicketToTechnician(ticketId: string, technicianId: string, technicianName: string): Promise<ServiceTicket | null> {
+    const now = new Date().toISOString();
+    await pool.query(
+      `UPDATE service_tickets 
+       SET assigned_technician = $1, assigned_technician_id = $2, updated_at = $3
+       WHERE id = $4`,
+      [technicianName, technicianId, now, ticketId]
+    );
+    return this.getTicketById(ticketId);
+  }
+
+  // Get ticket messages (private chat between admin and technician)
+  async getTicketMessages(ticketId: string): Promise<any[]> {
+    const result = await pool.query(`
+      SELECT id, ticket_id as "ticketId", sender_id as "senderId", 
+             sender_name as "senderName", sender_role as "senderRole", 
+             message, created_at as "createdAt"
+      FROM ticket_messages
+      WHERE ticket_id = $1
+      ORDER BY created_at ASC
+    `, [ticketId]);
+    
+    return result.rows;
+  }
+
+  // Add ticket message
+  async addTicketMessage(ticketId: string, senderId: string, senderName: string, senderRole: string, message: string): Promise<any> {
+    const id = `MSG-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const result = await pool.query(
+      `INSERT INTO ticket_messages (id, ticket_id, sender_id, sender_name, sender_role, message)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, ticket_id as "ticketId", sender_id as "senderId", 
+                 sender_name as "senderName", sender_role as "senderRole", 
+                 message, created_at as "createdAt"`,
+      [id, ticketId, senderId, senderName, senderRole, message]
+    );
+    
+    return result.rows[0];
   }
 
   // -------------------------------------------------------------------------

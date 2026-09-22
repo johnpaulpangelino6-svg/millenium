@@ -273,6 +273,244 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
+/** Handle social login (Google, Facebook, Apple) */
+async function handleSocialLogin(provider) {
+  console.log(`🔐 Initiating ${provider} login...`);
+  
+  const button = event.target.closest('.social-btn');
+  if (button) {
+    button.classList.add('loading');
+  }
+  
+  // Redirect to OAuth provider
+  try {
+    window.location.href = `${API_BASE}/auth/${provider}`;
+  } catch (error) {
+    console.error('Social login error:', error);
+    showToast(`Failed to initiate ${provider} login`, 'error');
+    if (button) {
+      button.classList.remove('loading');
+    }
+  }
+}
+
+// Check for OAuth callbacks on page load
+window.addEventListener('DOMContentLoaded', () => {
+  const hash = window.location.hash;
+  
+  // OAuth success callback
+  if (hash.startsWith('#oauth-success')) {
+    const urlParams = new URLSearchParams(hash.split('?')[1]);
+    const userDataEncoded = urlParams.get('user');
+    
+    if (userDataEncoded) {
+      try {
+        const user = JSON.parse(decodeURIComponent(userDataEncoded));
+        saveAuthSession(user);
+        window.location.hash = '';
+        window.location.reload();
+      } catch (error) {
+        console.error('Failed to parse OAuth user data:', error);
+        showToast('Authentication successful but failed to parse user data', 'error');
+      }
+    }
+  }
+  
+  // OAuth role selection needed
+  if (hash === '#oauth-role-selection') {
+    window.location.hash = '';
+    showOAuthRoleSelectionModal();
+  }
+});
+
+/** Show OAuth role selection modal */
+async function showOAuthRoleSelectionModal() {
+  try {
+    // Get OAuth session data from backend
+    const res = await fetch(`${API_BASE}/auth/oauth/session`);
+    const data = await res.json();
+    
+    if (!data.success || !data.data) {
+      showToast('OAuth session expired. Please try again.', 'error');
+      return;
+    }
+    
+    const oauthData = data.data;
+    
+    // Create modal HTML
+    const modal = document.createElement('div');
+    modal.className = 'oauth-role-modal-overlay';
+    modal.innerHTML = `
+      <div class="oauth-role-modal">
+        <div class="oauth-role-header">
+          <div class="oauth-profile-section">
+            ${oauthData.profilePhoto ? `<img src="${escapeHtml(oauthData.profilePhoto)}" alt="Profile" class="oauth-profile-photo" />` : '<div class="oauth-profile-placeholder">👤</div>'}
+            <div>
+              <h2 class="oauth-welcome-title">Welcome, ${escapeHtml(oauthData.fullName)}!</h2>
+              <p class="oauth-welcome-subtitle">${escapeHtml(oauthData.email)}</p>
+              <p class="oauth-provider-badge">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                </svg>
+                Signed in with ${oauthData.provider.charAt(0).toUpperCase() + oauthData.provider.slice(1)}
+              </p>
+            </div>
+          </div>
+        </div>
+        
+        <div class="oauth-role-body">
+          <h3 class="oauth-section-title">Select Your Account Type</h3>
+          <p class="oauth-section-desc">Choose how you'll be using the Millennium SmartBoard system</p>
+          
+          <form id="oauthRoleForm" class="oauth-role-form">
+            <div class="oauth-role-options">
+              <label class="oauth-role-option">
+                <input type="radio" name="role" value="technician" required />
+                <div class="oauth-role-card">
+                  <div class="oauth-role-icon">🔧</div>
+                  <div class="oauth-role-info">
+                    <div class="oauth-role-title">Field Technician</div>
+                    <div class="oauth-role-desc">Manage assigned service tickets and inventory</div>
+                  </div>
+                  <div class="oauth-role-check">✓</div>
+                </div>
+              </label>
+              
+              <label class="oauth-role-option">
+                <input type="radio" name="role" value="customer" required />
+                <div class="oauth-role-card">
+                  <div class="oauth-role-icon">🏫</div>
+                  <div class="oauth-role-info">
+                    <div class="oauth-role-title">Customer / Client</div>
+                    <div class="oauth-role-desc">Monitor your devices and service status</div>
+                  </div>
+                  <div class="oauth-role-check">✓</div>
+                </div>
+              </label>
+            </div>
+            
+            <div class="oauth-additional-fields" id="oauthAdditionalFields" style="display:none;">
+              <div class="auth-form-group">
+                <label class="auth-label" for="oauthLocation">Primary Location</label>
+                <select id="oauthLocation" class="auth-select">
+                  <option value="Quezon City">Quezon City</option>
+                  <option value="Taguig (BGC)">Taguig (BGC)</option>
+                  <option value="Makati">Makati</option>
+                  <option value="Mandaluyong">Mandaluyong</option>
+                  <option value="Pasig">Pasig</option>
+                  <option value="Manila">Manila</option>
+                  <option value="Paranaque">Paranaque</option>
+                  <option value="Marikina">Marikina</option>
+                  <option value="Cebu City">Cebu City</option>
+                  <option value="Davao City">Davao City</option>
+                </select>
+              </div>
+              
+              <div class="auth-form-group">
+                <label class="auth-label" for="oauthOrganization" id="oauthOrgLabel">School / Organization Name</label>
+                <input type="text" id="oauthOrganization" class="auth-input" placeholder="e.g. Ateneo de Manila University"/>
+              </div>
+            </div>
+            
+            <div id="oauthRoleError" class="auth-error-msg" style="display:none;"></div>
+            
+            <button type="submit" class="auth-submit-btn" id="oauthRoleSubmitBtn">
+              <span class="auth-btn-text">Complete Registration</span>
+              <svg class="auth-btn-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+            </button>
+          </form>
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // Handle role selection change
+    const roleOptions = modal.querySelectorAll('input[name="role"]');
+    const additionalFields = modal.querySelector('#oauthAdditionalFields');
+    const orgLabel = modal.querySelector('#oauthOrgLabel');
+    
+    roleOptions.forEach(option => {
+      option.addEventListener('change', (e) => {
+        additionalFields.style.display = 'block';
+        
+        if (e.target.value === 'customer') {
+          orgLabel.textContent = 'School / Organization Name';
+        } else {
+          orgLabel.textContent = 'Company Name (Optional)';
+        }
+        
+        // Update visual selection
+        roleOptions.forEach(opt => {
+          opt.closest('.oauth-role-option').classList.remove('selected');
+        });
+        e.target.closest('.oauth-role-option').classList.add('selected');
+      });
+    });
+    
+    // Handle form submission
+    const form = modal.querySelector('#oauthRoleForm');
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const selectedRole = modal.querySelector('input[name="role"]:checked');
+      if (!selectedRole) {
+        showOAuthError('Please select an account type');
+        return;
+      }
+      
+      const role = selectedRole.value;
+      const location = modal.querySelector('#oauthLocation').value;
+      const organization = modal.querySelector('#oauthOrganization').value;
+      
+      const submitBtn = modal.querySelector('#oauthRoleSubmitBtn');
+      submitBtn.disabled = true;
+      submitBtn.querySelector('.auth-btn-text').textContent = 'Creating account...';
+      
+      try {
+        const res = await fetch(`${API_BASE}/auth/oauth/complete`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ role, location, organization }),
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+          showToast(`✅ Account created successfully! Welcome, ${data.user.fullName}`, 'success');
+          saveAuthSession(data.user);
+          modal.remove();
+          window.location.reload();
+        } else {
+          showOAuthError(data.error || 'Failed to complete registration');
+          submitBtn.disabled = false;
+          submitBtn.querySelector('.auth-btn-text').textContent = 'Complete Registration';
+        }
+      } catch (error) {
+        console.error('OAuth completion error:', error);
+        showOAuthError('Network error. Please try again.');
+        submitBtn.disabled = false;
+        submitBtn.querySelector('.auth-btn-text').textContent = 'Complete Registration';
+      }
+    });
+    
+    function showOAuthError(message) {
+      const errorEl = modal.querySelector('#oauthRoleError');
+      errorEl.textContent = message;
+      errorEl.style.display = 'block';
+      setTimeout(() => {
+        errorEl.style.display = 'none';
+      }, 5000);
+    }
+    
+  } catch (error) {
+    console.error('Failed to load OAuth session:', error);
+    showToast('Failed to load authentication data. Please try again.', 'error');
+  }
+}
+
 
 /** One-click demo login — fills credentials AND auto-submits immediately */
 async function quickDemoLogin(username, password, roleLabel) {
@@ -559,10 +797,19 @@ function showToast(message, type = 'info') {
 // --- Data Fetchers ---
 async function fetchAllData() {
   try {
+    // Build tickets URL with role-based filtering
+    const user = state.currentUser;
+    const role = state.currentRole;
+    let ticketsUrl = `${API_BASE}/tickets`;
+    
+    if (user && role) {
+      ticketsUrl += `?userId=${encodeURIComponent(user.id)}&userRole=${encodeURIComponent(role)}`;
+    }
+    
     const fetchPromises = [
       fetch(`${API_BASE}/stats/dashboard`),
       fetch(`${API_BASE}/devices`),
-      fetch(`${API_BASE}/tickets`),
+      fetch(ticketsUrl),
       fetch(`${API_BASE}/warranties`),
       fetch(`${API_BASE}/inventory`),
       fetch(`${API_BASE}/cms`),
@@ -3219,24 +3466,33 @@ function renderTicketsView() {
     <div class="page-header-row">
       <div>
         <h1 class="page-title">🔧 ${isTech ? 'My Assigned Tickets' : 'Maintenance & Service Tickets'}</h1>
-        <p class="page-description">${isTech ? 'Your active service jobs and repair tasks.' : 'Automated lifecycle from issue detection to technician dispatch and inventory parts deduction.'}</p>
+        <p class="page-description">${isTech ? 'Your active service jobs and repair tasks assigned to you.' : 'Automated lifecycle from issue detection to technician dispatch and inventory parts deduction.'}</p>
       </div>
       <div class="page-actions">
         ${isAdmin ? `<button class="btn btn-primary" onclick="openCreateTicketModal()">➕ Submit Service Ticket</button>` : ''}
         ${isTech  ? `<button class="btn btn-secondary" onclick="fetchAllData()">🔄 Refresh My Jobs</button>` : ''}
       </div>
     </div>
-    ${isTech ? `<div class="role-info-banner">🔧 <strong>Technician View:</strong> Showing all open tickets. Use the ticket detail to log parts used and update status.</div>` : ''}
+    ${isTech ? `<div class="role-info-banner">🔧 <strong>Technician View:</strong> Showing only tickets assigned to you. Contact admin to view unassigned tickets.</div>` : ''}
+    ${isAdmin ? `<div class="role-info-banner">👑 <strong>Admin View:</strong> You can see all tickets from all customers and assign them to technicians.</div>` : ''}
 
     <!-- Kanban Columns -->
-    <div class="kanban-board">
+    <div class="kanban-board">${received.length === 0 && diagnosing.length === 0 && repairing.length === 0 && resolved.length === 0 && isTech ? `
+      <div style="grid-column: 1 / -1; text-align: center; padding: 60px 20px; background: rgba(0, 242, 254, 0.05); border-radius: 12px; border: 1px dashed rgba(0, 242, 254, 0.3);">
+        <div style="font-size: 3rem; margin-bottom: 16px;">📭</div>
+        <h3 style="font-size: 1.3rem; font-weight: 700; margin-bottom: 8px; color: var(--neon-cyan);">No Tickets Assigned Yet</h3>
+        <p style="color: var(--text-secondary); font-size: 0.95rem;">
+          You don't have any assigned service tickets at the moment. Check back later or contact your admin.
+        </p>
+      </div>
+    ` : `
       <!-- 1. Received -->
       <div class="kanban-column">
         <div class="kanban-header">
           <span>📥 Received (${received.length})</span>
           <span class="status-pill status-offline">${received.length} Pending</span>
         </div>
-        ${received.map(renderTicketCard).join('')}
+        ${received.length === 0 ? '<p style="padding:16px;color:var(--text-muted);">No tickets in this stage.</p>' : received.map(renderTicketCard).join('')}
       </div>
 
       <!-- 2. Diagnosing -->
@@ -3245,7 +3501,7 @@ function renderTicketsView() {
           <span>🔍 Diagnosing (${diagnosing.length})</span>
           <span class="status-pill status-warning">${diagnosing.length} In Progress</span>
         </div>
-        ${diagnosing.map(renderTicketCard).join('')}
+        ${diagnosing.length === 0 ? '<p style="padding:16px;color:var(--text-muted);">No tickets in this stage.</p>' : diagnosing.map(renderTicketCard).join('')}
       </div>
 
       <!-- 3. Repairing -->
@@ -3254,7 +3510,7 @@ function renderTicketsView() {
           <span>⚙️ Repairing (${repairing.length})</span>
           <span class="status-pill status-maintenance">${repairing.length} On-Site</span>
         </div>
-        ${repairing.map(renderTicketCard).join('')}
+        ${repairing.length === 0 ? '<p style="padding:16px;color:var(--text-muted);">No tickets in this stage.</p>' : repairing.map(renderTicketCard).join('')}
       </div>
 
       <!-- 4. Resolved -->
@@ -3263,8 +3519,9 @@ function renderTicketsView() {
           <span>✅ Resolved (${resolved.length})</span>
           <span class="status-pill status-online">${resolved.length} Closed</span>
         </div>
-        ${resolved.map(renderTicketCard).join('')}
+        ${resolved.length === 0 ? '<p style="padding:16px;color:var(--text-muted);">No tickets in this stage.</p>' : resolved.map(renderTicketCard).join('')}
       </div>
+    `}
     </div>
   `;
 }
@@ -4696,6 +4953,11 @@ function openTicketDetailModal(ticketId) {
   const title = document.getElementById('ticketDetailTitle');
   const body = document.getElementById('ticketDetailBody');
 
+  const isAdmin = state.currentRole === 'admin';
+  const isTechnician = state.currentRole === 'technician';
+  const isAssignedTech = isTechnician && tck.assignedTechnicianId === state.currentUser?.id;
+  const canChat = isAdmin || isAssignedTech;
+
   if (title) title.textContent = `Ticket Details — ${tck.ticketNumber}`;
   if (body) {
     body.innerHTML = `
@@ -4713,6 +4975,62 @@ function openTicketDetailModal(ticketId) {
           <div><strong>Assigned Tech:</strong> ${tck.assignedTechnician}</div>
           <div><strong>Status:</strong> <span class="status-pill status-online">${tck.status}</span></div>
         </div>
+
+        ${isAdmin ? `
+        <!-- Admin: Assign Technician Section -->
+        <div style="background: rgba(0, 242, 254, 0.08); padding: 16px; border-radius: 10px; border: 1px solid rgba(0, 242, 254, 0.25);">
+          <h4 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 8px; color: var(--neon-cyan);">👤 Assign Technician</h4>
+          <p style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 10px;">
+            Select a field technician to assign this ticket for repair.
+          </p>
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <select id="assignTechnicianSelect" class="form-select" style="flex: 1;">
+              <option value="">Select Technician...</option>
+              ${(state.allUsers || state.users || []).filter(u => u.role === 'technician').map(u => 
+                `<option value="${u.id}" ${tck.assignedTechnicianId === u.id ? 'selected' : ''}>${u.fullName} (${u.location})</option>`
+              ).join('')}
+            </select>
+            <button class="btn btn-primary btn-sm" onclick="assignTicketToTechnician()">
+              ${tck.assignedTechnicianId ? '🔄 Reassign' : '📋 Assign'}
+            </button>
+          </div>
+        </div>
+        ` : ''}
+
+        ${canChat ? `
+        <!-- Private Chat Section (Admin & Assigned Technician) -->
+        <div style="background: rgba(168, 85, 247, 0.08); padding: 16px; border-radius: 10px; border: 1px solid rgba(168, 85, 247, 0.25);">
+          <h4 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 8px; color: var(--neon-purple);">
+            💬 Private Chat ${isAdmin ? '(Admin ↔ Technician)' : '(You ↔ Admin)'}
+          </h4>
+          <p style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 10px;">
+            ${isAdmin ? 'Communicate privately with the assigned technician about this ticket.' : 'Discuss this ticket privately with the admin.'}
+          </p>
+          
+          <!-- Chat Messages Container -->
+          <div id="ticketChatMessages" style="max-height: 250px; overflow-y: auto; background: rgba(0, 0, 0, 0.3); border-radius: 8px; padding: 12px; margin-bottom: 10px;">
+            <div style="text-align: center; color: var(--text-muted); font-size: 0.8rem;">
+              <div class="spinner" style="margin: 10px auto;"></div>
+              Loading messages...
+            </div>
+          </div>
+
+          <!-- Chat Input -->
+          <div style="display: flex; gap: 8px;">
+            <input 
+              type="text" 
+              id="ticketChatInput" 
+              class="form-input" 
+              placeholder="Type your message..." 
+              style="flex: 1;"
+              onkeypress="if(event.key === 'Enter') sendTicketMessage()"
+            />
+            <button class="btn btn-primary btn-sm" onclick="sendTicketMessage()">
+              📤 Send
+            </button>
+          </div>
+        </div>
+        ` : ''}
 
         <div class="form-group">
           <label class="form-label">Update Ticket Status</label>
@@ -4745,6 +5063,11 @@ function openTicketDetailModal(ticketId) {
         </div>
       </div>
     `;
+    
+    // Load chat messages if user can access chat
+    if (canChat) {
+      loadTicketMessages(ticketId);
+    }
   }
 
   if (modal) modal.classList.add('active');
@@ -4755,6 +5078,177 @@ function closeTicketDetailModal() {
   if (modal) modal.classList.remove('active');
   state.selectedTicket = null;
 }
+
+// Assign ticket to technician (Admin only)
+async function assignTicketToTechnician() {
+  if (!state.selectedTicket) return;
+  
+  const select = document.getElementById('assignTechnicianSelect');
+  const technicianId = select.value;
+  
+  if (!technicianId) {
+    showToast('Please select a technician', 'error');
+    return;
+  }
+  
+  const technician = (state.allUsers || state.users || []).find(u => u.id === technicianId);
+  if (!technician) {
+    showToast('Technician not found', 'error');
+    return;
+  }
+  
+  try {
+    const res = await fetch(`${API_BASE}/tickets/${state.selectedTicket.id}/assign`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        technicianId: technician.id,
+        technicianName: technician.fullName 
+      }),
+    });
+    const data = await res.json();
+    
+    if (data.success) {
+      showToast(`✅ Ticket assigned to ${technician.fullName}!`, 'success');
+      await fetchAllData();
+      // Reopen modal to refresh the view
+      openTicketDetailModal(state.selectedTicket.id);
+    } else {
+      showToast(data.error || 'Failed to assign ticket', 'error');
+    }
+  } catch (err) {
+    console.error('Assignment error:', err);
+    showToast('Network error while assigning ticket', 'error');
+  }
+}
+
+// Load ticket messages
+async function loadTicketMessages(ticketId) {
+  const container = document.getElementById('ticketChatMessages');
+  if (!container) return;
+  
+  try {
+    const res = await fetch(`${API_BASE}/tickets/${ticketId}/messages`);
+    const data = await res.json();
+    
+    if (data.success) {
+      const messages = data.data || [];
+      
+      if (messages.length === 0) {
+        container.innerHTML = `
+          <div style="text-align: center; color: var(--text-muted); font-size: 0.8rem; padding: 20px;">
+            💬 No messages yet. Start the conversation!
+          </div>
+        `;
+      } else {
+        container.innerHTML = messages.map(msg => {
+          const isCurrentUser = msg.senderId === state.currentUser?.id;
+          const bubbleColor = msg.senderRole === 'admin' ? 'rgba(0, 242, 254, 0.15)' : 'rgba(168, 85, 247, 0.15)';
+          const borderColor = msg.senderRole === 'admin' ? 'rgba(0, 242, 254, 0.4)' : 'rgba(168, 85, 247, 0.4)';
+          const textAlign = isCurrentUser ? 'right' : 'left';
+          const marginSide = isCurrentUser ? 'margin-left: auto' : 'margin-right: auto';
+          
+          return `
+            <div style="text-align: ${textAlign}; margin-bottom: 12px;">
+              <div style="display: inline-block; max-width: 75%; ${marginSide};">
+                <div style="font-size: 0.7rem; color: var(--text-muted); margin-bottom: 2px;">
+                  ${isCurrentUser ? 'You' : msg.senderName} ${msg.senderRole === 'admin' ? '👑' : '🔧'}
+                </div>
+                <div style="background: ${bubbleColor}; border: 1px solid ${borderColor}; padding: 10px 14px; border-radius: 12px; font-size: 0.85rem; word-wrap: break-word;">
+                  ${escapeHtml(msg.message)}
+                </div>
+                <div style="font-size: 0.65rem; color: var(--text-muted); margin-top: 2px;">
+                  ${formatTimestamp(msg.createdAt)}
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('');
+        
+        // Scroll to bottom
+        container.scrollTop = container.scrollHeight;
+      }
+    } else {
+      container.innerHTML = `
+        <div style="text-align: center; color: #f87171; font-size: 0.8rem;">
+          ⚠️ Failed to load messages
+        </div>
+      `;
+    }
+  } catch (err) {
+    console.error('Load messages error:', err);
+    container.innerHTML = `
+      <div style="text-align: center; color: #f87171; font-size: 0.8rem;">
+        ⚠️ Network error
+      </div>
+    `;
+  }
+}
+
+// Send ticket message
+async function sendTicketMessage() {
+  if (!state.selectedTicket || !state.currentUser) return;
+  
+  const input = document.getElementById('ticketChatInput');
+  const message = input?.value?.trim();
+  
+  if (!message) {
+    showToast('Please type a message', 'error');
+    return;
+  }
+  
+  try {
+    const res = await fetch(`${API_BASE}/tickets/${state.selectedTicket.id}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        senderId: state.currentUser.id,
+        senderName: state.currentUser.fullName || state.currentUser.username,
+        senderRole: state.currentUser.role,
+        message: message
+      }),
+    });
+    const data = await res.json();
+    
+    if (data.success) {
+      // Clear input
+      if (input) input.value = '';
+      // Reload messages
+      await loadTicketMessages(state.selectedTicket.id);
+    } else {
+      showToast(data.error || 'Failed to send message', 'error');
+    }
+  } catch (err) {
+    console.error('Send message error:', err);
+    showToast('Network error while sending message', 'error');
+  }
+}
+
+// Helper functions
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function formatTimestamp(isoString) {
+  const date = new Date(isoString);
+  const now = new Date();
+  const diffMs = now - date;
+  const diffMins = Math.floor(diffMs / 60000);
+  
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays}d ago`;
+  
+  return date.toLocaleDateString();
+}
+
 
 async function advanceTicketStatus(ticketId, newStatus) {
   try {

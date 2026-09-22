@@ -157,11 +157,11 @@ apiRouter.patch('/auth/users/:id', async (req: Request, res: Response) => {
 apiRouter.delete('/auth/users/:id', async (req: Request, res: Response) => {
   try {
     const id = getParam(req.params.id);
-    const ok = await db.deleteUser(id);
-    if (!ok) {
-      return res.status(404).json({ success: false, error: 'User not found.' });
+    const success = await db.deleteUser(id);
+    if (!success) {
+      return res.status(404).json({ success: false, error: 'User not found' });
     }
-    res.json({ success: true, message: 'User deleted successfully.' });
+    res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -429,8 +429,56 @@ apiRouter.delete('/customers/:id', async (req: Request, res: Response) => {
 apiRouter.get('/tickets', async (req: Request, res: Response) => {
   try {
     let tickets = await db.getTickets();
-    const { status, priority, category, deviceId } = req.query;
+    const { status, priority, category, deviceId, userId, userRole } = req.query;
 
+    // Role-based filtering
+    if (userRole === 'technician' && userId) {
+      // Technicians only see tickets assigned to them
+      tickets = tickets.filter((t) => t.assignedTechnicianId === userId);
+    } else if (userRole === 'customer' && userId) {
+      // Customers only see their own tickets
+      // Find customer's organization and devices
+      const users = await db.getUsers();
+      const user = users.find(u => u.id === userId);
+      
+      if (user) {
+        const userOrg = (user.organization || '').trim().toLowerCase();
+        const userCustId = (user.customerId || '').trim().toLowerCase();
+        
+        // Find matched customer record
+        const customers = await db.getCustomers();
+        const matchedCustomer = customers.find(c =>
+          (userCustId && c.id.toLowerCase() === userCustId) ||
+          (userOrg && c.organizationName.toLowerCase() === userOrg)
+        );
+        
+        // Get customer's devices
+        const devices = await db.getDevices();
+        const customerDeviceIds = new Set(
+          devices
+            .filter(d => {
+              const devCustId = (d.customerId || '').trim().toLowerCase();
+              const devCustName = (d.customerName || '').trim().toLowerCase();
+              if (matchedCustomer && devCustId === matchedCustomer.id.toLowerCase()) return true;
+              if (userCustId && devCustId === userCustId) return true;
+              if (userOrg && devCustName === userOrg) return true;
+              return false;
+            })
+            .map(d => d.id)
+        );
+        
+        // Filter tickets by customer's devices or organization name
+        tickets = tickets.filter(t => {
+          const tCustName = (t.customerName || '').trim().toLowerCase();
+          if (userOrg && tCustName === userOrg) return true;
+          if (customerDeviceIds.has(t.deviceId)) return true;
+          return false;
+        });
+      }
+    }
+    // If admin or no userRole specified, show all tickets (default behavior)
+
+    // Apply additional filters
     if (status)   tickets = tickets.filter((t) => t.status.toLowerCase()   === (status as string).toLowerCase());
     if (priority) tickets = tickets.filter((t) => t.priority.toLowerCase() === (priority as string).toLowerCase());
     if (category) tickets = tickets.filter((t) => t.category.toLowerCase() === (category as string).toLowerCase());
@@ -518,6 +566,84 @@ apiRouter.post('/tickets/:id/use-part', async (req: Request, res: Response) => {
       return res.status(400).json(result);
     }
     res.json({ success: true, message: result.message, ticket: await db.getTicketById(id) });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/tickets/:id/assign - Assign ticket to technician (Admin only)
+apiRouter.post('/tickets/:id/assign', async (req: Request, res: Response) => {
+  try {
+    const id = getParam(req.params.id);
+    const { technicianId, technicianName } = req.body;
+    
+    if (!technicianId || !technicianName) {
+      return res.status(400).json({ success: false, error: 'Technician ID and name are required.' });
+    }
+    
+    // Verify technician exists
+    const users = await db.getUsers();
+    const technician = users.find(u => u.id === technicianId && u.role === 'technician');
+    if (!technician) {
+      return res.status(404).json({ success: false, error: 'Technician not found.' });
+    }
+    
+    const updated = await db.assignTicketToTechnician(id, technicianId, technicianName);
+    if (!updated) {
+      return res.status(404).json({ success: false, error: 'Ticket not found.' });
+    }
+    
+    res.json({ success: true, data: updated, message: `Ticket assigned to ${technicianName}` });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /api/tickets/:id/messages - Get private chat messages for a ticket
+apiRouter.get('/tickets/:id/messages', async (req: Request, res: Response) => {
+  try {
+    const id = getParam(req.params.id);
+    
+    // Verify ticket exists
+    const ticket = await db.getTicketById(id);
+    if (!ticket) {
+      return res.status(404).json({ success: false, error: 'Ticket not found.' });
+    }
+    
+    const messages = await db.getTicketMessages(id);
+    res.json({ success: true, data: messages });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/tickets/:id/messages - Send a message in ticket chat
+apiRouter.post('/tickets/:id/messages', async (req: Request, res: Response) => {
+  try {
+    const id = getParam(req.params.id);
+    const { senderId, senderName, senderRole, message } = req.body;
+    
+    if (!senderId || !senderName || !senderRole || !message) {
+      return res.status(400).json({ success: false, error: 'Sender ID, name, role, and message are required.' });
+    }
+    
+    // Verify ticket exists
+    const ticket = await db.getTicketById(id);
+    if (!ticket) {
+      return res.status(404).json({ success: false, error: 'Ticket not found.' });
+    }
+    
+    // Verify sender is admin or assigned technician
+    if (senderRole !== 'admin' && senderRole !== 'technician') {
+      return res.status(403).json({ success: false, error: 'Only admin and technicians can send messages.' });
+    }
+    
+    if (senderRole === 'technician' && ticket.assignedTechnicianId !== senderId) {
+      return res.status(403).json({ success: false, error: 'Only the assigned technician can send messages.' });
+    }
+    
+    const newMessage = await db.addTicketMessage(id, senderId, senderName, senderRole, message);
+    res.status(201).json({ success: true, data: newMessage });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }

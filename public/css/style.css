@@ -7957,3 +7957,310 @@ body {
     height: 32px;
   }
 }
+
+
+/* ========================================================================== 
+   Ticket Assignment & Chat Styling
+   ========================================================================== */
+
+/* Chat messages container custom scrollbar */
+#ticketChatMessages::-webkit-scrollbar {
+  width: 6px;
+}
+
+#ticketChatMessages::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+
+#ticketChatMessages::-webkit-scrollbar-thumb {
+  background: rgba(0, 242, 254, 0.3);
+  border-radius: 3px;
+}
+
+#ticketChatMessages::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 242, 254, 0.5);
+}
+
+/* Chat input focus effect */
+#ticketChatInput:focus {
+  border-color: var(--neon-purple);
+  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.1);
+}
+
+/* Assignment select focus effect */
+#assignTechnicianSelect:focus {
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 0 3px rgba(0, 242, 254, 0.1);
+}
+
+/* Smooth animations for chat messages */
+#ticketChatMessages > div {
+  animation: slideInMessage 0.3s ease-out;
+}
+
+@keyframes slideInMessage {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Loading spinner for chat */
+#ticketChatMessages .spinner {
+  border: 2px solid rgba(0, 242, 254, 0.2);
+  border-top: 2px solid var(--neon-cyan);
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Technician badge on ticket cards */
+.ticket-assigned-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background: rgba(168, 85, 247, 0.15);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--neon-purple);
+}
+
+.ticket-unassigned-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #fbbf24;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  #ticketChatMessages {
+    max-height: 200px;
+  }
+  
+  #assignTechnicianSelect {
+    font-size: 0.85rem;
+  }
+}
+
+
+/* ========================================================================== 
+   Social Login Buttons Styling
+   ========================================================================== */
+
+/* Divider with text */
+.auth-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  margin: 24px 0 20px 0;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.auth-divider span {
+  padding: 0 16px;
+  letter-spacing: 0.02em;
+}
+
+/* Social login buttons container */
+.social-login-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+/* Base social button styling */
+.social-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid;
+  position: relative;
+  overflow: hidden;
+}
+
+.social-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, transparent 100%);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.social-btn:hover::before {
+  opacity: 1;
+}
+
+.social-btn:active {
+  transform: scale(0.98);
+}
+
+.social-icon {
+  flex-shrink: 0;
+  transition: transform 0.25s ease;
+}
+
+.social-btn:hover .social-icon {
+  transform: scale(1.1);
+}
+
+/* Google button */
+.social-btn-google {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(0, 0, 0, 0.1);
+  color: #1f1f1f;
+}
+
+[data-theme="dark"] .social-btn-google {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+}
+
+.social-btn-google:hover {
+  background: rgba(255, 255, 255, 1);
+  border-color: rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 12px rgba(66, 133, 244, 0.25);
+}
+
+[data-theme="dark"] .social-btn-google:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.3);
+  box-shadow: 0 4px 12px rgba(66, 133, 244, 0.2);
+}
+
+/* Facebook button */
+.social-btn-facebook {
+  background: #1877F2;
+  border-color: #1877F2;
+  color: #ffffff;
+}
+
+.social-btn-facebook:hover {
+  background: #0c63d4;
+  border-color: #0c63d4;
+  box-shadow: 0 4px 12px rgba(24, 119, 242, 0.4);
+}
+
+[data-theme="dark"] .social-btn-facebook {
+  background: rgba(24, 119, 242, 0.2);
+  border-color: rgba(24, 119, 242, 0.4);
+}
+
+[data-theme="dark"] .social-btn-facebook:hover {
+  background: rgba(24, 119, 242, 0.3);
+  border-color: rgba(24, 119, 242, 0.6);
+}
+
+/* Apple button */
+.social-btn-apple {
+  background: #000000;
+  border-color: #000000;
+  color: #ffffff;
+}
+
+.social-btn-apple:hover {
+  background: #1a1a1a;
+  border-color: #1a1a1a;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="dark"] .social-btn-apple {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(255, 255, 255, 0.95);
+  color: #000000;
+}
+
+[data-theme="dark"] .social-btn-apple:hover {
+  background: rgba(255, 255, 255, 1);
+  border-color: rgba(255, 255, 255, 1);
+  box-shadow: 0 4px 12px rgba(255, 255, 255, 0.3);
+}
+
+[data-theme="dark"] .social-btn-apple svg path {
+  fill: #000000;
+}
+
+/* Responsive adjustments */
+@media (max-width: 640px) {
+  .social-btn {
+    padding: 11px 16px;
+    font-size: 0.85rem;
+    gap: 10px;
+  }
+  
+  .social-icon {
+    width: 16px;
+    height: 16px;
+  }
+  
+  .auth-divider {
+    margin: 20px 0 16px 0;
+    font-size: 0.75rem;
+  }
+}
+
+/* Loading state for social buttons */
+.social-btn.loading {
+  pointer-events: none;
+  opacity: 0.6;
+  position: relative;
+}
+
+.social-btn.loading::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  right: 20px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
