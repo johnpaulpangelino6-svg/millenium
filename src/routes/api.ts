@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import passport from '../config/passport.js';
 import { db } from '../db/database-supabase.js';
 
 export const apiRouter = Router();
@@ -162,6 +163,162 @@ apiRouter.delete('/auth/users/:id', async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, error: 'User not found' });
     }
     res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ============================================================
+// OAUTH ROUTES - Google, Facebook, Apple
+// ============================================================
+
+// Google OAuth
+apiRouter.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+
+apiRouter.get('/auth/google/callback',
+  passport.authenticate('google', { failureRedirect: '/' }),
+  (req: Request, res: Response) => {
+    const user: any = req.user;
+    
+    // If user needs role selection, redirect to role selection page
+    if (user && user.needsRoleSelection) {
+      // Store OAuth data in session
+      (req.session as any).oauthData = user;
+      return res.redirect('/#oauth-role-selection');
+    }
+    
+    // User exists, redirect to app with user data
+    const userData = encodeURIComponent(JSON.stringify(user));
+    res.redirect(`/#oauth-success?user=${userData}`);
+  }
+);
+
+// Facebook OAuth
+apiRouter.get('/auth/facebook', passport.authenticate('facebook', { scope: ['email'] }));
+
+apiRouter.get('/auth/facebook/callback',
+  passport.authenticate('facebook', { failureRedirect: '/' }),
+  (req: Request, res: Response) => {
+    const user: any = req.user;
+    
+    if (user && user.needsRoleSelection) {
+      (req.session as any).oauthData = user;
+      return res.redirect('/#oauth-role-selection');
+    }
+    
+    const userData = encodeURIComponent(JSON.stringify(user));
+    res.redirect(`/#oauth-success?user=${userData}`);
+  }
+);
+
+// Apple OAuth
+apiRouter.get('/auth/apple', passport.authenticate('apple', { scope: ['email', 'name'] }));
+
+apiRouter.post('/auth/apple/callback',
+  passport.authenticate('apple', { failureRedirect: '/' }),
+  (req: Request, res: Response) => {
+    const user: any = req.user;
+    
+    if (user && user.needsRoleSelection) {
+      (req.session as any).oauthData = user;
+      return res.redirect('/#oauth-role-selection');
+    }
+    
+    const userData = encodeURIComponent(JSON.stringify(user));
+    res.redirect(`/#oauth-success?user=${userData}`);
+  }
+);
+
+// Complete OAuth registration with role selection
+apiRouter.post('/auth/oauth/complete', async (req: Request, res: Response) => {
+  try {
+    const { role, location, organization } = req.body;
+    const oauthData = (req.session as any).oauthData;
+    
+    if (!oauthData) {
+      return res.status(400).json({ success: false, error: 'No OAuth session found' });
+    }
+    
+    if (!role || !['technician', 'customer'].includes(role)) {
+      return res.status(400).json({ success: false, error: 'Valid role is required' });
+    }
+    
+    // Determine organization
+    let orgName = (organization && String(organization).trim()) || '';
+    if (role === 'customer' && !orgName) {
+      orgName = `${oauthData.fullName}'s Organization`;
+    } else if (role === 'technician' && !orgName) {
+      orgName = 'Brains Infinite Innovations';
+    }
+    
+    // Create user in database
+    const result = await db.registerOAuthUser({
+      email: oauthData.email,
+      fullName: oauthData.fullName,
+      role,
+      location: location || 'Quezon City',
+      organization: orgName,
+      oauthProvider: oauthData.provider,
+      oauthProviderId: oauthData.providerId,
+      profilePhoto: oauthData.profilePhoto || null,
+    });
+    
+    if (!result.success) {
+      return res.status(500).json({ success: false, error: result.error });
+    }
+    
+    // If customer, create customer organization
+    if (role === 'customer' && orgName) {
+      const allCustomers = await db.getCustomers();
+      const match = allCustomers.find(
+        (c) => c.organizationName.toLowerCase() === orgName.toLowerCase()
+      );
+      if (!match) {
+        await db.addCustomer({
+          organizationName: orgName,
+          clientType: orgName.toLowerCase().includes('inc') || orgName.toLowerCase().includes('corp') ? 'corporate' : 'school',
+          contactPerson: oauthData.fullName,
+          email: oauthData.email,
+          city: location || 'Metro Manila',
+        });
+      }
+    }
+    
+    // Log audit
+    await db.logAudit({
+      userName: oauthData.fullName,
+      action: 'OAuth User Registered',
+      details: `New ${role} account via ${oauthData.provider} - ${oauthData.email}`
+    });
+    
+    // Clear OAuth session data
+    delete (req.session as any).oauthData;
+    
+    console.log(`  ✅ OAuth registration complete: ${oauthData.email} as ${role}`);
+    res.json({ success: true, user: result.user });
+  } catch (error: any) {
+    console.error('OAuth completion error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get OAuth session data
+apiRouter.get('/auth/oauth/session', (req: Request, res: Response) => {
+  const oauthData = (req.session as any).oauthData;
+  if (!oauthData) {
+    return res.status(404).json({ success: false, error: 'No OAuth session found' });
+  }
+  res.json({ success: true, data: oauthData });
+});
+
+apiRouter.delete('/users/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const ok = await db.deleteUser(id);
+    if (!ok) {
+      return res.status(404).json({ success: false, error: 'User not found.' });
+    }
+    res.json({ success: true, message: 'User deleted successfully.' });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }

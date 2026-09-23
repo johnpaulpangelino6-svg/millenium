@@ -105,8 +105,27 @@ class MillenniumDatabase {
           location TEXT DEFAULT 'All Locations',
           allowed_locations JSONB DEFAULT '[]'::jsonb,
           organization TEXT DEFAULT '',
+          oauth_provider TEXT DEFAULT NULL,
+          oauth_provider_id TEXT DEFAULT NULL,
+          profile_photo TEXT DEFAULT NULL,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
+      `);
+      
+      // Add OAuth columns if they don't exist (migration support)
+      await client.query(`
+        DO $$ 
+        BEGIN 
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='oauth_provider') THEN
+            ALTER TABLE users ADD COLUMN oauth_provider TEXT DEFAULT NULL;
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='oauth_provider_id') THEN
+            ALTER TABLE users ADD COLUMN oauth_provider_id TEXT DEFAULT NULL;
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='profile_photo') THEN
+            ALTER TABLE users ADD COLUMN profile_photo TEXT DEFAULT NULL;
+          END IF;
+        END $$;
       `);
 
       // Customers table
@@ -417,6 +436,70 @@ class MillenniumDatabase {
   async deleteUser(id: string): Promise<boolean> {
     const result = await pool.query('DELETE FROM users WHERE id = $1', [id]);
     return (result.rowCount || 0) > 0;
+  }
+
+  // -------------------------------------------------------------------------
+  // OAUTH USER REGISTRATION
+  // -------------------------------------------------------------------------
+  
+  async registerOAuthUser(data: {
+    email: string;
+    fullName: string;
+    role: string;
+    location?: string;
+    organization?: string;
+    oauthProvider: string;
+    oauthProviderId: string;
+    profilePhoto?: string;
+  }): Promise<{ success: boolean; user?: any; error?: string }> {
+    try {
+      const id = `USR-${Date.now()}`;
+      // Generate username from email
+      const username = data.email.split('@')[0] + '_' + data.oauthProvider;
+      // OAuth users don't need password, but we need a placeholder for schema
+      const hash = hashPassword(`oauth_${data.oauthProviderId}_${Date.now()}`);
+      
+      await pool.query(
+        `INSERT INTO users (id, username, email, password_hash, full_name, role, location, organization, 
+         allowed_locations, oauth_provider, oauth_provider_id, profile_photo)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+        [
+          id,
+          username,
+          data.email,
+          hash,
+          data.fullName,
+          data.role,
+          data.location || 'All Locations',
+          data.organization || '',
+          JSON.stringify([data.location || 'All Locations']),
+          data.oauthProvider,
+          data.oauthProviderId,
+          data.profilePhoto || null
+        ]
+      );
+
+      console.log(`  💾 OAuth user saved to Supabase: ${username} (${data.role}) via ${data.oauthProvider}`);
+
+      const user = {
+        id,
+        username,
+        email: data.email,
+        fullName: data.fullName,
+        role: data.role,
+        location: data.location || 'All Locations',
+        organization: data.organization || '',
+        allowedLocations: [data.location || 'All Locations'],
+        oauthProvider: data.oauthProvider,
+        oauthProviderId: data.oauthProviderId,
+        profilePhoto: data.profilePhoto || null,
+      };
+
+      return { success: true, user };
+    } catch (err: any) {
+      console.error(`  ❌ Failed to save OAuth user: ${err.message}`);
+      return { success: false, error: err.message };
+    }
   }
 
   // -------------------------------------------------------------------------

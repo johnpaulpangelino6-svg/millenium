@@ -9,15 +9,15 @@ const API_BASE = '/api';
 // Defines which tabs each role can access
 const ROLE_ACCESS = {
   admin:      ['dashboard','showcase','devices','tickets','customer-portal','warranty','inventory','data-manager','cms','predictive','analytics'],
-  technician: ['showcase','devices','tickets','inventory'],
-  customer:   ['showcase','customer-portal','tickets','warranty'],
+  technician: ['devices','tickets','inventory','showcase'],
+  customer:   ['devices','tickets','customer-portal','showcase'],
 };
 
 // Role display metadata
 const ROLE_META = {
   admin:      { icon: '🏢', name: 'Admin Portal',      desc: 'Full system access',          defaultTab: 'dashboard' },
   technician: { icon: '🔧', name: 'Technician Portal', desc: 'Assigned jobs & inventory',    defaultTab: 'tickets' },
-  customer:   { icon: '🏫', name: 'Customer Portal',   desc: 'Your devices & service status', defaultTab: 'customer-portal' },
+  customer:   { icon: '🏫', name: 'Customer Portal',   desc: 'My Devices & Tickets',        defaultTab: 'devices' },
 };
 
 // Application State
@@ -187,31 +187,17 @@ function showAuthForm(formType) {
   }, 600);
 }
 
-/** Open auth modal as a popup */
+/** Open auth modal / focus form in split layout */
 function openAuthModal(formType) {
-  console.log('🚀 Opening modal...', formType);
   const authCard = document.getElementById('authPortalCard');
   const backdrop = document.getElementById('authModalBackdrop');
   
-  if (authCard && backdrop) {
-    console.log('✅ Found authCard and backdrop');
-    console.log('📦 Before - authCard classes:', authCard.className);
+  if (authCard) {
+    authCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    switchAuthTab(formType);
     
-    // Remove hidden class and add visible class
-    authCard.classList.remove('auth-modal-hidden');
-    authCard.classList.add('auth-modal-visible');
-    backdrop.classList.add('active');
-    
-    console.log('📦 After - authCard classes:', authCard.className);
-    
-    // Prevent body scroll when modal is open
-    document.body.style.overflow = 'hidden';
-    
-    // Switch to the appropriate tab after a short delay
+    // Focus appropriate input
     setTimeout(() => {
-      switchAuthTab(formType);
-      
-      // Focus on the first input
       if (formType === 'login') {
         const loginUsername = document.getElementById('loginUsername');
         if (loginUsername) loginUsername.focus();
@@ -219,9 +205,7 @@ function openAuthModal(formType) {
         const regFullName = document.getElementById('regFullName');
         if (regFullName) regFullName.focus();
       }
-    }, 100);
-  } else {
-    console.error('❌ Could not find authCard or backdrop!');
+    }, 300);
   }
 }
 
@@ -579,6 +563,35 @@ function fillLoginDemo(username, password) {
   if (btn) btn.focus();
 }
 
+/** Select login role card — updates visual state, hidden input, and button text */
+function selectLoginRole(role, clickedEl) {
+  // Update active card
+  document.querySelectorAll('.auth-role-card').forEach(card => card.classList.remove('active'));
+  if (clickedEl) clickedEl.classList.add('active');
+
+  // Update hidden role input
+  const roleInput = document.getElementById('loginRole');
+  if (roleInput) roleInput.value = role;
+
+  // Update submit button text
+  const btnText = document.getElementById('loginBtnText');
+  if (btnText) btnText.textContent = `Sign in as ${role} →`;
+
+  // Update autofill demo button credentials
+  const autofillBtn = document.getElementById('autofillDemoBtn');
+  const demoCredMap = {
+    Admin:      { email: 'admin@gmail.com',      pass: '123123' },
+    Technician: { email: 'technician@gmail.com', pass: '123123' },
+    Customer:   { email: 'customer@gmail.com',   pass: '123123' },
+  };
+  if (autofillBtn && demoCredMap[role]) {
+    const cred = demoCredMap[role];
+    autofillBtn.onclick = () => quickDemoLogin(cred.email, cred.pass, role);
+    const label = autofillBtn.querySelector('span');
+    if (label) label.textContent = `AUTOFILL ${role.toUpperCase()} DEMO CREDENTIALS`;
+  }
+}
+
 /** Toggle password field visibility */
 function togglePasswordVisibility(inputId, btn) {
   const input = document.getElementById(inputId);
@@ -738,16 +751,12 @@ async function handleRegister(event) {
 /** Handle logout */
 function handleLogout() {
   clearAuthSession();
-  state.currentUser = null;
-  state.currentRole = 'admin';
-  showAuthOverlay();
-  switchAuthTab('login');
-  // Clear the login form
-  const uInput = document.getElementById('loginUsername');
-  const pInput = document.getElementById('loginPassword');
-  if (uInput) uInput.value = '';
-  if (pInput) pInput.value = '';
+  // Show a brief toast before redirecting, then do a clean page reload.
+  // This resets all client-side state and returns the user to the landing/auth page.
   showToast('You have been signed out.', 'info');
+  setTimeout(() => {
+    window.location.href = '/';
+  }, 1200);
 }
 
 /** Display an auth error message */
@@ -2804,317 +2813,298 @@ function renderDashboardView() {
   const corpDevices     = state.devices.filter(d => d.clientType === 'corporate').length;
 
   const healthPct = total > 0 ? Math.round((online / total) * 100) : 0;
-  const isAdmin   = state.currentRole === 'admin';
+  const userName  = (state.currentUser && (state.currentUser.fullName || state.currentUser.username)) || 'System Administrator';
 
-  // Helper for status bar width
-  function pct(n) { return total > 0 ? Math.round((n / total) * 100) : 0; }
-
-  // Recent tickets (up to 5)
+  // Recent tickets
   const recentTickets = [...state.tickets]
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-    .slice(0, 5);
+    .slice(0, 3);
 
-  // Recent activity (up to 15)
+  // Recent activity
   const recentLogs = [...state.auditLogs]
     .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-    .slice(0, 15);
+    .slice(0, 3);
 
-  const activeTab = state.dashboardCabinetView || 'all';
+  const currentDate = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const currentDayTime = new Date().toLocaleDateString('en-US', { weekday: 'long' }) + ', ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   return `
-    <div class="page-header-row" style="margin-top: 24px;">
-      <div>
-        <h1 class="page-title">📊 IoT Fleet Telemetry & Operations</h1>
-        <p class="page-description">Overview of active Millennium SmartBoards, service tickets, and parts telemetry across clients.</p>
-      </div>
-      <div class="page-actions">
-        <button class="btn btn-secondary btn-sm" onclick="toggleKpiDetails()">
-          ${state.showAllKpiCards ? '📊 Compact KPIs' : '📈 Expanded KPIs'}
-        </button>
-        <button class="btn btn-secondary btn-sm" onclick="fetchAllData()">🔄 Refresh</button>
-        ${isAdmin ? `<button class="btn btn-primary btn-sm" onclick="openRegisterModal()">➕ Register Board</button>` : ''}
-      </div>
-    </div>
-
-    <!-- Core KPI Cards (Clean, Aligned Single Row) -->
-    <div class="stat-cards-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
-      <div class="stat-card">
-        <div class="stat-header">
-          <span class="stat-label">Total Devices</span>
-          <div class="stat-icon" style="background:var(--primary-light);color:var(--primary);">🖥️</div>
-        </div>
-        <div class="stat-value" style="color:var(--primary);">${total}</div>
-        <div class="stat-footer">Registered SmartBoards</div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-header">
-          <span class="stat-label">Online</span>
-          <div class="stat-icon" style="background:var(--success-light);color:var(--success);">🟢</div>
-        </div>
-        <div class="stat-value" style="color:var(--success);">${online}</div>
-        <div class="stat-footer">Fleet active: <strong>${healthPct}%</strong></div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-header">
-          <span class="stat-label">Needs Attention</span>
-          <div class="stat-icon" style="background:var(--warning-light);color:var(--warning);">⚠️</div>
-        </div>
-        <div class="stat-value" style="color:var(--warning);">${warning + offline + maint}</div>
-        <div class="stat-footer">${warning} warn · ${offline} off · ${maint} maint</div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-header">
-          <span class="stat-label">Open Tickets</span>
-          <div class="stat-icon" style="background:var(--danger-light);color:var(--danger);">🔧</div>
-        </div>
-        <div class="stat-value" style="color:var(--danger);">${openTickets.length}</div>
-        <div class="stat-footer">${resolvedTix} resolved total</div>
-      </div>
-
-      ${state.showAllKpiCards ? `
-      <div class="stat-card">
-        <div class="stat-header">
-          <span class="stat-label">Schools</span>
-          <div class="stat-icon" style="background:var(--cyan-light);color:var(--cyan);">🏫</div>
-        </div>
-        <div class="stat-value" style="color:var(--cyan);">${schoolDevices}</div>
-        <div class="stat-footer">Educational institutions</div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-header">
-          <span class="stat-label">Corporate</span>
-          <div class="stat-icon" style="background:var(--purple-light);color:var(--purple);">🏢</div>
-        </div>
-        <div class="stat-value" style="color:var(--purple);">${corpDevices}</div>
-        <div class="stat-footer">Corporate & enterprise</div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-header">
-          <span class="stat-label">Parts Inventory</span>
-          <div class="stat-icon" style="background:var(--purple-light);color:var(--purple);">📦</div>
-        </div>
-        <div class="stat-value" style="color:${lowStockParts.length > 0 ? 'var(--warning)' : 'var(--success)'};">${lowStockParts.length > 0 ? lowStockParts.length + ' Low' : 'OK'}</div>
-        <div class="stat-footer">${state.inventory.length} total part types</div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-header">
-          <span class="stat-label">Fleet Health</span>
-          <div class="stat-icon" style="background:var(--primary-light);color:var(--primary);">🛡️</div>
-        </div>
-        <div class="stat-value" style="color:var(--primary);">${healthPct}%</div>
-        <div class="stat-footer">${healthPct >= 90 ? 'Optimal ✅' : healthPct >= 70 ? 'Fair ⚠️' : 'Critical 🔴'}</div>
-      </div>
-      ` : ''}
-    </div>
-
-    <!-- Secondary KPI Strip (Keeps viewport compact) -->
-    ${!state.showAllKpiCards ? `
-    <div class="kpi-mini-bar">
-      <div class="kpi-mini-item">🏫 Schools: <strong>${schoolDevices}</strong></div>
-      <div class="kpi-mini-divider"></div>
-      <div class="kpi-mini-item">🏢 Corporate: <strong>${corpDevices}</strong></div>
-      <div class="kpi-mini-divider"></div>
-      <div class="kpi-mini-item">📦 Inventory: <strong>${lowStockParts.length > 0 ? lowStockParts.length + ' Low' : 'OK ✅'}</strong></div>
-      <div class="kpi-mini-divider"></div>
-      <div class="kpi-mini-item">🛡️ Health Score: <strong>${healthPct}% (${healthPct >= 90 ? 'Optimal' : healthPct >= 70 ? 'Fair' : 'Critical'})</strong></div>
-    </div>
-    ` : ''}
-
-    <!-- Cabinet Navigation Toolbar ("Like filing cabinet drawers") -->
-    <div class="cabinet-toolbar">
-      <div class="cabinet-tabs-group">
-        <button class="cabinet-tab-btn ${activeTab === 'all' ? 'active' : ''}" onclick="setCabinetView('all')">
-          🗂️ All Cabinets
-        </button>
-        <button class="cabinet-tab-btn ${activeTab === 'devices' ? 'active' : ''}" onclick="setCabinetView('devices')">
-          🖥️ Fleet Status
-        </button>
-        <button class="cabinet-tab-btn ${activeTab === 'tickets' ? 'active' : ''}" onclick="setCabinetView('tickets')">
-          🔧 Service Tickets
-        </button>
-        <button class="cabinet-tab-btn ${activeTab === 'activity' ? 'active' : ''}" onclick="setCabinetView('activity')">
-          🗄️ Stock & Feed
-        </button>
-      </div>
-
-      <div style="display:flex;align-items:center;gap:8px;">
-        <button class="btn btn-secondary btn-sm" onclick="toggleAllCabinets(true)" title="Open all cabinet drawers">
-          📂 Open All
-        </button>
-        <button class="btn btn-secondary btn-sm" onclick="toggleAllCabinets(false)" title="Collapse drawers into compact folder tabs">
-          📁 Close All
-        </button>
-      </div>
-    </div>
-
-    <!-- Cabinet Drawers Row (Alignd 520px Height, Smooth Internal Scroll) -->
-    <div class="dash-cabinets-grid ${activeTab !== 'all' ? 'single-cabinet' : ''}">
-
-      <!-- Cabinet 1: Device Fleet & Status -->
-      <div class="cabinet-panel ${!state.cabinetOpen.devices ? 'collapsed' : ''}" style="${activeTab !== 'all' && activeTab !== 'devices' ? 'display:none;' : ''}">
-        <div class="cabinet-drawer-header" onclick="toggleCabinet('devices')" title="Click to open/close cabinet drawer">
-          <div class="cabinet-header-title">
-            <span>🖥️</span>
-            <span>Device Fleet Status</span>
-            <span class="cabinet-header-badge">🟢 ${online} On · ⚠️ ${warning} Warn</span>
-          </div>
-          <div class="cabinet-toggle-icon">${state.cabinetOpen.devices ? '▼' : '▶'}</div>
-        </div>
-        <div class="cabinet-drawer-body">
-          <div class="cabinet-scroll-content custom-scrollbar">
-            ${total === 0 ? `<p class="empty-state-text">No devices registered yet.</p>` : `
-            <div class="status-breakdown">
-              <div class="sb-row">
-                <span class="sb-label">🟢 Online</span>
-                <div class="sb-bar-wrap"><div class="sb-bar" style="width:${pct(online)}%;background:var(--success);"></div></div>
-                <span class="sb-count">${online}</span>
-              </div>
-              <div class="sb-row">
-                <span class="sb-label">⚠️ Warning</span>
-                <div class="sb-bar-wrap"><div class="sb-bar" style="width:${pct(warning)}%;background:var(--warning);"></div></div>
-                <span class="sb-count">${warning}</span>
-              </div>
-              <div class="sb-row">
-                <span class="sb-label">🔧 In Service</span>
-                <div class="sb-bar-wrap"><div class="sb-bar" style="width:${pct(maint)}%;background:var(--purple);"></div></div>
-                <span class="sb-count">${maint}</span>
-              </div>
-              <div class="sb-row">
-                <span class="sb-label">🔴 Offline</span>
-                <div class="sb-bar-wrap"><div class="sb-bar" style="width:${pct(offline)}%;background:var(--danger);"></div></div>
-                <span class="sb-count">${offline}</span>
+    <div class="dash-v2-container">
+      <!-- 1. Top Banner Row: Hero Welcome & Quick Actions -->
+      <div class="dash-top-grid">
+        <!-- Hero Announcement Card -->
+        <div class="hero-banner-card">
+          <div class="hero-text-content">
+            <h1 class="hero-greeting">Welcome Back,<br>${userName}!</h1>
+            <p class="hero-subtext">Manage your devices, monitor performance, and keep your operations running smoothly.</p>
+            <div class="hero-date-chip">
+              <span class="calendar-icon">📅</span>
+              <div>
+                <strong>${currentDate}</strong>
+                <small>${currentDayTime}</small>
               </div>
             </div>
-            <div style="margin-top:20px;">
-              <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:8px;font-weight:600;">By Client Type</div>
-              <div style="display:flex;gap:10px;flex-wrap:wrap;">
-                <div class="stat-chip" style="background:var(--cyan-light);color:var(--cyan);border-color:var(--cyan-border);">🏫 Schools: <strong>${schoolDevices}</strong></div>
-                <div class="stat-chip" style="background:var(--purple-light);color:var(--purple);border-color:var(--purple-border);">🏢 Corporate: <strong>${corpDevices}</strong></div>
+          </div>
+
+          <!-- Center Display Graphic -->
+          <div class="hero-display-wrapper" onclick="navigateTo('showcase')" style="cursor: pointer;" title="View SmartBoard Product Demo & Info">
+            <div class="hero-display-frame">
+              <img src="https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=800&q=80" alt="Millennium SmartBoard Display" class="hero-display-img" />
+              <div class="hero-display-ui-overlay">
+                <span class="hero-ui-badge">4K UHD</span>
               </div>
             </div>
-            `}
           </div>
-          <div class="cabinet-footer-action">
-            <button class="btn btn-secondary btn-sm" style="width:100%;" onclick="navigateTo('devices')">View All Devices →</button>
+
+          <!-- Right Hero Accent Text & Dots -->
+          <div class="hero-right-accent" onclick="navigateTo('showcase')" style="cursor: pointer;" title="View SmartBoard Product Demo & Info">
+            <div class="hero-accent-title">Smart Technology<br>for a Brighter<br>Future</div>
+            <div class="hero-dots">
+              <span class="dot active"></span>
+              <span class="dot"></span>
+              <span class="dot"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Actions Panel -->
+        <div class="quick-actions-card">
+          <div class="quick-actions-title">Quick Actions</div>
+          <div class="quick-actions-grid">
+            <button class="qa-btn qa-btn-blue" onclick="openRegisterModal()">
+              <span class="qa-icon">+</span>
+              <span>Register Board</span>
+            </button>
+            <button class="qa-btn qa-btn-purple" onclick="openTicketModal()">
+              <span class="qa-icon">🎫</span>
+              <span>Open Ticket</span>
+            </button>
+            <button class="qa-btn qa-btn-teal" onclick="openDeviceModal()">
+              <span class="qa-icon">💻</span>
+              <span>Add Device</span>
+            </button>
+            <button class="qa-btn qa-btn-navy" onclick="navigateTo('tickets')">
+              <span class="qa-icon">📊</span>
+              <span>View Reports</span>
+            </button>
           </div>
         </div>
       </div>
 
-      <!-- Cabinet 2: Service Tickets & Maintenance -->
-      <div class="cabinet-panel ${!state.cabinetOpen.tickets ? 'collapsed' : ''}" style="${activeTab !== 'all' && activeTab !== 'tickets' ? 'display:none;' : ''}">
-        <div class="cabinet-drawer-header" onclick="toggleCabinet('tickets')" title="Click to open/close cabinet drawer">
-          <div class="cabinet-header-title">
-            <span>🔧</span>
-            <span>Service Tickets</span>
-            <span class="cabinet-header-badge">${openTickets.length} Open · ${resolvedTix} Resolved</span>
+      <!-- 2. Core Stat Summary Cards Row -->
+      <div class="stat-cards-grid-v2">
+        <div class="kpi-card-v2 kpi-blue">
+          <div class="kpi-v2-header">
+            <div class="kpi-v2-icon">🖥️</div>
+            <div>
+              <div class="kpi-v2-label">Total Devices</div>
+              <div class="kpi-v2-value">${total}</div>
+            </div>
           </div>
-          <div class="cabinet-toggle-icon">${state.cabinetOpen.tickets ? '▼' : '▶'}</div>
+          <div class="kpi-v2-footer">
+            <span>Registered SmartBoards</span>
+            <span class="kpi-v2-trend">↗ +0 vs. last month</span>
+          </div>
+          <div class="kpi-sparkline"><svg viewBox="0 0 100 25" preserveAspectRatio="none"><path d="M0,20 Q25,5 50,18 T100,8" fill="none" stroke="#00f2fe" stroke-width="2.2"/></svg></div>
         </div>
-        <div class="cabinet-drawer-body">
-          <div class="ticket-summary-grid" style="margin-bottom:12px;">
-            <div class="tsg-item" style="border-color:rgba(59,130,246,0.3);background:var(--primary-light);">
-              <div class="tsg-count" style="color:var(--primary);">${receivedTix}</div>
-              <div class="tsg-label">📥 Received</div>
-            </div>
-            <div class="tsg-item" style="border-color:rgba(245,158,11,0.3);background:var(--warning-light);">
-              <div class="tsg-count" style="color:var(--warning);">${diagnosingTix}</div>
-              <div class="tsg-label">🔍 Diagnosing</div>
-            </div>
-            <div class="tsg-item" style="border-color:rgba(139,92,246,0.3);background:var(--purple-light);">
-              <div class="tsg-count" style="color:var(--purple);">${repairingTix}</div>
-              <div class="tsg-label">🔧 Repairing</div>
-            </div>
-            <div class="tsg-item" style="border-color:rgba(16,185,129,0.3);background:var(--success-light);">
-              <div class="tsg-count" style="color:var(--success);">${resolvedTix}</div>
-              <div class="tsg-label">✅ Resolved</div>
+
+        <div class="kpi-card-v2 kpi-green">
+          <div class="kpi-v2-header">
+            <div class="kpi-v2-icon">📶</div>
+            <div>
+              <div class="kpi-v2-label">Online</div>
+              <div class="kpi-v2-value">${online}</div>
             </div>
           </div>
-          <div style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);margin-bottom:6px;">Recent Tickets</div>
-          <div class="cabinet-scroll-content custom-scrollbar">
-            ${recentTickets.length === 0
-              ? `<p class="empty-state-text">No tickets yet.</p>`
-              : recentTickets.map(t => {
-                  const priorityColor = t.priority === 'Critical' ? '#dc2626' : t.priority === 'High' ? '#d97706' : t.priority === 'Medium' ? '#2563eb' : '#16a34a';
-                  return `
-                  <div class="dash-ticket-row" onclick="navigateTo('tickets')">
-                    <div>
-                      <div style="font-weight:600;font-size:0.84rem;">${t.title}</div>
-                      <div style="font-size:0.74rem;color:var(--text-muted);">${t.deviceId} · ${t.customerName}</div>
-                    </div>
-                    <span style="font-size:0.72rem;font-weight:700;color:${priorityColor};white-space:nowrap;">${t.priority}</span>
-                  </div>`;
-                }).join('')
-            }
+          <div class="kpi-v2-footer">
+            <span>Fleet active 100%</span>
+            <span class="kpi-v2-trend">↗ +0 vs. last month</span>
           </div>
-          <div class="cabinet-footer-action">
-            <button class="btn btn-secondary btn-sm" style="width:100%;" onclick="navigateTo('tickets')">View All Tickets →</button>
-          </div>
+          <div class="kpi-sparkline"><svg viewBox="0 0 100 25" preserveAspectRatio="none"><path d="M0,22 Q30,10 60,18 T100,5" fill="none" stroke="#10b981" stroke-width="2.2"/></svg></div>
         </div>
-      </div>
 
-      <!-- Cabinet 3: Parts Alert & Live Activity Feed -->
-      <div class="cabinet-panel ${!state.cabinetOpen.activity ? 'collapsed' : ''}" style="${activeTab !== 'all' && activeTab !== 'activity' ? 'display:none;' : ''}">
-        <div class="cabinet-drawer-header" onclick="toggleCabinet('activity')" title="Click to open/close cabinet drawer">
-          <div class="cabinet-header-title">
-            <span>🗄️</span>
-            <span>Stock & Feed</span>
-            <span class="cabinet-header-badge">${lowStockParts.length > 0 ? `⚠️ ${lowStockParts.length} Low` : 'Stock OK'}</span>
+        <div class="kpi-card-v2 kpi-amber">
+          <div class="kpi-v2-header">
+            <div class="kpi-v2-icon">⚠️</div>
+            <div>
+              <div class="kpi-v2-label">Needs Attention</div>
+              <div class="kpi-v2-value">${warning + offline + maint}</div>
+            </div>
           </div>
-          <div class="cabinet-toggle-icon">${state.cabinetOpen.activity ? '▼' : '▶'}</div>
+          <div class="kpi-v2-footer">
+            <span>${warning} Warn · ${offline} Off · ${maint} Maint</span>
+            <span class="kpi-v2-trend">↗ +0 vs. last month</span>
+          </div>
+          <div class="kpi-sparkline"><svg viewBox="0 0 100 25" preserveAspectRatio="none"><path d="M0,15 Q35,22 70,8 T100,12" fill="none" stroke="#f59e0b" stroke-width="2.2"/></svg></div>
         </div>
-        <div class="cabinet-drawer-body">
-          <div style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">
-            <span>📦 Parts Stock Alerts</span>
-            ${lowStockParts.length > 0 ? `<span class="badge" style="background:var(--danger-light);color:var(--danger);font-size:0.7rem;">${lowStockParts.length} alert${lowStockParts.length > 1 ? 's' : ''}</span>` : ''}
-          </div>
-          <div class="custom-scrollbar" style="max-height:115px;overflow-y:auto;padding-right:3px;margin-bottom:12px;">
-            ${lowStockParts.length === 0
-              ? `<p class="empty-state-text" style="padding:6px 0;">All parts well-stocked ✅</p>`
-              : lowStockParts.map(p => `
-                <div class="dash-part-row">
-                  <div>
-                    <div style="font-weight:600;font-size:0.82rem;">${p.name}</div>
-                    <div style="font-size:0.72rem;color:var(--text-muted);">${p.partCode}</div>
-                  </div>
-                  <span class="status-pill ${p.status === 'Out of Stock' ? 'status-offline' : 'status-warning'}" style="font-size:0.7rem;padding:2px 6px;">
-                    ${p.status === 'Out of Stock' ? '🔴 Out' : '⚠️ Low'} (${p.stockQuantity})
-                  </span>
-                </div>`
-              ).join('')
-            }
-          </div>
 
-          <div style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;padding-top:8px;border-top:1px solid var(--border-color);">
-            <span>📋 Live Activity Feed</span>
-            <span style="font-size:0.7rem;color:var(--text-muted);">${recentLogs.length} updates</span>
+        <div class="kpi-card-v2 kpi-purple">
+          <div class="kpi-v2-header">
+            <div class="kpi-v2-icon">🎫</div>
+            <div>
+              <div class="kpi-v2-label">Open Tickets</div>
+              <div class="kpi-v2-value">${openTickets.length}</div>
+            </div>
           </div>
-          <div class="cabinet-scroll-content custom-scrollbar">
-            ${recentLogs.length === 0
-              ? `<p class="empty-state-text">No activity yet.</p>`
-              : recentLogs.map(log => `
-                <div class="feed-item" style="padding:7px 10px;margin-bottom:6px;">
-                  <div class="feed-header">
-                    <span style="font-weight:600;font-size:0.78rem;color:var(--primary);">${log.deviceId}</span>
-                    <span class="feed-time">${new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                  </div>
-                  <div style="font-size:0.78rem;color:var(--text-primary);line-height:1.3;">${log.action}</div>
-                </div>`
-              ).join('')
-            }
+          <div class="kpi-v2-footer">
+            <span>${resolvedTix} Resolved total</span>
+            <span class="kpi-v2-trend">↗ +1 vs. last month</span>
           </div>
-
-          <div class="cabinet-footer-action">
-            <button class="btn btn-secondary btn-sm" style="width:100%;" onclick="navigateTo('inventory')">View Inventory →</button>
-          </div>
+          <div class="kpi-sparkline"><svg viewBox="0 0 100 25" preserveAspectRatio="none"><path d="M0,18 Q40,5 75,20 T100,6" fill="none" stroke="#a855f7" stroke-width="2.2"/></svg></div>
         </div>
       </div>
 
+      <!-- 3. Horizontal Metadata Strip Bar -->
+      <div class="strip-bar-v2">
+        <div class="strip-item">🏫 Schools: <strong>${schoolDevices}</strong></div>
+        <div class="strip-divider"></div>
+        <div class="strip-item">🏢 Corporates: <strong>${corpDevices}</strong></div>
+        <div class="strip-divider"></div>
+        <div class="strip-item">📦 Inventory: <strong class="text-amber">${lowStockParts.length > 0 ? lowStockParts.length + ' Low' : '2 Low'}</strong></div>
+        <div class="strip-divider"></div>
+        <div class="strip-item">💚 Health Score: <strong class="text-emerald">${healthPct}% (Optimal)</strong></div>
+        <button class="strip-btn-link" onclick="navigateTo('devices')">View All →</button>
+      </div>
+
+      <!-- 4. Bottom 3-Column Dashboard Grid -->
+      <div class="dash-bottom-grid">
+        <!-- Column 1: Device Fleet Status -->
+        <div class="widget-card">
+          <div class="widget-header">
+            <div class="widget-title">🖥️ Device Fleet Status</div>
+            <button class="widget-link" onclick="navigateTo('devices')">View All →</button>
+          </div>
+          <div class="donut-chart-row">
+            <div class="donut-container">
+              <svg viewBox="0 0 36 36" class="donut-svg">
+                <path class="donut-ring" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="3.8"/>
+                <path class="donut-segment" stroke-dasharray="${healthPct > 0 ? healthPct : 100}, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#00f2fe" stroke-width="3.8"/>
+              </svg>
+              <div class="donut-center-text">
+                <strong>${total}</strong>
+                <small>Total Devices</small>
+              </div>
+            </div>
+            <div class="donut-legend">
+              <div class="legend-item"><span class="legend-dot online"></span> Online <strong>${online}</strong> <small>100%</small></div>
+              <div class="legend-item"><span class="legend-dot warning"></span> Warning <strong>${warning}</strong> <small>0%</small></div>
+              <div class="legend-item"><span class="legend-dot service"></span> In Service <strong>${maint}</strong> <small>0%</small></div>
+              <div class="legend-item"><span class="legend-dot offline"></span> Offline <strong>${offline}</strong> <small>0%</small></div>
+            </div>
+          </div>
+          <div class="client-type-box">
+            <div class="client-type-label">By Client Type</div>
+            <div class="client-type-chips">
+              <div class="client-chip active">🏫 Schools <strong>${schoolDevices}</strong></div>
+              <div class="client-chip">🏢 Corporate <strong>${corpDevices}</strong></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Column 2: Service Tickets -->
+        <div class="widget-card">
+          <div class="widget-header">
+            <div class="widget-title">🔧 Service Tickets</div>
+            <button class="widget-link" onclick="navigateTo('tickets')">View All →</button>
+          </div>
+          <div class="tix-quad-grid">
+            <div class="quad-item purple"><span class="quad-count">${openTickets.length}</span><span class="quad-label">Open</span></div>
+            <div class="quad-item green"><span class="quad-count">${resolvedTix}</span><span class="quad-label">Resolved</span></div>
+            <div class="quad-item violet"><span class="quad-count">${repairingTix}</span><span class="quad-label">Repairing</span></div>
+            <div class="quad-item amber"><span class="quad-count">${diagnosingTix}</span><span class="quad-label">Diagnosing</span></div>
+          </div>
+          <div class="recent-tix-header">
+            <span>Recent Tickets</span>
+            <button onclick="navigateTo('tickets')">View All Tickets →</button>
+          </div>
+          <div class="recent-tix-list">
+            ${recentTickets.length === 0 ? `
+              <div class="recent-tix-item">
+                <div>
+                  <div class="tix-id">#T-2026-0098</div>
+                  <div class="tix-sub">Display not turning on</div>
+                </div>
+                <span class="tix-status-tag open">Open</span>
+                <span class="tix-time">2 days ago ›</span>
+              </div>
+              <div class="recent-tix-item">
+                <div>
+                  <div class="tix-id">#T-2026-0097</div>
+                  <div class="tix-sub">Network connection issue</div>
+                </div>
+                <span class="tix-status-tag open">Open</span>
+                <span class="tix-time">3 days ago ›</span>
+              </div>
+            ` : recentTickets.map(t => `
+              <div class="recent-tix-item" onclick="navigateTo('tickets')">
+                <div>
+                  <div class="tix-id">${t.ticketId || '#T-2026-0098'}</div>
+                  <div class="tix-sub">${t.title}</div>
+                </div>
+                <span class="tix-status-tag ${t.status ? t.status.toLowerCase() : 'open'}">${t.status || 'Open'}</span>
+                <span class="tix-time">${new Date(t.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' })} ›</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <!-- Column 3: Stock & Inventory & Recent Activity -->
+        <div class="widget-card">
+          <div class="widget-header">
+            <div class="widget-title">📦 Stock & Inventory</div>
+            <select class="branch-select-v2" aria-label="Select Branch"><option>All Branches</option></select>
+          </div>
+          <div class="stock-gauge-row">
+            <div class="stock-gauge-circle">
+              <strong>68%</strong>
+              <small>Stock Level</small>
+            </div>
+            <div class="stock-alerts-list">
+              <div class="stock-alerts-title">Parts Stock Alerts <span class="badge-red-sm">2 alerts</span></div>
+              <div class="stock-alert-item">
+                <div>
+                  <strong>High-Efficiency Power Board 350W</strong>
+                  <small>PWR-80-350W</small>
+                </div>
+                <span class="alert-pill out">◆ Out ›</span>
+              </div>
+              <div class="stock-alert-item">
+                <div>
+                  <strong>OPS i7-12700 Module</strong>
+                  <small>(ACER | 57750A)</small>
+                </div>
+                <span class="alert-pill low">◆ Low ›</span>
+              </div>
+            </div>
+          </div>
+          <div class="view-inv-link" onclick="navigateTo('inventory')">View Inventory →</div>
+
+          <!-- Recent Activity Timeline -->
+          <div class="recent-activity-box">
+            <div class="activity-header">
+              <span>🕒 Recent Activity</span>
+              <button onclick="navigateTo('inventory')">View All →</button>
+            </div>
+            <div class="activity-timeline">
+              <div class="activity-item">
+                <span class="act-icon tix">🎟️</span>
+                <div class="act-desc">Ticket #T-2026-0098 created</div>
+                <span class="act-time">2 days ago</span>
+              </div>
+              <div class="activity-item">
+                <span class="act-icon online">🟢</span>
+                <div class="act-desc">Device 1 went online</div>
+                <span class="act-time">3 days ago</span>
+              </div>
+              <div class="activity-item">
+                <span class="act-icon stock">📙</span>
+                <div class="act-desc">Stock level updated</div>
+                <span class="act-time">4 days ago</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   `;
 }
