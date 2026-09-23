@@ -128,7 +128,7 @@ if (process.env.APPLE_CLIENT_ID && process.env.APPLE_TEAM_ID && process.env.APPL
           callbackURL: process.env.APPLE_CALLBACK_URL || 'http://localhost:3000/api/auth/apple/callback',
           scope: ['email', 'name'],
         },
-        async (accessToken, refreshToken, idToken, profile, done) => {
+        async (accessToken: any, refreshToken: any, idToken: any, profile: any, done: any) => {
           try {
             const users = await db.getUsers();
             let user = users.find(u => u.email === profile.email);

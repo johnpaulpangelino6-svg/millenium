@@ -314,7 +314,7 @@ apiRouter.get('/auth/oauth/session', (req: Request, res: Response) => {
 apiRouter.delete('/users/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const ok = await db.deleteUser(id);
+    const ok = await db.deleteUser(id as string);
     if (!ok) {
       return res.status(404).json({ success: false, error: 'User not found.' });
     }
