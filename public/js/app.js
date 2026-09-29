@@ -41,6 +41,8 @@ const state = {
   selectedDeviceForRemote: null,
   selectedDeviceForQR: null,
   selectedTicket: null,
+  ticketChatPollInterval: null,
+  _activeChatTab: 'staff',
   searchQuery: '',
   filterModel: '',
   filterStatus: '',
@@ -3015,9 +3017,9 @@ function renderDashboardView() {
               <span class="qa-icon">🎫</span>
               <span>Open Ticket</span>
             </button>
-            <button class="qa-btn qa-btn-teal" onclick="openDeviceModal()">
-              <span class="qa-icon">💻</span>
-              <span>Add Device</span>
+            <button class="qa-btn qa-btn-teal" onclick="openInventoryQuickAction()" title="Inventory & Parts Restock">
+              <span class="qa-icon">📦</span>
+              <span> add parts </span>
             </button>
             <button class="qa-btn qa-btn-navy" onclick="navigateTo('tickets')">
               <span class="qa-icon">📊</span>
@@ -5053,6 +5055,29 @@ function closeCreateTicketModal() {
   if (modal) modal.classList.remove('active');
 }
 
+// Quick Action Aliases & Modal Helpers
+function openInventoryQuickAction() {
+  if (state.currentRole === 'admin') {
+    openRestockModal();
+  } else {
+    navigateTo('inventory');
+  }
+}
+
+function openTicketModal(prefillDeviceId = '') {
+  openCreateTicketModal(prefillDeviceId);
+}
+
+function openDeviceModal() {
+  openRegisterModal();
+}
+
+function closeCrudEditModal() {
+  const modal = document.getElementById('crudEditModal');
+  if (modal) modal.classList.remove('active');
+}
+
+
 async function submitTicketForm(e) {
   e.preventDefault();
   const deviceId = document.getElementById('ticketDeviceSelect').value;
@@ -5624,6 +5649,189 @@ async function consumePartForSelectedTicket() {
     }
   } catch (err) {
     showToast('Failed to consume part', 'error');
+  }
+}
+
+// Restock Inventory Modal
+function openRestockModal() {
+  const existing = document.getElementById('restockModalOverlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'restockModalOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px);';
+  overlay.innerHTML = `
+    <div style="background:var(--bg-card,#1a1a2e);border:1px solid rgba(0,242,254,0.3);border-radius:20px;padding:30px 34px;width:100%;max-width:540px;box-shadow:0 25px 70px rgba(0,0,0,0.6);">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <h2 style="font-size:1.2rem;font-weight:800;color:#ffffff;display:flex;align-items:center;gap:8px;margin:0;">📦 Restock Inventory Shipment</h2>
+        <button type="button" class="modal-close" onclick="document.getElementById('restockModalOverlay').remove()" style="font-size:1.4rem;background:none;border:none;color:#94a3b8;cursor:pointer;">&times;</button>
+      </div>
+      <p style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:18px;">
+        Record newly arrived parts from suppliers to update live stock levels for Millennium SmartBoard service operations.
+      </p>
+
+      <div style="display:flex;gap:8px;margin-bottom:18px;border-bottom:1px solid rgba(255,255,255,0.08);padding-bottom:10px;">
+        <button id="tabExistingPart" type="button" class="btn btn-sm btn-primary" onclick="toggleRestockMode('existing')" style="padding:6px 14px;font-weight:700;">Existing Part</button>
+        <button id="tabNewPart" type="button" class="btn btn-sm btn-secondary" onclick="toggleRestockMode('new')" style="padding:6px 14px;font-weight:700;">➕ New Part Catalog</button>
+      </div>
+
+      <!-- Restock Existing Part Section -->
+      <div id="restockExistingSection" style="display:flex;flex-direction:column;gap:14px;">
+        <div>
+          <label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:5px;">Select Part to Restock *</label>
+          <select id="restockPartSelect" class="form-input">
+            <option value="">— Select an inventory item (${(state.inventory || []).length} Available) —</option>
+            ${(state.inventory || []).map(p => `<option value="${p.id}">${p.partCode} — ${p.name} (Current: ${p.stockQuantity} in stock)</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:5px;">Quantity to Add (Shipment Received) *</label>
+          <input id="restockQuantity" class="form-input" type="number" min="1" max="1000" value="10" />
+        </div>
+      </div>
+
+      <!-- Add New Part Catalog Section -->
+      <div id="restockNewSection" style="display:none;flex-direction:column;gap:12px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div>
+            <label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:4px;">Part Code *</label>
+            <input id="newPartCode" class="form-input" placeholder="e.g. MSB-OPS-03" />
+          </div>
+          <div>
+            <label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:4px;">Category *</label>
+            <select id="newPartCategory" class="form-input">
+              <option value="Module">Module</option>
+              <option value="Display">Display</option>
+              <option value="Power">Power</option>
+              <option value="Audio">Audio</option>
+              <option value="Touch">Touch Surface</option>
+              <option value="Accessory">Accessory</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:4px;">Part Name *</label>
+          <input id="newPartName" class="form-input" placeholder="e.g. 4K Camera & Integrated Mic Array" />
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div>
+            <label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:4px;">Initial Quantity *</label>
+            <input id="newPartStock" class="form-input" type="number" min="1" value="5" />
+          </div>
+          <div>
+            <label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:4px;">Min Threshold</label>
+            <input id="newPartThreshold" class="form-input" type="number" min="1" value="3" />
+          </div>
+        </div>
+      </div>
+
+      <div id="restockErrorMsg" style="color:#f43f5e;font-size:0.82rem;margin-top:10px;display:none;"></div>
+
+      <div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;">
+        <button type="button" class="btn btn-secondary" style="flex:1;min-width:80px;" onclick="document.getElementById('restockModalOverlay').remove()">Cancel</button>
+        <button type="button" class="btn btn-secondary" style="flex:1.2;min-width:130px;" onclick="document.getElementById('restockModalOverlay').remove(); navigateTo('inventory');">📋 View Inventory</button>
+        <button type="button" class="btn btn-primary" style="flex:1.4;min-width:150px;" onclick="submitRestockShipment()">📥 Confirm Shipment</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+}
+
+function toggleRestockMode(mode) {
+  const existingSection = document.getElementById('restockExistingSection');
+  const newSection = document.getElementById('restockNewSection');
+  const tabExisting = document.getElementById('tabExistingPart');
+  const tabNew = document.getElementById('tabNewPart');
+  const errEl = document.getElementById('restockErrorMsg');
+  if (errEl) errEl.style.display = 'none';
+
+  if (mode === 'existing') {
+    if (existingSection) existingSection.style.display = 'flex';
+    if (newSection) newSection.style.display = 'none';
+    if (tabExisting) { tabExisting.className = 'btn btn-sm btn-primary'; }
+    if (tabNew) { tabNew.className = 'btn btn-sm btn-secondary'; }
+  } else {
+    if (existingSection) existingSection.style.display = 'none';
+    if (newSection) newSection.style.display = 'flex';
+    if (tabExisting) { tabExisting.className = 'btn btn-sm btn-secondary'; }
+    if (tabNew) { tabNew.className = 'btn btn-sm btn-primary'; }
+  }
+}
+
+async function submitRestockShipment() {
+  const errEl = document.getElementById('restockErrorMsg');
+  const isExisting = document.getElementById('restockExistingSection')?.style.display !== 'none';
+
+  if (isExisting) {
+    const partSelect = document.getElementById('restockPartSelect');
+    const partId = partSelect?.value;
+    const addQty = parseInt(document.getElementById('restockQuantity')?.value, 10);
+
+    if (!partId) {
+      if (errEl) { errEl.textContent = 'Please select a part to restock.'; errEl.style.display = 'block'; }
+      return;
+    }
+    if (!addQty || addQty < 1) {
+      if (errEl) { errEl.textContent = 'Please enter a valid quantity of 1 or more.'; errEl.style.display = 'block'; }
+      return;
+    }
+
+    const part = (state.inventory || []).find(p => p.id === partId);
+    if (!part) {
+      if (errEl) { errEl.textContent = 'Part record not found in inventory.'; errEl.style.display = 'block'; }
+      return;
+    }
+
+    const newTotal = (part.stockQuantity || 0) + addQty;
+
+    try {
+      const res = await fetch(`${API_BASE}/inventory/${partId}/stock`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stockQuantity: newTotal }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`✅ Added +${addQty} units to ${part.name} (Total: ${newTotal})`, 'success');
+        document.getElementById('restockModalOverlay')?.remove();
+        await fetchAllData();
+      } else {
+        if (errEl) { errEl.textContent = data.error || 'Failed to update inventory stock.'; errEl.style.display = 'block'; }
+      }
+    } catch (err) {
+      if (errEl) { errEl.textContent = 'Network error while restocking.'; errEl.style.display = 'block'; }
+    }
+  } else {
+    // New catalog item
+    const partCode = document.getElementById('newPartCode')?.value?.trim();
+    const name = document.getElementById('newPartName')?.value?.trim();
+    const category = document.getElementById('newPartCategory')?.value;
+    const stockQuantity = parseInt(document.getElementById('newPartStock')?.value, 10) || 5;
+    const minThreshold = parseInt(document.getElementById('newPartThreshold')?.value, 10) || 3;
+
+    if (!partCode || !name || !category) {
+      if (errEl) { errEl.textContent = 'Part code, name, and category are required.'; errEl.style.display = 'block'; }
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/inventory`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ partCode, name, category, stockQuantity, minThreshold, unitCost: 0 }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`✅ New part "${name}" registered with ${stockQuantity} units!`, 'success');
+        document.getElementById('restockModalOverlay')?.remove();
+        await fetchAllData();
+      } else {
+        if (errEl) { errEl.textContent = data.error || 'Failed to register new part.'; errEl.style.display = 'block'; }
+      }
+    } catch (err) {
+      if (errEl) { errEl.textContent = 'Network error while registering part.'; errEl.style.display = 'block'; }
+    }
   }
 }
 
@@ -6998,6 +7206,16 @@ function handleSearch(val) {
   state.searchQuery = val;
   renderApp();
 }
+
+function handleGlobalHeaderSearch(val) {
+  state.searchQuery = val;
+  if (state.currentTab !== 'devices' && state.currentTab !== 'tickets') {
+    navigateTo('devices');
+  } else {
+    renderApp();
+  }
+}
+
 
 function handleModelFilter(val) {
   state.filterModel = val;

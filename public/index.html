@@ -415,7 +415,7 @@
     <!-- Center Search Input -->
     <div class="header-search-container">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input type="text" class="header-search-input" placeholder="Search devices, tickets, or clients..." aria-label="Search devices, tickets, or clients" />
+      <input type="text" class="header-search-input" id="globalHeaderSearch" placeholder="Search devices, tickets, or clients..." aria-label="Search devices, tickets, or clients" oninput="handleGlobalHeaderSearch(this.value)" />
     </div>
 
     <div class="header-meta">
@@ -446,6 +446,7 @@
         </div>
         <div class="system-status-pill">
           <span class="status-pulse-dot"></span>
+          
           <span class="status-pill-text">Online</span>
         </div>
         <button class="auth-logout-btn" onclick="handleLogout()" title="Sign out" aria-label="Sign out">
