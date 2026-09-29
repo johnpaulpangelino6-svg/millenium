@@ -29,137 +29,115 @@
   <div class="auth-modal-backdrop" id="authModalBackdrop" onclick="closeAuthModal()"></div>
 
   <!-- ============================================================ -->
-  <!-- ============================================================ -->
-  <!-- AUTH PORTAL OVERLAY — Modern Scrollable Portal with Top Nav -->
+  <!-- AUTH PORTAL OVERLAY — Full Screen Split Layout (Reference Design) -->
   <!-- ============================================================ -->
   <div class="auth-portal-overlay" id="authPortalOverlay">
-    <!-- Futuristic Ambient Light Grid & Cyber Accents -->
-    <div class="auth-ambient-grid" aria-hidden="true"></div>
+    <!-- Outer Futuristic Chamfered Bezel Frame -->
+    <div class="auth-portal-frame">
 
-    <!-- Top Navigation Bar with Login/Register Buttons -->
-    <div class="auth-top-nav">
-      <div class="auth-nav-container">
-        <div class="auth-nav-brand">
-          <div class="brains-emblem-box" title="Brains Infinite Innovations Inc.">
-            <img src="/images/brains-logo.svg" alt="Brains Infinite Innovations" style="width: 100%; height: 100%; object-fit: contain; padding: 3px;" />
+      <!-- Top Navigation Bar -->
+      <header class="auth-top-nav">
+        <div class="auth-nav-container">
+          <div class="auth-nav-brand">
+            <div class="auth-nav-logo-box" title="Brains Infinite Innovations Inc.">
+              <img src="/images/brains-logo.svg" alt="Brains Infinite Innovations" />
+              <span class="auth-nav-logo-text">BRAINS</span>
+            </div>
+            <div class="auth-nav-title-group">
+              <div class="auth-nav-title">MILLENNIUM SMARTBOARD</div>
+              <div class="auth-nav-subtitle">Management Portal</div>
+            </div>
           </div>
-          <div>
-            <div class="auth-nav-title">MILLENNIUM SMARTBOARD</div>
-            <div class="auth-nav-subtitle">Management Portal</div>
+          <div class="auth-nav-tagline-wrap">
+            <span class="auth-nav-accent-bar" aria-hidden="true"></span>
+            <div class="auth-nav-tagline">
+              Smarter Classrooms. Better Meetings. <strong>A Brighter Future.</strong>
+            </div>
           </div>
         </div>
-        <div class="auth-nav-actions">
-          <button class="auth-nav-btn" id="navLoginBtn" onclick="openAuthModal('login')">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
-              <polyline points="10 17 15 12 10 7"/>
-              <line x1="15" y1="12" x2="3" y2="12"/>
-            </svg>
-            <span>Login</span>
-          </button>
-          <button class="auth-nav-btn auth-nav-btn-outline" id="navRegisterBtn" onclick="openAuthModal('register')">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-              <circle cx="8.5" cy="7" r="4"/>
-              <line x1="20" y1="8" x2="20" y2="14"/>
-              <line x1="23" y1="11" x2="17" y2="11"/>
-            </svg>
-            <span>Register</span>
-          </button>
-        </div>
-      </div>
-    </div>
+      </header>
 
-    <!-- Scrollable Content Container -->
-    <div class="auth-scrollable-container">
-           <!-- Two-Column Split Layout Container (Showcase on Left, Login Card on Right) -->
-      <div class="auth-split-layout" id="authSplitLayout">
+      <!-- Main Split Layout -->
+      <main class="auth-split-layout" id="authSplitLayout">
 
         <!-- ============================================================ -->
-        <!-- LEFT SIDE: ENTERPRISE IoT FLEET INTELLIGENCE SHOWCASE       -->
+        <!-- LEFT SIDE: MILLENNIUM SMARTBOARD SHOWCASE                   -->
         <!-- ============================================================ -->
         <section class="auth-showcase-panel" aria-label="Millennium Interactive SmartBoard Overview">
-          
-          <!-- Brand Header Row -->
-          <div class="auth-showcase-brand-row">
-            <div class="auth-brand-emblem-sq" title="Brains Infinite Innovations Inc.">
-              <img src="/images/brains-logo.svg" alt="Brains Infinite Innovations" style="width: 100%; height: 100%; object-fit: contain; padding: 3px;" />
-            </div>
-            <div class="auth-brand-info">
-              <div class="auth-brand-company-title">Brains Infinite Innovations</div>
-              <div class="auth-brand-company-sub">MANILA, PH · EST. 2024</div>
-            </div>
+
+          <!-- Brand Pill -->
+          <div class="auth-brand-pill">
+            <span class="auth-brand-pill-b">B</span>
+            <span>Brains <strong class="auth-brand-bold">Infinite Innovations</strong></span>
           </div>
 
-          <!-- Kicker & Hero Title Group -->
+          <!-- Hero Title -->
           <div class="auth-hero-title-group">
-            <div class="auth-kicker-tag">MILLENNIUM INTERACTIVE SMARTBOARD</div>
             <h1 class="auth-hero-title">
-              <span>Enterprise IoT</span>
-              <span class="auth-title-glow-cyan">Fleet Intelligence</span>
+              <span class="auth-title-line-white">Millennium</span>
+              <span class="auth-title-line-gradient">Smartboard</span>
             </h1>
+            <p class="auth-hero-tagline">Interactive technology for a smarter,<br>more connected world.</p>
             <p class="auth-hero-desc">
-              Centralized monitoring, predictive maintenance, and role-based access for your SmartBoard fleet across every campus and boardroom.
+              Millennium is a Dynamic touch panel that can do presentations in the classroom, the conference room, in your home theater, or anywhere that requires collaborative and engaging presentations.
             </p>
           </div>
 
-         
-
-
-            </summary>
-            <div class="auth-extra-content">
-              <!-- Feature highlights mini-grid -->
-              <div class="auth-features-mini-grid">
-                <div class="auth-feat-mini-card">
-                  <span class="auth-feat-mini-icon">🖥️</span>
-                  <div>
-                    <strong>4K UHD 60Hz</strong>
-                    <small>Zero-gap optical bonding &amp; 4mm toughened glass</small>
-                  </div>
-                </div>
-                <div class="auth-feat-mini-card">
-                  <span class="auth-feat-mini-icon">⚡</span>
-                  <div>
-                    <strong>Intel Core i7 OPS</strong>
-                    <small>Windows 11 Pro + Android 13 dual OS boot</small>
-                  </div>
-                </div>
-                <div class="auth-feat-mini-card">
-                  <span class="auth-feat-mini-icon">🎙️</span>
-                  <div>
-                    <strong>8m Mic Radar</strong>
-                    <small>360° omnidirectional array with noise cancellation</small>
-                  </div>
-                </div>
-                <div class="auth-feat-mini-card">
-                  <span class="auth-feat-mini-icon">📡</span>
-                  <div>
-                    <strong>4-Split Screen</strong>
-                    <small>Low &lt;6ms touch response wireless screen projection</small>
-                  </div>
-                </div>
+          <!-- Feature Icons Row (5 Items from Reference) -->
+          <div class="auth-features-row">
+            <div class="auth-feat-item">
+              <div class="auth-feat-icon-wrap">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
               </div>
+              <span>Interactive<br>Touch Display</span>
+            </div>
+            <div class="auth-feat-item">
+              <div class="auth-feat-icon-wrap">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              </div>
+              <span>Real-time<br>Collaboration</span>
+            </div>
+            <div class="auth-feat-item">
+              <div class="auth-feat-icon-wrap">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
+              </div>
+              <span>Cloud<br>Integration</span>
+            </div>
+            <div class="auth-feat-item">
+              <div class="auth-feat-icon-wrap">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
+              </div>
+              <span>Secure &<br>Reliable</span>
+            </div>
+            <div class="auth-feat-item">
+              <div class="auth-feat-icon-wrap">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><rect x="7" y="17" width="10" height="4" rx="1"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+              </div>
+              <span>For Classrooms,<br>Offices & More</span>
+            </div>
+          </div>
 
-              
-
-              <!-- Philippine Headquarters Details & Contacts -->
-              <div class="auth-showcase-footer">
-                <div class="auth-contact-row">
-                  <span class="auth-contact-icon">📍</span>
-                  <span>Suite 1004 Atlanta Center, 31 Annapolis St., Greenhills, San Juan City Philippines</span>
-                </div>
-                <div class="auth-contact-row">
-                  <span class="auth-contact-icon">✉️</span>
-                  <a href="mailto:info@brains.asia">info@brains.asia</a>
-                  <span class="auth-contact-sep">·</span>
-                  <span class="auth-contact-icon">📞</span>
-                  <a href="tel:+639755826830">+63 975 582 6830</a>
-                  <span class="auth-contact-sep">·</span>
-                  <a href="tel:+639815409835">+63 981 540 9835</a>
-                </div>
+          <!-- Showcase Footer Bar (Reference) -->
+          <div class="auth-showcase-footer-bar">
+            <div class="auth-footer-brand">
+              <div class="auth-footer-logo">
+                <img src="/images/brains-logo.svg" alt="Brains" />
+              </div>
+              <div>
+                <div class="auth-footer-brand-name">Brains Infinite Innovations</div>
+                <div class="auth-footer-brand-sub">Creating Better Opportunities</div>
               </div>
             </div>
-          </details>
+            <div class="auth-footer-tabs">
+              <a href="#" class="auth-tab-link active">Innovation</a>
+              <span class="auth-footer-divider">|</span>
+              <a href="#" class="auth-tab-link">Technology</a>
+              <span class="auth-footer-divider">|</span>
+              <a href="#" class="auth-tab-link">Collaboration</a>
+              <span class="auth-footer-divider">|</span>
+              <a href="#" class="auth-tab-link">Growth</a>
+            </div>
+          </div>
 
         </section>
 
@@ -170,82 +148,56 @@
 
           <!-- Close Button for Modal (Mobile Only) -->
           <button class="auth-modal-close-btn" onclick="closeAuthModal()" aria-label="Close login modal">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <line x1="18" y1="6" x2="6" y2="18"></line>
               <line x1="6" y1="6" x2="18" y2="18"></line>
             </svg>
           </button>
 
-        <!-- Card Brand Header Row -->
-        <div class="auth-card-brand-header">
-          <div class="auth-card-brand-emblem" title="Brains Infinite Innovations Inc.">
-            <span>B</span>
-          </div>
-          <span class="auth-card-brand-name">Brains Infinite Innovations</span>
-        </div>
-
-        <!-- Auth Tabs -->
-        <div class="auth-tabs" role="tablist">
-          <button class="auth-tab active" id="loginTab" onclick="switchAuthTab('login')" role="tab" aria-selected="true">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
-            <span>Sign In</span>
-          </button>
-          <button class="auth-tab" id="registerTab" onclick="switchAuthTab('register')" role="tab" aria-selected="false">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
-            <span>Create Account</span>
-          </button>
-        </div>
-
-        <!-- ===== LOGIN FORM ===== -->
-        <div id="loginPanel" class="auth-panel" role="tabpanel">
-
-          <!-- Full Access Badge -->
-          <div class="auth-full-access-badge">
-            <span class="auth-fa-star">★</span>
-            <span>FULL ACCESS</span>
-          </div>
-
-          <!-- Sign In Heading -->
-          <h2 class="auth-signin-heading">Sign in to<br>your account</h2>
-          <p class="auth-signin-subtext">Select your role and enter credentials to continue.</p>
-
-          <!-- Access Role Selector -->
-          <div class="auth-role-section">
-            <div class="auth-role-label">ACCESS ROLE</div>
-            <div class="auth-role-grid" id="authRoleGrid">
-              <button type="button" class="auth-role-card active" data-role-btn="Admin" onclick="selectLoginRole('Admin', this)">
-                <span class="auth-role-card-star">☆</span>
-                <span class="auth-role-card-name">Admin</span>
-                <span class="auth-role-card-desc">FULL ACCESS</span>
-              </button>
-              <button type="button" class="auth-role-card" data-role-btn="Technician" onclick="selectLoginRole('Technician', this)">
-                <span class="auth-role-card-icon">⚙</span>
-                <span class="auth-role-card-name">Technician</span>
-                <span class="auth-role-card-desc">SERVICE ROLE</span>
-              </button>
-              <button type="button" class="auth-role-card" data-role-btn="Customer" onclick="selectLoginRole('Customer', this)">
-                <span class="auth-role-card-icon">👤</span>
-                <span class="auth-role-card-name">Customer</span>
-                <span class="auth-role-card-desc">PORTAL</span>
-              </button>
+          <!-- Card Logo with BRAINS label -->
+          <div class="auth-card-logo-wrap">
+            <div class="auth-card-logo">
+              <img src="/images/brains-logo.svg" alt="Brains" />
+              <span class="auth-card-logo-label">BRAINS</span>
             </div>
           </div>
 
-          <form id="loginForm" onsubmit="handleLogin(event)" novalidate>
-            <!-- Hidden role field -->
+          <!-- Welcome Heading -->
+          <h2 class="auth-welcome-heading">Welcome Back</h2>
+          <p class="auth-welcome-sub">Sign in to your account to continue to the<br>Millennium Smartboard Management Portal.</p>
+
+          <!-- Role Selector Tabs -->
+          <div class="auth-role-tabs" id="authRoleGrid" role="tablist">
+            <button type="button" class="auth-role-tab active" data-role-btn="Admin" onclick="selectLoginRole('Admin', this)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              Admin
+            </button>
+            <button type="button" class="auth-role-tab" data-role-btn="Technician" onclick="selectLoginRole('Technician', this)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+              Technician
+            </button>
+            <button type="button" class="auth-role-tab" data-role-btn="Customer" onclick="selectLoginRole('Customer', this)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              Customer
+            </button>
+          </div>
+
+          <!-- Login Form -->
+          <form id="loginForm" onsubmit="handleLogin(event)" novalidate style="width:100%;">
             <input type="hidden" id="loginRole" value="Admin" />
+            <input type="hidden" id="loginTab" />
 
             <!-- Email Address -->
-            <div class="auth-form-group">
-              <label class="auth-label" for="loginUsername">EMAIL ADDRESS</label>
-              <div class="auth-input-icon-wrapper">
-                <span class="auth-input-icon-prefix">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            <div class="auth-field-group">
+              <label class="auth-field-label" for="loginUsername">Email Address</label>
+              <div class="auth-field-wrap">
+                <span class="auth-field-icon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
                 </span>
                 <input
                   type="text"
                   id="loginUsername"
-                  class="auth-input auth-input-with-icon"
+                  class="auth-field-input"
                   placeholder="e.g. admin@brains.asia"
                   autocomplete="username"
                   required
@@ -254,19 +206,16 @@
             </div>
 
             <!-- Password -->
-            <div class="auth-form-group">
-              <div class="auth-label-row">
-                <label class="auth-label" for="loginPassword">PASSWORD</label>
-                <button type="button" class="auth-forgot-link" tabindex="-1">FORGOT PASSWORD?</button>
-              </div>
-              <div class="auth-input-icon-wrapper">
-                <span class="auth-input-icon-prefix">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <div class="auth-field-group">
+              <label class="auth-field-label" for="loginPassword">Password</label>
+              <div class="auth-field-wrap">
+                <span class="auth-field-icon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                 </span>
                 <input
                   type="password"
                   id="loginPassword"
-                  class="auth-input auth-input-with-icon"
+                  class="auth-field-input"
                   placeholder="Enter your password"
                   autocomplete="current-password"
                   required
@@ -277,71 +226,101 @@
               </div>
             </div>
 
-            <!-- Remember Me -->
-            <div class="auth-remember-row">
+            <!-- Options Row (Remember Me + Forgot Password) -->
+            <div class="auth-options-row">
               <label class="auth-checkbox-label">
                 <input type="checkbox" id="loginRememberMe" class="auth-checkbox" />
                 <span class="auth-checkbox-custom"></span>
                 <span>Remember me for 30 days</span>
               </label>
+              <button type="button" class="auth-forgot-link" onclick="handleForgotPassword()" tabindex="-1">Forgot Password?</button>
             </div>
 
             <div id="loginError" class="auth-error-msg" style="display:none;"></div>
 
-            <button type="submit" class="auth-submit-btn" id="loginSubmitBtn">
-              <span class="auth-btn-text" id="loginBtnText">Sign in as Admin →</span>
+            <!-- Sign In Button -->
+            <button type="submit" class="auth-signin-btn" id="loginSubmitBtn">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+              <span id="loginBtnText" class="auth-btn-text">Sign In</span>
             </button>
+
+            <!-- Divider -->
+            <div class="auth-divider">
+              <span>or</span>
+            </div>
+
+            <!-- Sign in with Google Button -->
+            <button type="button" class="auth-google-btn" onclick="window.location.href='/api/auth/google'">
+              <svg class="auth-google-icon" width="18" height="18" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"/>
+                <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"/>
+                <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.98 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/>
+                <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
+              </svg>
+              <span>Sign in with Google</span>
+            </button>
+
+            <!-- Demo Autofill -->
+            <div class="auth-demo-row">
+              <button type="button" class="auth-demo-btn" onclick="quickDemoLogin('admin@gmail.com','123123','Admin')" id="autofillDemoBtn">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/></svg>
+                <span>AUTOFILL ADMIN DEMO CREDENTIALS</span>
+              </button>
+            </div>
           </form>
 
-          <!-- Autofill Demo Credentials -->
-          <div class="auth-autofill-bar">
-            <button type="button" class="auth-autofill-btn" onclick="quickDemoLogin('admin@gmail.com','123123','Admin')" id="autofillDemoBtn">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/></svg>
-              <span>AUTOFILL FULL ACCESS DEMO CREDENTIALS</span>
-            </button>
+          <!-- Register Link -->
+          <p class="auth-register-link">Don't have an account? <a href="#" onclick="switchAuthTab('register'); return false;">Register here</a></p>
+
+        </div><!-- /auth-portal-card (login) -->
+
+        <!-- Register Card (separate, shown when register tab clicked) -->
+        <div class="auth-portal-card auth-register-card" id="authRegisterCard" style="display:none;">
+
+          <!-- Card Logo -->
+          <div class="auth-card-logo-wrap">
+            <div class="auth-card-logo">
+              <img src="/images/brains-logo.svg" alt="Brains" />
+              <span class="auth-card-logo-label">BRAINS</span>
+            </div>
           </div>
-        </div>
 
-        <!-- ===== REGISTER FORM ===== -->
-        <div id="registerPanel" class="auth-panel" style="display:none;" role="tabpanel">
+          <h2 class="auth-welcome-heading">Create Account</h2>
+          <p class="auth-welcome-sub">Register to access the Millennium Smartboard portal.</p>
 
-          <!-- Register Heading -->
-          <h2 class="auth-signin-heading">Create<br>your account</h2>
-          <p class="auth-signin-subtext">Register to access the Millennium SmartBoard portal.</p>
-
-          <form id="registerForm" onsubmit="handleRegister(event)" novalidate>
-            <div class="auth-form-row">
-              <div class="auth-form-group">
-                <label class="auth-label" for="regFullName">FULL NAME</label>
-                <input type="text" id="regFullName" class="auth-input" placeholder="e.g. Maria Santos" required/>
+          <form id="registerForm" onsubmit="handleRegister(event)" novalidate style="width:100%;">
+            <div class="auth-form-row-2">
+              <div class="auth-field-group">
+                <label class="auth-field-label" for="regFullName">Full Name</label>
+                <input type="text" id="regFullName" class="auth-field-input" placeholder="e.g. Maria Santos" required/>
               </div>
-              <div class="auth-form-group">
-                <label class="auth-label" for="regUsername">USERNAME</label>
-                <input type="text" id="regUsername" class="auth-input" placeholder="Choose a username" required autocomplete="username"/>
+              <div class="auth-field-group">
+                <label class="auth-field-label" for="regUsername">Username</label>
+                <input type="text" id="regUsername" class="auth-field-input" placeholder="Choose a username" required autocomplete="username"/>
               </div>
             </div>
 
-            <div class="auth-form-group">
-              <label class="auth-label" for="regEmail">EMAIL ADDRESS</label>
-              <div class="auth-input-icon-wrapper">
-                <span class="auth-input-icon-prefix">
+            <div class="auth-field-group">
+              <label class="auth-field-label" for="regEmail">Email Address</label>
+              <div class="auth-field-wrap">
+                <span class="auth-field-icon">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
                 </span>
-                <input type="email" id="regEmail" class="auth-input auth-input-with-icon" placeholder="your@email.com" required autocomplete="email"/>
+                <input type="email" id="regEmail" class="auth-field-input" placeholder="your@email.com" required autocomplete="email"/>
               </div>
             </div>
 
-            <div class="auth-form-row">
-              <div class="auth-form-group">
-                <label class="auth-label" for="regRole">ACCOUNT TYPE</label>
-                <select id="regRole" class="auth-select" onchange="updateRegLocationLabel(this.value)">
+            <div class="auth-form-row-2">
+              <div class="auth-field-group">
+                <label class="auth-field-label" for="regRole">Account Type</label>
+                <select id="regRole" class="auth-field-input auth-field-select" onchange="updateRegLocationLabel(this.value)">
                   <option value="technician">🔧 Field Technician</option>
                   <option value="customer">🏫 Customer / Client</option>
                 </select>
               </div>
-              <div class="auth-form-group">
-                <label class="auth-label" for="regLocation">PRIMARY LOCATION</label>
-                <select id="regLocation" class="auth-select">
+              <div class="auth-field-group">
+                <label class="auth-field-label" for="regLocation">Primary Location</label>
+                <select id="regLocation" class="auth-field-input auth-field-select">
                   <option value="Quezon City">Quezon City</option>
                   <option value="Taguig (BGC)">Taguig (BGC)</option>
                   <option value="Makati">Makati</option>
@@ -356,49 +335,45 @@
               </div>
             </div>
 
-            <div class="auth-form-group">
-              <label class="auth-label" for="regOrganization" id="regOrgLabel">SCHOOL / ORGANIZATION</label>
-              <input type="text" id="regOrganization" class="auth-input" placeholder="e.g. Ateneo de Manila University"/>
+            <div class="auth-field-group">
+              <label class="auth-field-label" for="regOrganization" id="regOrgLabel">School / Organization</label>
+              <input type="text" id="regOrganization" class="auth-field-input" placeholder="e.g. Ateneo de Manila University"/>
             </div>
 
-            <div class="auth-form-row">
-              <div class="auth-form-group">
-                <label class="auth-label" for="regPassword">PASSWORD</label>
-                <div class="auth-input-icon-wrapper">
-                  <span class="auth-input-icon-prefix">
+            <div class="auth-form-row-2">
+              <div class="auth-field-group">
+                <label class="auth-field-label" for="regPassword">Password</label>
+                <div class="auth-field-wrap">
+                  <span class="auth-field-icon">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                   </span>
-                  <input type="password" id="regPassword" class="auth-input auth-input-with-icon" placeholder="Min 6 characters" required autocomplete="new-password"/>
+                  <input type="password" id="regPassword" class="auth-field-input" placeholder="Min 6 characters" required autocomplete="new-password"/>
                   <button type="button" class="auth-eye-btn" onclick="togglePasswordVisibility('regPassword', this)" aria-label="Toggle password">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                   </button>
                 </div>
               </div>
-              <div class="auth-form-group">
-                <label class="auth-label" for="regConfirmPassword">CONFIRM PASSWORD</label>
-                <input type="password" id="regConfirmPassword" class="auth-input" placeholder="Repeat password" required autocomplete="new-password"/>
+              <div class="auth-field-group">
+                <label class="auth-field-label" for="regConfirmPassword">Confirm Password</label>
+                <input type="password" id="regConfirmPassword" class="auth-field-input" placeholder="Repeat password" required autocomplete="new-password"/>
               </div>
             </div>
 
             <div id="registerError" class="auth-error-msg" style="display:none;"></div>
             <div id="registerSuccess" class="auth-success-msg" style="display:none;"></div>
 
-            <button type="submit" class="auth-submit-btn" id="registerSubmitBtn">
+            <button type="submit" class="auth-signin-btn" id="registerSubmitBtn">
               <span class="auth-btn-text">Create Account</span>
-              <svg class="auth-btn-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
             </button>
           </form>
 
-          <p class="auth-note">
-            Note: Admin accounts are provisioned by Brains Infinite Innovations. Customer and technician accounts can self-register.
-          </p>
-        </div>
+          <p class="auth-register-link">Already have an account? <a href="#" onclick="switchAuthTab('login'); return false;">Sign in</a></p>
+          <p class="auth-note" style="margin-top:8px;">Note: Admin accounts are provisioned by Brains Infinite Innovations.</p>
+        </div><!-- /auth-register-card -->
 
-      </div><!-- /auth-portal-card -->
-
-      </div><!-- /auth-split-layout -->
-      
-    </div><!-- /auth-scrollable-container -->
+      </main><!-- /auth-split-layout -->
+    </div><!-- /auth-portal-frame -->
   </div><!-- /auth-portal-overlay -->
 
 
@@ -442,11 +417,23 @@
     </div>
 
     <div class="header-meta">
-      <!-- Notification Icon Button -->
-      <button class="header-notif-btn" title="Notifications" aria-label="Notifications">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-        <span class="notif-count-badge">3</span>
-      </button>
+      <!-- Notification Container -->
+      <div class="notif-wrapper" style="position: relative;">
+        <button class="header-notif-btn" id="notifBtn" title="Notifications" aria-label="Notifications" onclick="toggleNotifications(event)">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <span class="notif-count-badge" id="notifBadge" style="display:none;">0</span>
+        </button>
+
+        <div class="notif-dropdown" id="notifDropdown">
+          <div class="notif-dropdown-header">
+            <h4>Notifications</h4>
+            <button class="notif-mark-read" onclick="markAllNotificationsRead(event)">Mark all read</button>
+          </div>
+          <div class="notif-dropdown-body" id="notifList">
+            <div style="padding:20px;text-align:center;color:var(--text-muted);font-size:0.8rem;">Loading...</div>
+          </div>
+        </div>
+      </div>
 
       <!-- Authenticated User Chip + Status -->
       <div class="auth-user-chip" id="authUserChip">

@@ -987,6 +987,76 @@ apiRouter.post('/predictive/simulate-telemetry', async (req: Request, res: Respo
   }
 });
 
+// --- Notifications ---
+apiRouter.get('/notifications', async (req: Request, res: Response) => {
+  try {
+    const notifications: any[] = [];
+    const now = new Date();
+    const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+    // 1. Low Stock Notifications
+    const inventory = await db.getInventory();
+    inventory.forEach(part => {
+      if (part.stockQuantity <= part.minThreshold) {
+        notifications.push({
+          id: `notif-stock-${part.id}`,
+          type: 'low_stock',
+          title: 'Low Stock Alert',
+          message: `Part "${part.name}" is running low (${part.stockQuantity} remaining).`,
+          timestamp: new Date().toISOString(),
+          linkId: part.id,
+          read: false
+        });
+      }
+    });
+
+    // 2. New Ticket Notifications (Created within last 24h OR Received status)
+    const tickets = await db.getTickets();
+    tickets.forEach(ticket => {
+      const ticketDate = new Date(ticket.createdAt);
+      if (ticket.status === 'Received' || ticketDate >= twentyFourHoursAgo) {
+        notifications.push({
+          id: `notif-ticket-${ticket.id}`,
+          type: 'new_ticket',
+          title: 'New Support Ticket',
+          message: `Ticket ${ticket.ticketNumber} from ${ticket.customerName} requires attention.`,
+          timestamp: ticket.createdAt,
+          linkId: ticket.id,
+          read: false
+        });
+      }
+    });
+
+    // 3. New Ticket Messages
+    try {
+      const recentMessages = await db.getRecentTicketMessages(30);
+      recentMessages.forEach(msg => {
+        const msgDate = new Date(msg.createdAt);
+        if (msgDate >= twentyFourHoursAgo) {
+          notifications.push({
+            id: `notif-msg-${msg.id}`,
+            type: 'new_message',
+            title: 'New Ticket Message',
+            message: `${msg.senderName} (${msg.senderRole}): "${msg.message.substring(0, 30)}${msg.message.length > 30 ? '...' : ''}"`,
+            timestamp: msg.createdAt,
+            linkId: msg.ticketId, // Link to ticket ID to open it
+            read: false
+          });
+        }
+      });
+    } catch (msgErr) {
+      // Gracefully continue if ticket_messages table query has issues
+    }
+
+    // Sort by most recent
+    notifications.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+    res.json({ success: true, data: notifications });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // --- Audit Logs ---
 apiRouter.get('/audit-logs', async (req: Request, res: Response) => {
   try {

@@ -32,6 +32,8 @@ const state = {
   cms: [],
   predictiveAlerts: [],
   auditLogs: [],
+  notifications: [],
+  notifDropdownOpen: false,
   customers: [],
   allUsers: [],
   dataManagerSubTab: 'users', // 'users' | 'customers' | 'allocation'
@@ -141,27 +143,39 @@ function updateAuthChip(user) {
 
 /** Switch between login and register tabs */
 function switchAuthTab(tab) {
-  const loginPanel    = document.getElementById('loginPanel');
+  const loginCard = document.getElementById('authPortalCard');
+  const registerCard = document.getElementById('authRegisterCard');
+  
+  const loginPanel = document.getElementById('loginPanel');
   const registerPanel = document.getElementById('registerPanel');
-  const loginTab      = document.getElementById('loginTab');
-  const registerTab   = document.getElementById('registerTab');
-  if (!loginPanel || !registerPanel) return;
-
-  if (tab === 'login') {
-    loginPanel.style.display = 'block';
-    registerPanel.style.display = 'none';
-    loginTab.classList.add('active');
-    loginTab.setAttribute('aria-selected', 'true');
-    registerTab.classList.remove('active');
-    registerTab.setAttribute('aria-selected', 'false');
-  } else {
-    loginPanel.style.display = 'none';
-    registerPanel.style.display = 'block';
-    registerTab.classList.add('active');
-    registerTab.setAttribute('aria-selected', 'true');
-    loginTab.classList.remove('active');
-    loginTab.setAttribute('aria-selected', 'false');
+  if (loginPanel && registerPanel) {
+    if (tab === 'login') {
+      loginPanel.style.display = 'block';
+      registerPanel.style.display = 'none';
+    } else {
+      loginPanel.style.display = 'none';
+      registerPanel.style.display = 'block';
+    }
   }
+
+  if (loginCard && registerCard) {
+    if (tab === 'login') {
+      loginCard.style.display = 'flex';
+      registerCard.style.display = 'none';
+      const u = document.getElementById('loginUsername');
+      if (u) u.focus();
+    } else {
+      loginCard.style.display = 'none';
+      registerCard.style.display = 'flex';
+      const r = document.getElementById('regFullName');
+      if (r) r.focus();
+    }
+  }
+}
+
+/** Handle forgot password link */
+function handleForgotPassword() {
+  showToast('Password Reset: Please contact Brains Infinite Innovations admin at admin@brains.asia or call +63 975 582 6830.', 'info');
 }
 
 /** Show auth form section and scroll to it */
@@ -514,7 +528,8 @@ async function quickDemoLogin(username, password, roleLabel) {
   if (errorEl) errorEl.style.display = 'none';
   if (btn) {
     btn.disabled = true;
-    btn.querySelector('.auth-btn-text').textContent = `Signing in as ${roleLabel}...`;
+    const txtSpan = btn.querySelector('.auth-btn-text') || document.getElementById('loginBtnText');
+    if (txtSpan) txtSpan.textContent = `Signing in as ${roleLabel}...`;
   }
 
   try {
@@ -547,7 +562,8 @@ async function quickDemoLogin(username, password, roleLabel) {
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.querySelector('.auth-btn-text').textContent = 'Sign In to Portal';
+      const txtSpan = btn.querySelector('.auth-btn-text') || document.getElementById('loginBtnText');
+      if (txtSpan) txtSpan.textContent = 'Sign In';
     }
     document.querySelectorAll('.auth-demo-chip').forEach(c => c.classList.remove('selected'));
   }
@@ -563,19 +579,15 @@ function fillLoginDemo(username, password) {
   if (btn) btn.focus();
 }
 
-/** Select login role card — updates visual state, hidden input, and button text */
+/** Select login role tab — updates visual state, hidden input, and button text */
 function selectLoginRole(role, clickedEl) {
-  // Update active card
-  document.querySelectorAll('.auth-role-card').forEach(card => card.classList.remove('active'));
+  // Update active tab/card
+  document.querySelectorAll('.auth-role-tab, .auth-role-card').forEach(tab => tab.classList.remove('active'));
   if (clickedEl) clickedEl.classList.add('active');
 
   // Update hidden role input
   const roleInput = document.getElementById('loginRole');
   if (roleInput) roleInput.value = role;
-
-  // Update submit button text
-  const btnText = document.getElementById('loginBtnText');
-  if (btnText) btnText.textContent = `Sign in as ${role} →`;
 
   // Update autofill demo button credentials
   const autofillBtn = document.getElementById('autofillDemoBtn');
@@ -625,7 +637,8 @@ async function handleLogin(event) {
 
   // Loading state
   btn.disabled = true;
-  btn.querySelector('.auth-btn-text').textContent = 'Signing in...';
+  const txtSpan = btn.querySelector('.auth-btn-text') || document.getElementById('loginBtnText');
+  if (txtSpan) txtSpan.textContent = 'Signing in...';
   if (errorEl) errorEl.style.display = 'none';
 
   try {
@@ -659,7 +672,8 @@ async function handleLogin(event) {
     showAuthError(errorEl, 'Network error. Please check your connection.');
   } finally {
     btn.disabled = false;
-    btn.querySelector('.auth-btn-text').textContent = 'Sign In to Portal';
+    const txtSpan = btn.querySelector('.auth-btn-text') || document.getElementById('loginBtnText');
+    if (txtSpan) txtSpan.textContent = 'Sign In';
   }
 }
 
@@ -705,7 +719,8 @@ async function handleRegister(event) {
   }
 
   btn.disabled = true;
-  btn.querySelector('.auth-btn-text').textContent = 'Creating account...';
+  const txtSpan = btn.querySelector('.auth-btn-text') || btn.querySelector('span');
+  if (txtSpan) txtSpan.textContent = 'Creating account...';
 
   try {
     const resp = await fetch(`${API_BASE}/auth/register`, {
@@ -744,7 +759,8 @@ async function handleRegister(event) {
     showAuthError(errorEl, 'Network error. Please check your connection.');
   } finally {
     btn.disabled = false;
-    btn.querySelector('.auth-btn-text').textContent = 'Create Account';
+    const txtSpan = btn.querySelector('.auth-btn-text') || btn.querySelector('span');
+    if (txtSpan) txtSpan.textContent = 'Create Account';
   }
 }
 
@@ -825,6 +841,7 @@ async function fetchAllData() {
       fetch(`${API_BASE}/predictive/alerts`),
       fetch(`${API_BASE}/audit-logs`),
       fetch(`${API_BASE}/customers`),
+      fetch(`${API_BASE}/notifications`),
     ];
 
     if (state.currentRole === 'admin') {
@@ -832,7 +849,7 @@ async function fetchAllData() {
     }
 
     const responses = await Promise.all(fetchPromises);
-    const [statsRes, devRes, tckRes, warRes, invRes, cmsRes, predRes, logsRes, custRes] = responses;
+    const [statsRes, devRes, tckRes, warRes, invRes, cmsRes, predRes, logsRes, custRes, notifRes] = responses;
 
     const statsData = await statsRes.json();
     const devData = await devRes.json();
@@ -843,6 +860,7 @@ async function fetchAllData() {
     const predData = await predRes.json();
     const logsData = await logsRes.json();
     const custData = await custRes.json();
+    const notifData = await notifRes.json();
 
     if (statsData.success) state.stats = statsData.data;
     if (devData.success) state.devices = devData.data;
@@ -853,9 +871,10 @@ async function fetchAllData() {
     if (predData.success) state.predictiveAlerts = predData.data;
     if (logsData.success) state.auditLogs = logsData.data;
     if (custData.success) state.customers = custData.data;
+    if (notifData.success) state.notifications = notifData.data;
 
-    if (responses[9]) {
-      const userData = await responses[9].json();
+    if (responses[10]) {
+      const userData = await responses[10].json();
       if (userData.success) state.allUsers = userData.data;
     }
 
@@ -870,6 +889,7 @@ async function fetchAllData() {
 
 function renderApp() {
   renderSidebarBadges();
+  renderNotifications();
   applyRoleUI();
   const mainContent = document.getElementById('mainContent');
   if (!mainContent) return;
@@ -969,6 +989,108 @@ function renderSidebarBadges() {
   if (bInv)  bInv.textContent  = `${invLowCount} Low`;
   if (bTckC) bTckC.textContent = tckCount > 0 ? `${tckCount} Open` : '';
 }
+
+// --- Notification Logic ---
+function renderNotifications() {
+  const badge = document.getElementById('notifBadge');
+  const list = document.getElementById('notifList');
+  if (!badge || !list) return;
+
+  const notifs = state.notifications || [];
+  const unreadCount = notifs.filter(n => !n.read).length;
+
+  if (unreadCount > 0) {
+    badge.textContent = unreadCount;
+    badge.style.display = 'block';
+  } else {
+    badge.style.display = 'none';
+  }
+
+  if (notifs.length === 0) {
+    list.innerHTML = `<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:0.8rem;">No new notifications</div>`;
+    return;
+  }
+
+  list.innerHTML = notifs.map((n, i) => {
+    let icon = '🔔';
+    let path = '';
+    if (n.type === 'low_stock') {
+      icon = '⚠️';
+      path = 'inventory';
+    } else if (n.type === 'new_ticket') {
+      icon = '🎫';
+      path = 'tickets';
+    } else if (n.type === 'new_message' || n.type === 'ticket_message') {
+      icon = '💬';
+      path = 'tickets';
+    }
+
+    const timeStr = timeAgo(new Date(n.timestamp || n.createdAt || n.created_at || Date.now()));
+
+    return `
+      <div class="notif-item ${n.read ? '' : 'unread'}" onclick="handleNotifClick(${i}, '${path}')">
+        <div class="notif-item-header">
+          <span class="notif-item-title"><span class="notif-item-type-icon">${icon}</span>${escapeHtml(n.title)}</span>
+          <span class="notif-item-time">${timeStr}</span>
+        </div>
+        <div class="notif-item-msg">${escapeHtml(n.message)}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function toggleNotifications(e) {
+  if (e) e.stopPropagation();
+  state.notifDropdownOpen = !state.notifDropdownOpen;
+  const dropdown = document.getElementById('notifDropdown');
+  if (dropdown) {
+    if (state.notifDropdownOpen) {
+      dropdown.classList.add('show');
+    } else {
+      dropdown.classList.remove('show');
+    }
+  }
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', (e) => {
+  const notifBtn = document.getElementById('notifBtn');
+  const notifDropdown = document.getElementById('notifDropdown');
+  if (state.notifDropdownOpen && notifBtn && notifDropdown) {
+    if (!notifBtn.contains(e.target) && !notifDropdown.contains(e.target)) {
+      state.notifDropdownOpen = false;
+      notifDropdown.classList.remove('show');
+    }
+  }
+});
+
+function markAllNotificationsRead(e) {
+  if (e) e.stopPropagation();
+  if (state.notifications) {
+    state.notifications.forEach(n => n.read = true);
+  }
+  renderNotifications();
+}
+
+function handleNotifClick(index, tabPath) {
+  const notif = state.notifications[index];
+  if (notif) notif.read = true;
+  if (state.notifDropdownOpen) {
+    toggleNotifications(); // close
+  }
+  renderNotifications();
+  if (tabPath) {
+    switchTab(tabPath);
+    if (notif && (notif.type === 'new_ticket' || notif.type === 'new_message' || notif.type === 'ticket_message') && notif.linkId) {
+      setTimeout(() => {
+        if (typeof openTicketDetailModal === 'function') {
+          openTicketDetailModal(notif.linkId);
+        }
+      }, 300);
+    }
+  }
+}
+
 
 // ==========================================================================
 // MILLENNIUM INTERACTIVE SMARTBOARD SIMULATOR & SHOWCASE LOGIC

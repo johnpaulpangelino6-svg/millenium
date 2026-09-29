@@ -1265,6 +1265,21 @@ class MillenniumDatabase {
       avgResponseTime: '2.4h',
     };
   }
+
+  // -------------------------------------------------------------------------
+  // NOTIFICATIONS
+  // -------------------------------------------------------------------------
+  async getRecentTicketMessages(limit: number = 20): Promise<any[]> {
+    const query = `
+      SELECT id, ticket_id as "ticketId", sender_id as "senderId", sender_name as "senderName",
+             sender_role as "senderRole", message, created_at as "createdAt"
+      FROM ticket_messages
+      ORDER BY created_at DESC
+      LIMIT $1
+    `;
+    const result = await pool.query(query, [limit]);
+    return result.rows;
+  }
 }
 
 export const db = new MillenniumDatabase();
