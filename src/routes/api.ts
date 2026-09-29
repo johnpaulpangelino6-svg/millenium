@@ -790,12 +790,12 @@ apiRouter.post('/tickets/:id/messages', async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, error: 'Ticket not found.' });
     }
     
-    // Verify sender is admin or assigned technician
-    if (senderRole !== 'admin' && senderRole !== 'technician') {
-      return res.status(403).json({ success: false, error: 'Only admin and technicians can send messages.' });
+    // Verify sender has permission to chat on this ticket (admin, customer, or assigned technician)
+    if (senderRole !== 'admin' && senderRole !== 'technician' && senderRole !== 'customer') {
+      return res.status(403).json({ success: false, error: 'Only admin, assigned technician, and customers can send messages.' });
     }
     
-    if (senderRole === 'technician' && ticket.assignedTechnicianId !== senderId) {
+    if (senderRole === 'technician' && ticket.assignedTechnicianId && ticket.assignedTechnicianId !== senderId) {
       return res.status(403).json({ success: false, error: 'Only the assigned technician can send messages.' });
     }
     
@@ -1033,11 +1033,12 @@ apiRouter.get('/notifications', async (req: Request, res: Response) => {
       recentMessages.forEach(msg => {
         const msgDate = new Date(msg.createdAt);
         if (msgDate >= twentyFourHoursAgo) {
+          const roleLabel = msg.senderRole === 'customer' ? 'Customer' : msg.senderRole === 'admin' ? 'Admin' : 'Technician';
           notifications.push({
             id: `notif-msg-${msg.id}`,
             type: 'new_message',
-            title: 'New Ticket Message',
-            message: `${msg.senderName} (${msg.senderRole}): "${msg.message.substring(0, 30)}${msg.message.length > 30 ? '...' : ''}"`,
+            title: `${roleLabel} Ticket Message`,
+            message: `${msg.senderName} (${msg.senderRole}): "${msg.message.substring(0, 32)}${msg.message.length > 32 ? '...' : ''}"`,
             timestamp: msg.createdAt,
             linkId: msg.ticketId, // Link to ticket ID to open it
             read: false
