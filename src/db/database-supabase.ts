@@ -236,7 +236,9 @@ class MillenniumDatabase {
         );
       `);
 
-      // Ticket Messages table (Private chat between admin and technician)
+      // Ticket Messages table — two private channels per ticket:
+      //   chat_type = 'staff'    : Admin ↔ Technician  (default, original channel)
+      //   chat_type = 'customer' : Admin ↔ Customer     (new isolated channel)
       await client.query(`
         CREATE TABLE IF NOT EXISTS ticket_messages (
           id TEXT PRIMARY KEY,
@@ -245,13 +247,25 @@ class MillenniumDatabase {
           sender_name TEXT NOT NULL,
           sender_role TEXT NOT NULL,
           message TEXT NOT NULL,
+          chat_type TEXT NOT NULL DEFAULT 'staff' CHECK(chat_type IN ('staff', 'customer')),
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY (ticket_id) REFERENCES service_tickets(id) ON DELETE CASCADE,
           FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE
         );
       `);
+      // Migration: add chat_type if it does not exist yet (safe on existing databases)
+      await client.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='ticket_messages' AND column_name='chat_type') THEN
+            ALTER TABLE ticket_messages ADD COLUMN chat_type TEXT NOT NULL DEFAULT 'staff'
+              CHECK(chat_type IN ('staff', 'customer'));
+          END IF;
+        END $$;
+      `);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_ticket_messages_ticket_id ON ticket_messages(ticket_id);`);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_ticket_messages_created_at ON ticket_messages(created_at);`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_ticket_messages_chat_type ON ticket_messages(ticket_id, chat_type);`);
 
       // Inventory Parts table
       await client.query(`
@@ -904,29 +918,58 @@ class MillenniumDatabase {
     return this.getTicketById(ticketId);
   }
 
-  // Get ticket messages (private chat between admin and technician)
+  // Get STAFF ticket messages (admin ↔ technician channel only — customers cannot see these)
   async getTicketMessages(ticketId: string): Promise<any[]> {
     const result = await pool.query(`
       SELECT id, ticket_id as "ticketId", sender_id as "senderId", 
              sender_name as "senderName", sender_role as "senderRole", 
-             message, created_at as "createdAt"
+             message, chat_type as "chatType", created_at as "createdAt"
       FROM ticket_messages
-      WHERE ticket_id = $1
+      WHERE ticket_id = $1 AND chat_type = 'staff'
       ORDER BY created_at ASC
     `, [ticketId]);
     
     return result.rows;
   }
 
-  // Add ticket message
+  // Add STAFF ticket message (admin ↔ technician)
   async addTicketMessage(ticketId: string, senderId: string, senderName: string, senderRole: string, message: string): Promise<any> {
     const id = `MSG-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const result = await pool.query(
-      `INSERT INTO ticket_messages (id, ticket_id, sender_id, sender_name, sender_role, message)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO ticket_messages (id, ticket_id, sender_id, sender_name, sender_role, message, chat_type)
+       VALUES ($1, $2, $3, $4, $5, $6, 'staff')
        RETURNING id, ticket_id as "ticketId", sender_id as "senderId", 
                  sender_name as "senderName", sender_role as "senderRole", 
-                 message, created_at as "createdAt"`,
+                 message, chat_type as "chatType", created_at as "createdAt"`,
+      [id, ticketId, senderId, senderName, senderRole, message]
+    );
+    
+    return result.rows[0];
+  }
+
+  // Get CUSTOMER ticket messages (admin ↔ customer private channel — technicians cannot see these)
+  async getCustomerTicketMessages(ticketId: string): Promise<any[]> {
+    const result = await pool.query(`
+      SELECT id, ticket_id as "ticketId", sender_id as "senderId", 
+             sender_name as "senderName", sender_role as "senderRole", 
+             message, chat_type as "chatType", created_at as "createdAt"
+      FROM ticket_messages
+      WHERE ticket_id = $1 AND chat_type = 'customer'
+      ORDER BY created_at ASC
+    `, [ticketId]);
+    
+    return result.rows;
+  }
+
+  // Add CUSTOMER ticket message (admin ↔ customer)
+  async addCustomerTicketMessage(ticketId: string, senderId: string, senderName: string, senderRole: string, message: string): Promise<any> {
+    const id = `CMSG-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const result = await pool.query(
+      `INSERT INTO ticket_messages (id, ticket_id, sender_id, sender_name, sender_role, message, chat_type)
+       VALUES ($1, $2, $3, $4, $5, $6, 'customer')
+       RETURNING id, ticket_id as "ticketId", sender_id as "senderId", 
+                 sender_name as "senderName", sender_role as "senderRole", 
+                 message, chat_type as "chatType", created_at as "createdAt"`,
       [id, ticketId, senderId, senderName, senderRole, message]
     );
     

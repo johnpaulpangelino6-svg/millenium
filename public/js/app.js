@@ -5088,155 +5088,233 @@ function openTicketDetailModal(ticketId) {
 
   const modal = document.getElementById('ticketDetailModal');
   const title = document.getElementById('ticketDetailTitle');
-  const body = document.getElementById('ticketDetailBody');
+  const body  = document.getElementById('ticketDetailBody');
 
-  const isAdmin = state.currentRole === 'admin';
+  const isAdmin      = state.currentRole === 'admin';
   const isTechnician = state.currentRole === 'technician';
-  const isCustomer = state.currentRole === 'customer';
+  const isCustomer   = state.currentRole === 'customer';
   const isAssignedTech = isTechnician && tck.assignedTechnicianId === state.currentUser?.id;
-  const canChat = isAdmin || isAssignedTech || isCustomer;
+
+  // Channel access rules
+  const canSeeStaffChat    = isAdmin || isAssignedTech;   // Admin & assigned tech see staff channel
+  const canSeeCustomerChat = isAdmin || isCustomer;       // Admin & customer see customer-private channel
 
   if (title) title.textContent = `Ticket Details — ${tck.ticketNumber}`;
+
   if (body) {
-    let chatHeaderTitle = '💬 Ticket Support Chat (Admin ↔ Customer & Tech)';
-    let chatHeaderSubtitle = `Live communications with <strong>${escapeHtml(tck.customerName)}</strong> and assigned technical team.`;
-    let chatAccentColor = 'var(--neon-purple)';
-    let chatStatusBadge = '<span style="font-size:0.72rem;padding:2px 8px;border-radius:9999px;background:rgba(0,242,254,0.18);color:#00f2fe;font-weight:700;">● Admin Desk</span>';
+    // Build chat section HTML based on role
+    let chatSectionHtml = '';
 
     if (isCustomer) {
-      chatHeaderTitle = '💬 Support Chat (You ↔ Support & Admin)';
-      chatHeaderSubtitle = 'Have questions or updates? Message Millennium SmartBoard Customer Support & Technical Team directly.';
-      chatAccentColor = '#00f2fe';
-      chatStatusBadge = '<span style="font-size:0.72rem;padding:2px 8px;border-radius:9999px;background:rgba(16,185,129,0.2);color:#34d399;font-weight:700;">● Connected to Admin</span>';
-    } else if (isTechnician) {
-      chatHeaderTitle = '💬 Ticket Chat (Technician ↔ Admin & Customer)';
-      chatHeaderSubtitle = 'Field coordination with administration and client.';
-      chatAccentColor = '#c084fc';
-      chatStatusBadge = '<span style="font-size:0.72rem;padding:2px 8px;border-radius:9999px;background:rgba(168,85,247,0.2);color:#c084fc;font-weight:700;">● Tech Dispatch</span>';
+      // CUSTOMER VIEW: Only the private customer↔admin channel
+      chatSectionHtml = `
+      <div style="background: rgba(10,16,36,0.9); padding: 16px; border-radius: 12px;
+                  border: 1px solid rgba(16,185,129,0.35); box-shadow: 0 4px 20px rgba(0,0,0,0.4);">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
+          <h4 style="font-size:0.96rem; font-weight:700; margin:0; color:#34d399; display:flex; align-items:center; gap:8px;">
+            💬 Customer Support Chat <span style="font-size:0.68rem;font-weight:400;color:#64748b;">(Private — Admin & Support only)</span>
+          </h4>
+          <span style="font-size:0.72rem;padding:2px 9px;border-radius:9999px;background:rgba(16,185,129,0.18);color:#34d399;font-weight:700;">● Private Channel</span>
+        </div>
+        <p style="font-size:0.78rem; color:var(--text-secondary); margin-bottom:12px;">
+          This is a <strong>private conversation</strong> between you and Millennium SmartBoard Admin/Support.
+          Your messages are <strong>not visible</strong> to technicians.
+        </p>
+        <div id="ticketChatMessages" style="max-height:280px; min-height:120px; overflow-y:auto;
+             background:#070c1d; border:1px solid rgba(16,185,129,0.2); border-radius:10px;
+             padding:14px; margin-bottom:12px;">
+          <div style="text-align:center; color:var(--text-muted); font-size:0.8rem; padding:20px;">
+            <div class="spinner" style="margin:10px auto;"></div>
+            Connecting to support chat...
+          </div>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <input type="text" id="ticketChatInput" class="form-input"
+            placeholder="Message Millennium Support (private)..."
+            style="flex:1; background:#070d20; border-color:rgba(16,185,129,0.3);"
+            onkeypress="if(event.key==='Enter') sendTicketMessage('customer')" />
+          <button class="btn btn-primary btn-sm" onclick="sendTicketMessage('customer')"
+            style="display:flex; align-items:center; gap:6px; font-weight:700; padding:0 16px;
+                   background:linear-gradient(135deg,#059669,#34d399); border:none;">
+            📤 Send
+          </button>
+        </div>
+      </div>`;
+    } else if (isAdmin) {
+      // ADMIN VIEW: Two tabs — Staff Channel + Customer Support Channel
+      chatSectionHtml = `
+      <div style="background:rgba(10,16,36,0.9); padding:16px; border-radius:12px;
+                  border:1px solid rgba(0,242,254,0.28); box-shadow:0 4px 20px rgba(0,0,0,0.4);">
+        <h4 style="font-size:0.96rem; font-weight:700; margin:0 0 12px 0; color:var(--neon-cyan);">👑 Admin Chat Channels</h4>
+        <!-- Tab Switcher -->
+        <div style="display:flex; gap:8px; margin-bottom:14px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:10px;">
+          <button id="tabStaffChat" onclick="switchTicketChatTab('staff','${tck.id}')"
+            style="padding:6px 14px; border-radius:8px; font-size:0.82rem; font-weight:700; cursor:pointer;
+                   background:rgba(0,242,254,0.2); color:#00f2fe; border:1px solid rgba(0,242,254,0.4);
+                   transition:all 0.2s;">
+            🔧 Staff Channel
+          </button>
+          <button id="tabCustomerChat" onclick="switchTicketChatTab('customer','${tck.id}')"
+            style="padding:6px 14px; border-radius:8px; font-size:0.82rem; font-weight:700; cursor:pointer;
+                   background:rgba(255,255,255,0.04); color:#94a3b8; border:1px solid rgba(255,255,255,0.12);
+                   transition:all 0.2s;">
+            💬 Customer Support
+          </button>
+        </div>
+        <!-- Chat Subtitle -->
+        <p id="ticketChatSubtitle" style="font-size:0.78rem; color:var(--text-secondary); margin-bottom:12px;">
+          Staff channel — coordination with assigned technician. <strong>Customers cannot see this.</strong>
+        </p>
+        <!-- Messages Container -->
+        <div id="ticketChatMessages" style="max-height:280px; min-height:120px; overflow-y:auto;
+             background:#070c1d; border:1px solid rgba(0,242,254,0.15); border-radius:10px;
+             padding:14px; margin-bottom:12px;">
+          <div style="text-align:center; color:var(--text-muted); font-size:0.8rem; padding:20px;">
+            <div class="spinner" style="margin:10px auto;"></div>
+            Loading staff messages...
+          </div>
+        </div>
+        <!-- Input -->
+        <div style="display:flex; gap:8px;">
+          <input type="text" id="ticketChatInput" class="form-input"
+            placeholder="Reply to technician (staff channel)..."
+            style="flex:1; background:#070d20; border-color:rgba(0,242,254,0.3);"
+            onkeypress="if(event.key==='Enter') sendTicketMessage(state._activeChatTab||'staff')" />
+          <button class="btn btn-primary btn-sm" onclick="sendTicketMessage(state._activeChatTab||'staff')"
+            style="display:flex; align-items:center; gap:6px; font-weight:700; padding:0 16px;">
+            📤 Send
+          </button>
+        </div>
+      </div>`;
+    } else if (isAssignedTech) {
+      // TECHNICIAN VIEW: Staff channel only
+      chatSectionHtml = `
+      <div style="background:rgba(10,16,36,0.9); padding:16px; border-radius:12px;
+                  border:1px solid rgba(168,85,247,0.3); box-shadow:0 4px 20px rgba(0,0,0,0.4);">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
+          <h4 style="font-size:0.96rem; font-weight:700; margin:0; color:#c084fc; display:flex; align-items:center; gap:8px;">
+            🔧 Staff Channel <span style="font-size:0.68rem;font-weight:400;color:#64748b;">(Admin & Technician)</span>
+          </h4>
+          <span style="font-size:0.72rem;padding:2px 9px;border-radius:9999px;background:rgba(168,85,247,0.2);color:#c084fc;font-weight:700;">● Tech Dispatch</span>
+        </div>
+        <p style="font-size:0.78rem; color:var(--text-secondary); margin-bottom:12px;">
+          Internal coordination with admin. <strong>Customer messages are kept separate and private.</strong>
+        </p>
+        <div id="ticketChatMessages" style="max-height:280px; min-height:120px; overflow-y:auto;
+             background:#070c1d; border:1px solid rgba(168,85,247,0.2); border-radius:10px;
+             padding:14px; margin-bottom:12px;">
+          <div style="text-align:center; color:var(--text-muted); font-size:0.8rem; padding:20px;">
+            <div class="spinner" style="margin:10px auto;"></div>
+            Connecting to staff chat...
+          </div>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <input type="text" id="ticketChatInput" class="form-input"
+            placeholder="Reply to admin or field update..."
+            style="flex:1; background:#070d20; border-color:rgba(168,85,247,0.3);"
+            onkeypress="if(event.key==='Enter') sendTicketMessage('staff')" />
+          <button class="btn btn-primary btn-sm" onclick="sendTicketMessage('staff')"
+            style="display:flex; align-items:center; gap:6px; font-weight:700; padding:0 16px;
+                   background:linear-gradient(135deg,#7c3aed,#c084fc); border:none;">
+            📤 Send
+          </button>
+        </div>
+      </div>`;
     }
 
     body.innerHTML = `
-      <div style="display: flex; flex-direction: column; gap: 14px;">
-        <div style="background: var(--bg-card); padding: 14px; border-radius: 8px; border: 1px solid var(--border-subtle);">
-          <h3 style="font-size: 1.1rem; font-weight: 800; color: #ffffff;">${escapeHtml(tck.title)}</h3>
-          <p style="color: var(--text-secondary); font-size: 0.88rem; margin-top: 6px;">${escapeHtml(tck.description)}</p>
+      <div style="display:flex; flex-direction:column; gap:14px;">
+        <div style="background:var(--bg-card); padding:14px; border-radius:8px; border:1px solid var(--border-subtle);">
+          <h3 style="font-size:1.1rem; font-weight:800; color:#ffffff;">${escapeHtml(tck.title)}</h3>
+          <p style="color:var(--text-secondary); font-size:0.88rem; margin-top:6px;">${escapeHtml(tck.description)}</p>
         </div>
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 0.85rem;">
-          <div><strong>Device:</strong> <span style="color: var(--neon-cyan);">${escapeHtml(tck.deviceId)}</span> (${escapeHtml(tck.deviceModel || '')})</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; font-size:0.85rem;">
+          <div><strong>Device:</strong> <span style="color:var(--neon-cyan);">${escapeHtml(tck.deviceId)}</span> (${escapeHtml(tck.deviceModel||'')})</div>
           <div><strong>Customer:</strong> ${escapeHtml(tck.customerName)}</div>
-          <div><strong>Priority:</strong> <span style="font-weight: 700;">${tck.priority}</span></div>
-          <div><strong>Warranty Covered:</strong> <span class="${tck.warrantyCovered ? 'warranty-badge-active' : 'warranty-badge-expired'}">${tck.warrantyCovered ? 'Yes (Under Warranty) ✅' : 'No (Expired) ⚠️'}</span></div>
-          <div><strong>Assigned Tech:</strong> ${escapeHtml(tck.assignedTechnician || 'Pending')}</div>
+          <div><strong>Priority:</strong> <span style="font-weight:700;">${tck.priority}</span></div>
+          <div><strong>Warranty Covered:</strong> <span class="${tck.warrantyCovered ? 'warranty-badge-active' : 'warranty-badge-expired'}">${tck.warrantyCovered ? 'Yes ✅' : 'No ⚠️'}</span></div>
+          <div><strong>Assigned Tech:</strong> ${escapeHtml(tck.assignedTechnician||'Pending')}</div>
           <div><strong>Status:</strong> <span class="status-pill status-online">${tck.status}</span></div>
         </div>
 
         ${isAdmin ? `
-        <!-- Admin: Assign Technician Section -->
-        <div style="background: rgba(0, 242, 254, 0.08); padding: 16px; border-radius: 10px; border: 1px solid rgba(0, 242, 254, 0.25);">
-          <h4 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 8px; color: var(--neon-cyan);">👤 Assign Technician</h4>
-          <p style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 10px;">
-            Select a field technician to assign this ticket for repair.
-          </p>
-          <div style="display: flex; gap: 10px; align-items: center;">
-            <select id="assignTechnicianSelect" class="form-select" style="flex: 1;">
+        <div style="background:rgba(0,242,254,0.08); padding:16px; border-radius:10px; border:1px solid rgba(0,242,254,0.25);">
+          <h4 style="font-size:0.95rem; font-weight:700; margin-bottom:8px; color:var(--neon-cyan);">👤 Assign Technician</h4>
+          <p style="font-size:0.78rem; color:var(--text-secondary); margin-bottom:10px;">Select a field technician to assign this ticket for repair.</p>
+          <div style="display:flex; gap:10px; align-items:center;">
+            <select id="assignTechnicianSelect" class="form-select" style="flex:1;">
               <option value="">Select Technician...</option>
-              ${(state.allUsers || state.users || []).filter(u => u.role === 'technician').map(u => 
-                `<option value="${u.id}" ${tck.assignedTechnicianId === u.id ? 'selected' : ''}>${u.fullName} (${u.location})</option>`
+              ${(state.allUsers||state.users||[]).filter(u=>u.role==='technician').map(u=>
+                `<option value="${u.id}" ${tck.assignedTechnicianId===u.id?'selected':''}>${u.fullName} (${u.location})</option>`
               ).join('')}
             </select>
             <button class="btn btn-primary btn-sm" onclick="assignTicketToTechnician()">
               ${tck.assignedTechnicianId ? '🔄 Reassign' : '📋 Assign'}
             </button>
           </div>
-        </div>
-        ` : ''}
+        </div>` : ''}
 
-        ${canChat ? `
-        <!-- Ticket Live Chat Section (Customer ↔ Admin ↔ Tech) -->
-        <div style="background: rgba(10, 16, 36, 0.85); padding: 16px; border-radius: 12px; border: 1px solid rgba(0, 242, 254, 0.28); box-shadow: 0 4px 20px rgba(0,0,0,0.4);">
-          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; flex-wrap: wrap; gap: 8px;">
-            <h4 style="font-size: 0.96rem; font-weight: 700; margin: 0; color: ${chatAccentColor}; display: flex; align-items: center; gap: 8px;">
-              ${chatHeaderTitle}
-            </h4>
-            ${chatStatusBadge}
-          </div>
-          <p style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 12px;">
-            ${chatHeaderSubtitle}
-          </p>
-          
-          <!-- Chat Messages Container -->
-          <div id="ticketChatMessages" style="max-height: 280px; min-height: 120px; overflow-y: auto; background: #070c1d; border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 14px; margin-bottom: 12px;">
-            <div style="text-align: center; color: var(--text-muted); font-size: 0.8rem; padding: 20px;">
-              <div class="spinner" style="margin: 10px auto;"></div>
-              Connecting to ticket chat...
-            </div>
-          </div>
+        ${chatSectionHtml}
 
-          <!-- Chat Input & Send Button -->
-          <div style="display: flex; gap: 8px;">
-            <input 
-              type="text" 
-              id="ticketChatInput" 
-              class="form-input" 
-              placeholder="${isCustomer ? 'Message support or admin about your ticket...' : 'Reply to customer or technical team...'}" 
-              style="flex: 1; background: #070d20; border-color: rgba(0, 242, 254, 0.3);"
-              onkeypress="if(event.key === 'Enter') sendTicketMessage()"
-            />
-            <button class="btn btn-primary btn-sm" onclick="sendTicketMessage()" style="display: flex; align-items: center; gap: 6px; font-weight: 700; padding: 0 16px;">
-              📤 Send
-            </button>
-          </div>
-        </div>
-        ` : ''}
-
-        ${(isAdmin || isTechnician) ? `
+        ${(isAdmin||isTechnician) ? `
         <div class="form-group">
           <label class="form-label">Update Ticket Status</label>
-          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-            <button class="btn btn-secondary btn-sm" onclick="advanceTicketStatus('${tck.id}', 'Received')">Received</button>
-            <button class="btn btn-secondary btn-sm" onclick="advanceTicketStatus('${tck.id}', 'Diagnosing')">Diagnosing</button>
-            <button class="btn btn-secondary btn-sm" onclick="advanceTicketStatus('${tck.id}', 'Repairing')">Repairing</button>
-            <button class="btn btn-primary btn-sm" onclick="advanceTicketStatus('${tck.id}', 'Resolved')">Mark Resolved ✅</button>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn btn-secondary btn-sm" onclick="advanceTicketStatus('${tck.id}','Received')">Received</button>
+            <button class="btn btn-secondary btn-sm" onclick="advanceTicketStatus('${tck.id}','Diagnosing')">Diagnosing</button>
+            <button class="btn btn-secondary btn-sm" onclick="advanceTicketStatus('${tck.id}','Repairing')">Repairing</button>
+            <button class="btn btn-primary btn-sm" onclick="advanceTicketStatus('${tck.id}','Resolved')">Mark Resolved ✅</button>
           </div>
         </div>
 
-        <!-- Spare Parts Deduction Section -->
-        <div style="background: rgba(0,0,0,0.3); padding: 16px; border-radius: 10px; border: 1px solid var(--border-bright);">
-          <h4 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 8px; color: var(--neon-cyan);">🔩 Consume Spare Part from Inventory</h4>
-          <p style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 10px;">
-            Select a replacement part used by the technician to automatically deduct from company inventory and link to this unit's service history.
+        <div style="background:rgba(0,0,0,0.3); padding:16px; border-radius:10px; border:1px solid var(--border-bright);">
+          <h4 style="font-size:0.95rem; font-weight:700; margin-bottom:8px; color:var(--neon-cyan);">🔩 Consume Spare Part from Inventory</h4>
+          <p style="font-size:0.78rem; color:var(--text-secondary); margin-bottom:10px;">
+            Select a replacement part used by the technician to automatically deduct from company inventory.
           </p>
-          <div style="display: flex; gap: 10px;">
-            <select id="ticketPartSelect" class="form-select" style="flex: 2;">
-              ${state.inventory.map((p) => `<option value="${p.id}">${p.name} (In Stock: ${p.stockQuantity})</option>`).join('')}
+          <div style="display:flex; gap:10px;">
+            <select id="ticketPartSelect" class="form-select" style="flex:2;">
+              ${state.inventory.map(p=>`<option value="${p.id}">${p.name} (In Stock: ${p.stockQuantity})</option>`).join('')}
             </select>
-            <input type="number" id="ticketPartQty" class="form-input" style="flex: 1; min-width: 60px;" value="1" min="1" max="10" />
+            <input type="number" id="ticketPartQty" class="form-input" style="flex:1; min-width:60px;" value="1" min="1" max="10" />
             <button class="btn btn-secondary btn-sm" onclick="consumePartForSelectedTicket()">Deduct Part</button>
           </div>
           ${tck.partsUsed && tck.partsUsed.length > 0 ? `
-            <div style="margin-top: 10px; font-size: 0.8rem; color: var(--neon-cyan);">
-              <strong>Parts Used:</strong> ${tck.partsUsed.map((p) => `${p.quantity}x ${p.partName}`).join(', ')}
-            </div>
-          ` : ''}
-        </div>
-        ` : ''}
+            <div style="margin-top:10px; font-size:0.8rem; color:var(--neon-cyan);">
+              <strong>Parts Used:</strong> ${tck.partsUsed.map(p=>`${p.quantity}x ${p.partName}`).join(', ')}
+            </div>` : ''}
+        </div>` : ''}
       </div>
     `;
-    
-    // Load chat messages and start real-time polling
-    if (canChat) {
-      loadTicketMessages(ticketId);
-      if (state.ticketChatPollInterval) {
-        clearInterval(state.ticketChatPollInterval);
-      }
+
+    // Clear any previous poll
+    if (state.ticketChatPollInterval) {
+      clearInterval(state.ticketChatPollInterval);
+      state.ticketChatPollInterval = null;
+    }
+
+    // Start the appropriate chat channel
+    if (isCustomer) {
+      state._activeChatTab = 'customer';
+      loadTicketMessages(ticketId, false, 'customer');
       state.ticketChatPollInterval = setInterval(() => {
-        if (state.selectedTicket && state.selectedTicket.id === ticketId) {
-          loadTicketMessages(ticketId, true);
-        } else {
-          clearInterval(state.ticketChatPollInterval);
-          state.ticketChatPollInterval = null;
-        }
+        if (state.selectedTicket?.id === ticketId) loadTicketMessages(ticketId, true, 'customer');
+        else { clearInterval(state.ticketChatPollInterval); state.ticketChatPollInterval = null; }
+      }, 3000);
+    } else if (isAdmin) {
+      state._activeChatTab = 'staff';
+      loadTicketMessages(ticketId, false, 'staff');
+      state.ticketChatPollInterval = setInterval(() => {
+        if (state.selectedTicket?.id === ticketId) loadTicketMessages(ticketId, true, state._activeChatTab || 'staff');
+        else { clearInterval(state.ticketChatPollInterval); state.ticketChatPollInterval = null; }
+      }, 3000);
+    } else if (isAssignedTech) {
+      state._activeChatTab = 'staff';
+      loadTicketMessages(ticketId, false, 'staff');
+      state.ticketChatPollInterval = setInterval(() => {
+        if (state.selectedTicket?.id === ticketId) loadTicketMessages(ticketId, true, 'staff');
+        else { clearInterval(state.ticketChatPollInterval); state.ticketChatPollInterval = null; }
       }, 3000);
     }
   }
@@ -5252,6 +5330,50 @@ function closeTicketDetailModal() {
     state.ticketChatPollInterval = null;
   }
   state.selectedTicket = null;
+  state._activeChatTab = null;
+}
+
+// Switch between Staff / Customer chat tabs (Admin only)
+function switchTicketChatTab(tab, ticketId) {
+  if (!state.selectedTicket) return;
+  state._activeChatTab = tab;
+
+  // Update tab button styles
+  const staffBtn    = document.getElementById('tabStaffChat');
+  const customerBtn = document.getElementById('tabCustomerChat');
+  const subtitle    = document.getElementById('ticketChatSubtitle');
+  const input       = document.getElementById('ticketChatInput');
+
+  if (tab === 'staff') {
+    if (staffBtn) {
+      staffBtn.style.background = 'rgba(0,242,254,0.2)';
+      staffBtn.style.color = '#00f2fe';
+      staffBtn.style.border = '1px solid rgba(0,242,254,0.4)';
+    }
+    if (customerBtn) {
+      customerBtn.style.background = 'rgba(255,255,255,0.04)';
+      customerBtn.style.color = '#94a3b8';
+      customerBtn.style.border = '1px solid rgba(255,255,255,0.12)';
+    }
+    if (subtitle) subtitle.textContent = 'Staff channel — coordination with assigned technician. Customers cannot see this.';
+    if (input) input.placeholder = 'Reply to technician (staff channel)...';
+  } else {
+    if (customerBtn) {
+      customerBtn.style.background = 'rgba(16,185,129,0.2)';
+      customerBtn.style.color = '#34d399';
+      customerBtn.style.border = '1px solid rgba(16,185,129,0.4)';
+    }
+    if (staffBtn) {
+      staffBtn.style.background = 'rgba(255,255,255,0.04)';
+      staffBtn.style.color = '#94a3b8';
+      staffBtn.style.border = '1px solid rgba(255,255,255,0.12)';
+    }
+    if (subtitle) subtitle.textContent = 'Customer support channel — private conversation with the customer. Technicians cannot see this.';
+    if (input) input.placeholder = 'Reply to customer (private support)...';
+  }
+
+  // Reload messages for the selected tab
+  loadTicketMessages(ticketId, false, tab);
 }
 
 // Assign ticket to technician (Admin only)
@@ -5297,139 +5419,137 @@ async function assignTicketToTechnician() {
   }
 }
 
-// Load ticket messages
-async function loadTicketMessages(ticketId, isSilent = false) {
+// Load ticket messages — channel-aware
+// channel: 'staff' (admin ↔ tech) | 'customer' (admin ↔ customer)
+async function loadTicketMessages(ticketId, isSilent = false, channel = 'staff') {
   const container = document.getElementById('ticketChatMessages');
   if (!container) return;
-  
-  if (!isSilent && (!container.children.length || container.textContent.includes('Connecting to ticket chat...'))) {
+
+  if (!isSilent) {
     container.innerHTML = `
-      <div style="text-align: center; color: var(--text-muted); font-size: 0.82rem; padding: 24px 16px;">
-        <div class="spinner" style="margin: 8px auto;"></div>
-        Loading chat messages...
+      <div style="text-align:center; color:var(--text-muted); font-size:0.82rem; padding:24px 16px;">
+        <div class="spinner" style="margin:8px auto;"></div>
+        Loading ${channel === 'customer' ? 'support' : 'staff'} messages...
       </div>
     `;
   }
-  
+
+  const endpoint = channel === 'customer'
+    ? `${API_BASE}/tickets/${ticketId}/customer-messages?requestingRole=${encodeURIComponent(state.currentRole||'')}`
+    : `${API_BASE}/tickets/${ticketId}/messages`;
+
   try {
-    const res = await fetch(`${API_BASE}/tickets/${ticketId}/messages`);
+    const res  = await fetch(endpoint);
     const data = await res.json();
-    
+
     if (data.success) {
       const messages = data.data || [];
-      
+
       if (messages.length === 0) {
         container.innerHTML = `
-          <div style="text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 30px 16px;">
+          <div style="text-align:center; color:var(--text-muted); font-size:0.85rem; padding:30px 16px;">
             <span style="display:block;font-size:2rem;margin-bottom:8px;opacity:0.8;">💬</span>
-            No messages yet. Send a message to start communicating with the team!
+            No messages yet. ${channel === 'customer' ? 'Send a message to reach Admin/Support!' : 'Start the staff coordination here.'}
           </div>
         `;
       } else {
         const wasScrolledToBottom = container.scrollHeight - container.clientHeight <= container.scrollTop + 45;
-        
+
         container.innerHTML = messages.map(msg => {
           const isCurrentUser = msg.senderId === state.currentUser?.id;
-          
-          let roleTag = '';
-          let bubbleBg = '';
-          let bubbleBorder = '';
-          
+          let roleTag = '', bubbleBg = '', bubbleBorder = '';
+
           if (msg.senderRole === 'admin') {
-            roleTag = `<span style="background:rgba(0,242,254,0.18);color:#00f2fe;padding:2px 7px;border-radius:4px;font-size:0.68rem;font-weight:700;">👑 Admin Support</span>`;
-            bubbleBg = isCurrentUser ? 'rgba(0, 242, 254, 0.18)' : 'rgba(0, 242, 254, 0.10)';
-            bubbleBorder = 'rgba(0, 242, 254, 0.35)';
+            roleTag = `<span style="background:rgba(0,242,254,0.18);color:#00f2fe;padding:2px 7px;border-radius:4px;font-size:0.68rem;font-weight:700;">👑 Admin</span>`;
+            bubbleBg = isCurrentUser ? 'rgba(0,242,254,0.18)' : 'rgba(0,242,254,0.10)';
+            bubbleBorder = 'rgba(0,242,254,0.35)';
           } else if (msg.senderRole === 'customer') {
             roleTag = `<span style="background:rgba(16,185,129,0.18);color:#34d399;padding:2px 7px;border-radius:4px;font-size:0.68rem;font-weight:700;">🏢 Customer</span>`;
-            bubbleBg = isCurrentUser ? 'rgba(16, 185, 129, 0.18)' : 'rgba(16, 185, 129, 0.10)';
-            bubbleBorder = 'rgba(16, 185, 129, 0.35)';
+            bubbleBg = isCurrentUser ? 'rgba(16,185,129,0.18)' : 'rgba(16,185,129,0.10)';
+            bubbleBorder = 'rgba(16,185,129,0.35)';
           } else {
             roleTag = `<span style="background:rgba(168,85,247,0.18);color:#c084fc;padding:2px 7px;border-radius:4px;font-size:0.68rem;font-weight:700;">🔧 Technician</span>`;
-            bubbleBg = isCurrentUser ? 'rgba(168, 85, 247, 0.18)' : 'rgba(168, 85, 247, 0.10)';
-            bubbleBorder = 'rgba(168, 85, 247, 0.35)';
+            bubbleBg = isCurrentUser ? 'rgba(168,85,247,0.18)' : 'rgba(168,85,247,0.10)';
+            bubbleBorder = 'rgba(168,85,247,0.35)';
           }
-          
-          const textAlign = isCurrentUser ? 'right' : 'left';
-          const marginSide = isCurrentUser ? 'margin-left: auto' : 'margin-right: auto';
-          
+
+          const textAlign   = isCurrentUser ? 'right' : 'left';
+          const marginSide  = isCurrentUser ? 'margin-left:auto' : 'margin-right:auto';
+
           return `
-            <div style="text-align: ${textAlign}; margin-bottom: 12px;">
-              <div style="display: inline-block; max-width: 82%; ${marginSide}; text-align: left;">
-                <div style="display: flex; align-items: center; gap: 6px; font-size: 0.72rem; color: #94a3b8; margin-bottom: 4px; justify-content: ${isCurrentUser ? 'flex-end' : 'flex-start'};">
-                  <strong style="color: ${isCurrentUser ? '#00f2fe' : '#ffffff'};">${isCurrentUser ? 'You' : escapeHtml(msg.senderName)}</strong>
+            <div style="text-align:${textAlign}; margin-bottom:12px;">
+              <div style="display:inline-block; max-width:82%; ${marginSide}; text-align:left;">
+                <div style="display:flex; align-items:center; gap:6px; font-size:0.72rem; color:#94a3b8; margin-bottom:4px;
+                            justify-content:${isCurrentUser ? 'flex-end' : 'flex-start'};">
+                  <strong style="color:${isCurrentUser ? '#00f2fe' : '#ffffff'};">${isCurrentUser ? 'You' : escapeHtml(msg.senderName)}</strong>
                   ${roleTag}
-                  <span style="font-size: 0.65rem; color: #64748b;">${formatTimestamp(msg.createdAt)}</span>
+                  <span style="font-size:0.65rem; color:#64748b;">${formatTimestamp(msg.createdAt)}</span>
                 </div>
-                <div style="background: ${bubbleBg}; border: 1px solid ${bubbleBorder}; padding: 10px 14px; border-radius: 12px; font-size: 0.86rem; color: #f1f5f9; word-break: break-word; line-height: 1.45; box-shadow: 0 2px 6px rgba(0,0,0,0.25);">
+                <div style="background:${bubbleBg}; border:1px solid ${bubbleBorder}; padding:10px 14px;
+                            border-radius:12px; font-size:0.86rem; color:#f1f5f9; word-break:break-word;
+                            line-height:1.45; box-shadow:0 2px 6px rgba(0,0,0,0.25);">
                   ${escapeHtml(msg.message)}
                 </div>
               </div>
             </div>
           `;
         }).join('');
-        
-        if (wasScrolledToBottom || !isSilent) {
-          container.scrollTop = container.scrollHeight;
-        }
+
+        if (wasScrolledToBottom || !isSilent) container.scrollTop = container.scrollHeight;
       }
     } else {
       if (!isSilent) {
-        container.innerHTML = `
-          <div style="text-align: center; color: #f87171; font-size: 0.8rem; padding: 16px;">
-            ⚠️ Failed to load messages: ${escapeHtml(data.error || 'Unknown error')}
-          </div>
-        `;
+        container.innerHTML = `<div style="text-align:center; color:#f87171; font-size:0.8rem; padding:16px;">⚠️ ${escapeHtml(data.error || 'Failed to load messages')}</div>`;
       }
     }
   } catch (err) {
     if (!isSilent) {
       console.error('Load messages error:', err);
-      container.innerHTML = `
-        <div style="text-align: center; color: #f87171; font-size: 0.8rem; padding: 16px;">
-          ⚠️ Network error loading chat
-        </div>
-      `;
+      container.innerHTML = `<div style="text-align:center; color:#f87171; font-size:0.8rem; padding:16px;">⚠️ Network error loading chat</div>`;
     }
   }
 }
 
-// Send ticket message
-async function sendTicketMessage() {
+// Send ticket message — channel-aware
+// channel: 'staff' | 'customer'
+async function sendTicketMessage(channel) {
   if (!state.selectedTicket || !state.currentUser) return;
-  
-  const input = document.getElementById('ticketChatInput');
+
+  // Resolve channel: customers always use 'customer', others use the active tab or fallback to 'staff'
+  const effectiveChannel = state.currentRole === 'customer'
+    ? 'customer'
+    : (channel || state._activeChatTab || 'staff');
+
+  const input   = document.getElementById('ticketChatInput');
   const message = input?.value?.trim();
-  
-  if (!message) {
-    showToast('Please type a message', 'error');
-    return;
-  }
-  
+
+  if (!message) { showToast('Please type a message', 'error'); return; }
+
+  const endpoint = effectiveChannel === 'customer'
+    ? `${API_BASE}/tickets/${state.selectedTicket.id}/customer-messages`
+    : `${API_BASE}/tickets/${state.selectedTicket.id}/messages`;
+
   try {
-    const res = await fetch(`${API_BASE}/tickets/${state.selectedTicket.id}/messages`, {
+    const res = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        senderId: state.currentUser.id,
+        senderId:   state.currentUser.id,
         senderName: state.currentUser.fullName || state.currentUser.username,
         senderRole: state.currentUser.role,
-        message: message
+        message
       }),
     });
     const data = await res.json();
-    
+
     if (data.success) {
-      // Clear input
       if (input) input.value = '';
-      // Reload messages immediately
-      await loadTicketMessages(state.selectedTicket.id);
-      showToast('Message sent! Team notified.', 'success');
-      // Update notifications in background
-      if (typeof fetchAllData === 'function') {
-        fetch(`${API_BASE}/notifications`).then(r => r.json()).then(d => {
-          if (d.success) { state.notifications = d.data; renderNotifications(); }
-        }).catch(() => {});
-      }
+      await loadTicketMessages(state.selectedTicket.id, false, effectiveChannel);
+      showToast('✅ Message sent!', 'success');
+      // Background notification refresh
+      fetch(`${API_BASE}/notifications`).then(r => r.json()).then(d => {
+        if (d.success) { state.notifications = d.data; renderNotifications(); }
+      }).catch(() => {});
     } else {
       showToast(data.error || 'Failed to send message', 'error');
     }

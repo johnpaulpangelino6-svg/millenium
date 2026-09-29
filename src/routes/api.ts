@@ -806,6 +806,61 @@ apiRouter.post('/tickets/:id/messages', async (req: Request, res: Response) => {
   }
 });
 
+// ============================================================
+// CUSTOMER-PRIVATE TICKET CHAT (Admin ↔ Customer ONLY)
+// Technicians have NO access to this channel.
+// ============================================================
+
+// GET /api/tickets/:id/customer-messages — Fetch customer-private chat messages
+apiRouter.get('/tickets/:id/customer-messages', async (req: Request, res: Response) => {
+  try {
+    const id = getParam(req.params.id);
+    const { requestingRole } = req.query;
+
+    // Only admin and customer may access this channel
+    if (requestingRole && requestingRole !== 'admin' && requestingRole !== 'customer') {
+      return res.status(403).json({ success: false, error: 'This is a private channel between admin and customer only.' });
+    }
+
+    const ticket = await db.getTicketById(id);
+    if (!ticket) {
+      return res.status(404).json({ success: false, error: 'Ticket not found.' });
+    }
+
+    const messages = await db.getCustomerTicketMessages(id);
+    res.json({ success: true, data: messages });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/tickets/:id/customer-messages — Send a message in the customer-private chat
+apiRouter.post('/tickets/:id/customer-messages', async (req: Request, res: Response) => {
+  try {
+    const id = getParam(req.params.id);
+    const { senderId, senderName, senderRole, message } = req.body;
+
+    if (!senderId || !senderName || !senderRole || !message) {
+      return res.status(400).json({ success: false, error: 'Sender ID, name, role, and message are required.' });
+    }
+
+    // Only admin and customer may post to this channel
+    if (senderRole !== 'admin' && senderRole !== 'customer') {
+      return res.status(403).json({ success: false, error: 'Only admin and customers can use the customer support chat.' });
+    }
+
+    const ticket = await db.getTicketById(id);
+    if (!ticket) {
+      return res.status(404).json({ success: false, error: 'Ticket not found.' });
+    }
+
+    const newMessage = await db.addCustomerTicketMessage(id, senderId, senderName, senderRole, message);
+    res.status(201).json({ success: true, data: newMessage });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // --- Warranties ---
 apiRouter.get('/warranties', async (req: Request, res: Response) => {
   try {
