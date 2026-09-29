@@ -6582,7 +6582,12 @@ body {
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  overflow: visible !important;
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.header-notif-btn::after {
+  display: none !important;
 }
 
 .header-notif-btn:hover,
@@ -6596,22 +6601,24 @@ body {
 
 .notif-count-badge {
   position: absolute;
-  top: -3px;
-  right: -3px;
+  top: -6px;
+  right: -6px;
   background: linear-gradient(135deg, #ec4899 0%, #f43f5e 100%);
   color: #ffffff;
   font-size: 0.68rem;
   font-weight: 800;
-  min-width: 19px;
-  height: 19px;
-  padding: 0 4px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
   border-radius: 9999px;
   display: flex;
   align-items: center;
   justify-content: center;
   border: 2px solid #060a17;
-  box-shadow: 0 0 12px rgba(244, 63, 94, 0.8);
+  box-shadow: 0 0 12px rgba(244, 63, 94, 0.85);
   animation: notifBadgePulse 2.4s infinite ease-in-out;
+  z-index: 10;
+  pointer-events: none;
 }
 
 @keyframes notifBadgePulse {
