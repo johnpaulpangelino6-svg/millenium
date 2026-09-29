@@ -1001,13 +1001,21 @@ function renderNotifications() {
 
   if (unreadCount > 0) {
     badge.textContent = unreadCount;
-    badge.style.display = 'block';
+    badge.style.display = 'flex';
   } else {
     badge.style.display = 'none';
   }
 
+  // Update header text if present
+  const headerTitle = document.querySelector('.notif-dropdown-header h4');
+  if (headerTitle) {
+    headerTitle.innerHTML = unreadCount > 0 
+      ? `Notifications <span style="font-size:0.72rem;padding:2px 7px;border-radius:10px;background:rgba(0,242,254,0.18);color:#00f2fe;font-weight:700;letter-spacing:0;">${unreadCount} New</span>`
+      : `Notifications`;
+  }
+
   if (notifs.length === 0) {
-    list.innerHTML = `<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:0.8rem;">No new notifications</div>`;
+    list.innerHTML = `<div style="padding:32px 20px;text-align:center;color:#94a3b8;font-size:0.85rem;"><span style="display:block;font-size:1.8rem;margin-bottom:8px;opacity:0.6;">🔔</span>No new notifications</div>`;
     return;
   }
 
@@ -1043,11 +1051,14 @@ function toggleNotifications(e) {
   if (e) e.stopPropagation();
   state.notifDropdownOpen = !state.notifDropdownOpen;
   const dropdown = document.getElementById('notifDropdown');
+  const btn = document.getElementById('notifBtn');
   if (dropdown) {
     if (state.notifDropdownOpen) {
       dropdown.classList.add('show');
+      if (btn) btn.classList.add('active');
     } else {
       dropdown.classList.remove('show');
+      if (btn) btn.classList.remove('active');
     }
   }
 }
@@ -1060,6 +1071,7 @@ document.addEventListener('click', (e) => {
     if (!notifBtn.contains(e.target) && !notifDropdown.contains(e.target)) {
       state.notifDropdownOpen = false;
       notifDropdown.classList.remove('show');
+      notifBtn.classList.remove('active');
     }
   }
 });
@@ -1078,6 +1090,8 @@ function handleNotifClick(index, tabPath) {
   if (state.notifDropdownOpen) {
     toggleNotifications(); // close
   }
+  const btn = document.getElementById('notifBtn');
+  if (btn) btn.classList.remove('active');
   renderNotifications();
   if (tabPath) {
     switchTab(tabPath);
