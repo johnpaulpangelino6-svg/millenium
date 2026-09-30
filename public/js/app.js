@@ -273,244 +273,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-/** Handle social login (Google, Facebook, Apple) */
-async function handleSocialLogin(provider) {
-  console.log(`🔐 Initiating ${provider} login...`);
-  
-  const button = event.target.closest('.social-btn');
-  if (button) {
-    button.classList.add('loading');
-  }
-  
-  // Redirect to OAuth provider
-  try {
-    window.location.href = `${API_BASE}/auth/${provider}`;
-  } catch (error) {
-    console.error('Social login error:', error);
-    showToast(`Failed to initiate ${provider} login`, 'error');
-    if (button) {
-      button.classList.remove('loading');
-    }
-  }
-}
-
-// Check for OAuth callbacks on page load
-window.addEventListener('DOMContentLoaded', () => {
-  const hash = window.location.hash;
-  
-  // OAuth success callback
-  if (hash.startsWith('#oauth-success')) {
-    const urlParams = new URLSearchParams(hash.split('?')[1]);
-    const userDataEncoded = urlParams.get('user');
-    
-    if (userDataEncoded) {
-      try {
-        const user = JSON.parse(decodeURIComponent(userDataEncoded));
-        saveAuthSession(user);
-        window.location.hash = '';
-        window.location.reload();
-      } catch (error) {
-        console.error('Failed to parse OAuth user data:', error);
-        showToast('Authentication successful but failed to parse user data', 'error');
-      }
-    }
-  }
-  
-  // OAuth role selection needed
-  if (hash === '#oauth-role-selection') {
-    window.location.hash = '';
-    showOAuthRoleSelectionModal();
-  }
-});
-
-/** Show OAuth role selection modal */
-async function showOAuthRoleSelectionModal() {
-  try {
-    // Get OAuth session data from backend
-    const res = await fetch(`${API_BASE}/auth/oauth/session`);
-    const data = await res.json();
-    
-    if (!data.success || !data.data) {
-      showToast('OAuth session expired. Please try again.', 'error');
-      return;
-    }
-    
-    const oauthData = data.data;
-    
-    // Create modal HTML
-    const modal = document.createElement('div');
-    modal.className = 'oauth-role-modal-overlay';
-    modal.innerHTML = `
-      <div class="oauth-role-modal">
-        <div class="oauth-role-header">
-          <div class="oauth-profile-section">
-            ${oauthData.profilePhoto ? `<img src="${escapeHtml(oauthData.profilePhoto)}" alt="Profile" class="oauth-profile-photo" />` : '<div class="oauth-profile-placeholder">👤</div>'}
-            <div>
-              <h2 class="oauth-welcome-title">Welcome, ${escapeHtml(oauthData.fullName)}!</h2>
-              <p class="oauth-welcome-subtitle">${escapeHtml(oauthData.email)}</p>
-              <p class="oauth-provider-badge">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                </svg>
-                Signed in with ${oauthData.provider.charAt(0).toUpperCase() + oauthData.provider.slice(1)}
-              </p>
-            </div>
-          </div>
-        </div>
-        
-        <div class="oauth-role-body">
-          <h3 class="oauth-section-title">Select Your Account Type</h3>
-          <p class="oauth-section-desc">Choose how you'll be using the Millennium SmartBoard system</p>
-          
-          <form id="oauthRoleForm" class="oauth-role-form">
-            <div class="oauth-role-options">
-              <label class="oauth-role-option">
-                <input type="radio" name="role" value="technician" required />
-                <div class="oauth-role-card">
-                  <div class="oauth-role-icon">🔧</div>
-                  <div class="oauth-role-info">
-                    <div class="oauth-role-title">Field Technician</div>
-                    <div class="oauth-role-desc">Manage assigned service tickets and inventory</div>
-                  </div>
-                  <div class="oauth-role-check">✓</div>
-                </div>
-              </label>
-              
-              <label class="oauth-role-option">
-                <input type="radio" name="role" value="customer" required />
-                <div class="oauth-role-card">
-                  <div class="oauth-role-icon">🏫</div>
-                  <div class="oauth-role-info">
-                    <div class="oauth-role-title">Customer / Client</div>
-                    <div class="oauth-role-desc">Monitor your devices and service status</div>
-                  </div>
-                  <div class="oauth-role-check">✓</div>
-                </div>
-              </label>
-            </div>
-            
-            <div class="oauth-additional-fields" id="oauthAdditionalFields" style="display:none;">
-              <div class="auth-form-group">
-                <label class="auth-label" for="oauthLocation">Primary Location</label>
-                <select id="oauthLocation" class="auth-select">
-                  <option value="Quezon City">Quezon City</option>
-                  <option value="Taguig (BGC)">Taguig (BGC)</option>
-                  <option value="Makati">Makati</option>
-                  <option value="Mandaluyong">Mandaluyong</option>
-                  <option value="Pasig">Pasig</option>
-                  <option value="Manila">Manila</option>
-                  <option value="Paranaque">Paranaque</option>
-                  <option value="Marikina">Marikina</option>
-                  <option value="Cebu City">Cebu City</option>
-                  <option value="Davao City">Davao City</option>
-                </select>
-              </div>
-              
-              <div class="auth-form-group">
-                <label class="auth-label" for="oauthOrganization" id="oauthOrgLabel">School / Organization Name</label>
-                <input type="text" id="oauthOrganization" class="auth-input" placeholder="e.g. Ateneo de Manila University"/>
-              </div>
-            </div>
-            
-            <div id="oauthRoleError" class="auth-error-msg" style="display:none;"></div>
-            
-            <button type="submit" class="auth-submit-btn" id="oauthRoleSubmitBtn">
-              <span class="auth-btn-text">Complete Registration</span>
-              <svg class="auth-btn-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <polyline points="9 18 15 12 9 6"/>
-              </svg>
-            </button>
-          </form>
-        </div>
-      </div>
-    `;
-    
-    document.body.appendChild(modal);
-    
-    // Handle role selection change
-    const roleOptions = modal.querySelectorAll('input[name="role"]');
-    const additionalFields = modal.querySelector('#oauthAdditionalFields');
-    const orgLabel = modal.querySelector('#oauthOrgLabel');
-    
-    roleOptions.forEach(option => {
-      option.addEventListener('change', (e) => {
-        additionalFields.style.display = 'block';
-        
-        if (e.target.value === 'customer') {
-          orgLabel.textContent = 'School / Organization Name';
-        } else {
-          orgLabel.textContent = 'Company Name (Optional)';
-        }
-        
-        // Update visual selection
-        roleOptions.forEach(opt => {
-          opt.closest('.oauth-role-option').classList.remove('selected');
-        });
-        e.target.closest('.oauth-role-option').classList.add('selected');
-      });
-    });
-    
-    // Handle form submission
-    const form = modal.querySelector('#oauthRoleForm');
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      
-      const selectedRole = modal.querySelector('input[name="role"]:checked');
-      if (!selectedRole) {
-        showOAuthError('Please select an account type');
-        return;
-      }
-      
-      const role = selectedRole.value;
-      const location = modal.querySelector('#oauthLocation').value;
-      const organization = modal.querySelector('#oauthOrganization').value;
-      
-      const submitBtn = modal.querySelector('#oauthRoleSubmitBtn');
-      submitBtn.disabled = true;
-      submitBtn.querySelector('.auth-btn-text').textContent = 'Creating account...';
-      
-      try {
-        const res = await fetch(`${API_BASE}/auth/oauth/complete`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ role, location, organization }),
-        });
-        
-        const data = await res.json();
-        
-        if (data.success) {
-          showToast(`✅ Account created successfully! Welcome, ${data.user.fullName}`, 'success');
-          saveAuthSession(data.user);
-          modal.remove();
-          window.location.reload();
-        } else {
-          showOAuthError(data.error || 'Failed to complete registration');
-          submitBtn.disabled = false;
-          submitBtn.querySelector('.auth-btn-text').textContent = 'Complete Registration';
-        }
-      } catch (error) {
-        console.error('OAuth completion error:', error);
-        showOAuthError('Network error. Please try again.');
-        submitBtn.disabled = false;
-        submitBtn.querySelector('.auth-btn-text').textContent = 'Complete Registration';
-      }
-    });
-    
-    function showOAuthError(message) {
-      const errorEl = modal.querySelector('#oauthRoleError');
-      errorEl.textContent = message;
-      errorEl.style.display = 'block';
-      setTimeout(() => {
-        errorEl.style.display = 'none';
-      }, 5000);
-    }
-    
-  } catch (error) {
-    console.error('Failed to load OAuth session:', error);
-    showToast('Failed to load authentication data. Please try again.', 'error');
-  }
-}
-
 
 /** One-click demo login — fills credentials AND auto-submits immediately */
 async function quickDemoLogin(username, password, roleLabel) {
@@ -833,9 +595,21 @@ async function fetchAllData() {
       ticketsUrl += `?userId=${encodeURIComponent(user.id)}&userRole=${encodeURIComponent(role)}`;
     }
     
+    // Build devices URL with role-based filtering
+    let devicesUrl = `${API_BASE}/devices`;
+    if (state.currentUser) {
+      const params = new URLSearchParams();
+      params.append('userId', state.currentUser.id);
+      params.append('userRole', state.currentUser.role);
+      if (state.currentUser.organization) {
+        params.append('userOrganization', state.currentUser.organization);
+      }
+      devicesUrl += `?${params.toString()}`;
+    }
+    
     const fetchPromises = [
       fetch(`${API_BASE}/stats/dashboard`),
-      fetch(`${API_BASE}/devices`),
+      fetch(devicesUrl),  // Use filtered URL
       fetch(ticketsUrl),
       fetch(`${API_BASE}/warranties`),
       fetch(`${API_BASE}/inventory`),
@@ -893,6 +667,13 @@ function renderApp() {
   renderSidebarBadges();
   renderNotifications();
   applyRoleUI();
+  
+  // Sync global header search with state
+  const globalSearchInput = document.getElementById('globalHeaderSearch');
+  if (globalSearchInput && globalSearchInput.value !== state.searchQuery) {
+    globalSearchInput.value = state.searchQuery || '';
+  }
+  
   const mainContent = document.getElementById('mainContent');
   if (!mainContent) return;
 
@@ -3479,10 +3260,27 @@ function renderTicketCardCustomer(t) {
 // 3. Maintenance & Service Ticket View
 function renderTicketsView() {
   const categories = ['All', 'Touchscreen', 'OPS Hardware', 'Software', 'Display Panel', 'Network', 'Power Board'];
-  const received = state.tickets.filter((t) => t.status === 'Received');
-  const diagnosing = state.tickets.filter((t) => t.status === 'Diagnosing');
-  const repairing = state.tickets.filter((t) => t.status === 'Repairing');
-  const resolved = state.tickets.filter((t) => t.status === 'Resolved' || t.status === 'Closed');
+  
+  // Apply search filter to tickets if search query exists
+  let filteredTickets = state.tickets;
+  if (state.searchQuery) {
+    const q = state.searchQuery.toLowerCase();
+    filteredTickets = filteredTickets.filter(
+      (t) =>
+        t.ticketNumber.toLowerCase().includes(q) ||
+        t.title.toLowerCase().includes(q) ||
+        t.deviceId.toLowerCase().includes(q) ||
+        t.customerName.toLowerCase().includes(q) ||
+        t.category.toLowerCase().includes(q) ||
+        t.assignedTechnician.toLowerCase().includes(q) ||
+        (t.description && t.description.toLowerCase().includes(q))
+    );
+  }
+  
+  const received = filteredTickets.filter((t) => t.status === 'Received');
+  const diagnosing = filteredTickets.filter((t) => t.status === 'Diagnosing');
+  const repairing = filteredTickets.filter((t) => t.status === 'Repairing');
+  const resolved = filteredTickets.filter((t) => t.status === 'Resolved' || t.status === 'Closed');
 
   function renderTicketCard(t) {
     const priorityColor =
@@ -3561,7 +3359,7 @@ function renderTicketsView() {
         .map(d => d.id)
     );
 
-    const myTickets = state.tickets.filter(t => {
+    let myTickets = filteredTickets.filter(t => {
       const tCustName = (t.customerName || '').trim().toLowerCase();
       // Match by customerName on the ticket matching user org
       if (userOrg   && tCustName === userOrg)   return true;
@@ -3585,6 +3383,15 @@ function renderTicketsView() {
           <button class="btn btn-primary" onclick="openCreateTicketModal()">🚨 Report a Problem</button>
         </div>
       </div>
+      
+      <!-- Search Bar for Customer Tickets -->
+      <div class="glass-panel" style="padding: 16px 20px; margin-bottom: 20px;">
+        <div class="search-input-box">
+          <span class="search-icon">🔍</span>
+          <input type="text" class="search-input" placeholder="Search your tickets by ID, title, device..." value="${state.searchQuery}" oninput="handleSearch(this.value)" />
+        </div>
+      </div>
+      
       <div class="role-info-banner">
         ℹ️ <strong>Customer View:</strong> You can report issues and track your repair status. For urgent matters, call our support hotline.
       </div>
@@ -3612,6 +3419,15 @@ function renderTicketsView() {
         ${isTech  ? `<button class="btn btn-secondary" onclick="fetchAllData()">🔄 Refresh My Jobs</button>` : ''}
       </div>
     </div>
+    
+    <!-- Search Bar for Tickets -->
+    <div class="glass-panel" style="padding: 16px 20px; margin-bottom: 20px;">
+      <div class="search-input-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" class="search-input" placeholder="Search tickets by ID, title, device, customer, category..." value="${state.searchQuery}" oninput="handleSearch(this.value)" />
+      </div>
+    </div>
+    
     ${isTech ? `<div class="role-info-banner">🔧 <strong>Technician View:</strong> Showing only tickets assigned to you. Contact admin to view unassigned tickets.</div>` : ''}
     ${isAdmin ? `<div class="role-info-banner">👑 <strong>Admin View:</strong> You can see all tickets from all customers and assign them to technicians.</div>` : ''}
 
@@ -7236,6 +7052,11 @@ function clearFilters() {
 
 function switchTab(tabId) {
   if (state.currentTab === tabId) return;
+
+  // Clear search when navigating away from devices/tickets tabs
+  if (tabId !== 'devices' && tabId !== 'tickets') {
+    state.searchQuery = '';
+  }
 
   const mainContent = document.getElementById('mainContent');
   if (mainContent) {

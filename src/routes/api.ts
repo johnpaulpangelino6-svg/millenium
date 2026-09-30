@@ -338,8 +338,15 @@ apiRouter.get('/stats/dashboard', async (req: Request, res: Response) => {
 apiRouter.get('/devices', async (req: Request, res: Response) => {
   try {
     let devices = await db.getDevices();
-    const { status, model, clientType, search } = req.query;
+    const { status, model, clientType, search, userId, userRole, userOrganization } = req.query;
 
+    // Role-based filtering: customers can only see devices assigned to their organization
+    if (userRole === 'customer' && userOrganization) {
+      const orgName = String(userOrganization).toLowerCase().trim();
+      devices = devices.filter((d) => d.customerName.toLowerCase().trim() === orgName);
+    }
+
+    // Apply additional filters
     if (status) {
       devices = devices.filter((d) => d.status.toLowerCase() === (status as string).toLowerCase());
     }
