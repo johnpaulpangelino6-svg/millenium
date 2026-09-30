@@ -2,3 +2,12 @@ node_modules/
 dist/
 .env
 *.log
+
+# Vim swap files
+*.swp
+*.swo
+*~
+
+# Git lock files
+.git/*.lock
+.git/index.lock
