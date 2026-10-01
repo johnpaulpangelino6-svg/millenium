@@ -2,6 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -16,6 +19,16 @@
   <link rel="stylesheet" href="/css/style.css" />
 </head>
 <body data-theme="dark">
+
+  <!-- Backend Connection Status Banner -->
+  <div id="backendStatusBanner" style="
+    display:none;position:fixed;top:0;left:0;right:0;z-index:10000;
+    background:linear-gradient(90deg,#dc2626,#991b1b);color:#fff;
+    text-align:center;padding:8px 16px;font-size:0.85rem;font-weight:600;
+    box-shadow:0 2px 10px rgba(0,0,0,0.5);
+  ">
+    <span id="backendStatusText">Connecting to backend...</span>
+  </div>
 
   <!-- Cosmic Stars Ambient Canvas (Millennium Space Nebula Theme) -->
   <div class="cosmic-nebula-bg" aria-hidden="true">
@@ -511,6 +524,15 @@
         </div>
       </a>
 
+      <!-- Rental Scheduling Nav Tab -->
+      <a href="#" class="nav-item" data-tab="rentals" data-roles="admin customer" onclick="navigateTo('rentals')">
+        <span class="nav-emoji">📅</span>
+        <div class="nav-text-group">
+          <span class="nav-title">Rentals</span>
+          <span class="nav-sub">Device Scheduling & Booking</span>
+        </div>
+      </a>
+
       <!-- Sidebar Promo Cards -->
       <div class="sidebar-promo-section">
         <div class="sidebar-promo-card" onclick="navigateTo('showcase')" style="cursor: pointer;" title="View SmartBoard Product Demo & Info">
@@ -901,6 +923,6 @@
   <!-- JsBarcode Library for Barcode Generation -->
   <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
   
-  <script src="/js/app.js"></script>
+  <script src="/js/app.js?v=20261001d"></script>
 </body>
 </html>

@@ -10,6 +10,84 @@ const getParam = (param: string | string[] | undefined): string => {
 };
 
 // ============================================================
+// CUSTOMER SCOPING HELPERS
+// A customer account must only ever receive records that belong to its own
+// organization. The users table has no customer_id column, so the customer
+// record is resolved from the users.organization value.
+// ============================================================
+
+type CustomerScope = { customerId: string; organization: string };
+
+type RequesterScope = { role: string; scope: CustomerScope | null };
+
+/**
+ * Resolve who is asking. The role is read from the database rather than trusted
+ * from the query string, so a client cannot widen its own access by simply
+ * claiming to be an admin.
+ */
+async function resolveRequesterScope(userId: string): Promise<RequesterScope | null> {
+  const users = await db.getUsers();
+  const user: any = users.find((u: any) => u.id === userId);
+  if (!user) return null;
+
+  const role = String(user.role || '');
+  if (role !== 'customer') return { role, scope: null };
+
+  const organization = String(user.organization || '').trim();
+  let customerId = String(user.customerId || '').trim();
+
+  // No direct link on the user row — match it against the customers table.
+  if (!customerId && organization) {
+    const customers = await db.getCustomers();
+    const match = customers.find(
+      (c) => c.organizationName.trim().toLowerCase() === organization.toLowerCase()
+    );
+    if (match) customerId = match.id;
+  }
+
+  return {
+    role,
+    scope: customerId || organization ? { customerId, organization } : null,
+  };
+}
+
+/**
+ * Case/whitespace-insensitive ownership test.
+ * Matches on the stable customer id first, then falls back to the
+ * organization name (the two are not always spelled identically).
+ */
+function rentalInScope(rental: any, scope: CustomerScope): boolean {
+  const rentalCustomerId = String(rental?.customerId || '').trim().toLowerCase();
+  const rentalCustomerName = String(rental?.customerName || '').trim().toLowerCase();
+
+  if (scope.customerId && rentalCustomerId && rentalCustomerId === scope.customerId.toLowerCase()) {
+    return true;
+  }
+  if (scope.organization && rentalCustomerName && rentalCustomerName === scope.organization.toLowerCase()) {
+    return true;
+  }
+  return false;
+}
+
+/** Derive dashboard stats from an already-scoped rental list. */
+function computeRentalStats(rentals: any[]): any {
+  const statusBreakdown: Record<string, number> = {};
+  const today = new Date().toISOString().split('T')[0];
+  let revenue = 0;
+  let upcoming = 0;
+  let overdue = 0;
+
+  for (const r of rentals) {
+    statusBreakdown[r.status] = (statusBreakdown[r.status] || 0) + 1;
+    if (r.status === 'Active' || r.status === 'Returned') revenue += Number(r.totalCost) || 0;
+    if (r.status === 'Overdue') overdue += 1;
+    if (['Pending', 'Approved'].includes(r.status) && String(r.startDate) >= today) upcoming += 1;
+  }
+
+  return { totalRentals: rentals.length, revenue, upcoming, overdue, statusBreakdown };
+}
+
+// ============================================================
 // AUTH ROUTES
 // ============================================================
 
@@ -1126,6 +1204,137 @@ apiRouter.get('/audit-logs', async (req: Request, res: Response) => {
     const deviceId = req.query.deviceId as string | undefined;
     const logs = await db.getAuditLogs(deviceId);
     res.json({ success: true, data: logs });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ============================================================
+// RENTAL SCHEDULING ROUTES — Device Rental & Booking Management
+// ============================================================
+
+// GET /api/rentals — list all rentals
+apiRouter.get('/rentals', async (req: Request, res: Response) => {
+  try {
+    let rentals = await db.getAllRentals();
+    const { userId } = req.query;
+
+    // Customers may only ever see their own bookings. Enforced server-side so
+    // the data never reaches their browser in the first place.
+    if (userId) {
+      const requester = await resolveRequesterScope(String(userId));
+      // An unknown identity is treated the same as a customer: never grant it
+      // the full list. (No userId at all keeps the original admin behaviour.)
+      if (!requester || requester.role === 'customer') {
+        rentals = requester?.scope ? rentals.filter((r) => rentalInScope(r, requester.scope!)) : [];
+      }
+    }
+
+    res.json({ success: true, data: rentals, count: rentals.length });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /api/rentals/:id — get single rental
+apiRouter.get('/rentals/:id', async (req: Request, res: Response) => {
+  try {
+    const id = getParam(req.params.id);
+    const rental = await db.getRentalById(id);
+    if (!rental) return res.status(404).json({ success: false, error: 'Rental not found' });
+    res.json({ success: true, data: rental });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/rentals — create new rental booking
+apiRouter.post('/rentals', async (req: Request, res: Response) => {
+  try {
+    const { customerId, deviceId, startDate, endDate } = req.body;
+    if (!customerId || !deviceId || !startDate || !endDate) {
+      return res.status(400).json({ success: false, error: 'customerId, deviceId, startDate, and endDate are required.' });
+    }
+    const rental = await db.createRental(req.body);
+    res.json({ success: true, data: rental });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// PATCH /api/rentals/:id/status — update rental status
+apiRouter.patch('/rentals/:id/status', async (req: Request, res: Response) => {
+  try {
+    const id = getParam(req.params.id);
+    const { status } = req.body;
+    const validStatuses = ['Pending', 'Approved', 'Active', 'Returned', 'Overdue', 'Cancelled'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ success: false, error: 'Invalid status.' });
+    }
+    const rental = await db.updateRentalStatus(id, status);
+    if (!rental) return res.status(404).json({ success: false, error: 'Rental not found' });
+    res.json({ success: true, data: rental });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// PATCH /api/rentals/:id — update rental details
+apiRouter.patch('/rentals/:id', async (req: Request, res: Response) => {
+  try {
+    const id = getParam(req.params.id);
+    const rental = await db.updateRental(id, req.body);
+    if (!rental) return res.status(404).json({ success: false, error: 'Rental not found' });
+    res.json({ success: true, data: rental });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// DELETE /api/rentals/:id — delete rental
+apiRouter.delete('/rentals/:id', async (req: Request, res: Response) => {
+  try {
+    const id = getParam(req.params.id);
+    const success = await db.deleteRental(id);
+    if (!success) return res.status(404).json({ success: false, error: 'Rental not found' });
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /api/rentals/stats/summary — rental dashboard stats
+apiRouter.get('/rentals/stats/summary', async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.query;
+
+    // Customers must not see company-wide revenue / booking totals.
+    if (userId) {
+      const requester = await resolveRequesterScope(String(userId));
+      if (!requester || requester.role === 'customer') {
+        const all = await db.getAllRentals();
+        const mine = requester?.scope ? all.filter((r) => rentalInScope(r, requester.scope!)) : [];
+        return res.json({ success: true, data: computeRentalStats(mine) });
+      }
+    }
+
+    const stats = await db.getRentalStats();
+    res.json({ success: true, data: stats });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /api/rentals/availability/check — check available devices for date range
+apiRouter.get('/rentals/availability/check', async (req: Request, res: Response) => {
+  try {
+    const startDate = req.query.startDate as string;
+    const endDate = req.query.endDate as string;
+    if (!startDate || !endDate) {
+      return res.status(400).json({ success: false, error: 'startDate and endDate are required.' });
+    }
+    const devices = await db.getAvailableDevices(startDate, endDate);
+    res.json({ success: true, data: devices });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }

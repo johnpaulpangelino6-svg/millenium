@@ -8747,3 +8747,149 @@ body {
   to   { opacity: 1; transform: scale(1); }
 }
 
+/* ==========================================================================
+   RENTAL SCHEDULING & DEVICE RENTAL MANAGEMENT STYLES
+   ========================================================================== */
+
+/* --- Calendar Grid --- */
+.rental-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.rental-cal-dow {
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted, #94a3b8);
+  padding: 6px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.rental-cal-day {
+  min-height: 90px;
+  border: 1px solid var(--border-subtle, rgba(255,255,255,0.06));
+  border-radius: 8px;
+  padding: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.rental-cal-day:hover {
+  border-color: rgba(14,165,233,0.4);
+  background: rgba(14,165,233,0.04);
+}
+
+.rental-cal-day-empty {
+  background: transparent;
+  border-color: transparent;
+  cursor: default;
+}
+
+.rental-cal-day-empty:hover {
+  background: transparent;
+  border-color: transparent;
+}
+
+.rental-cal-day-num {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-secondary, #cbd5e1);
+  margin-bottom: 2px;
+}
+
+.rental-cal-event {
+  font-size: 0.66rem;
+  font-weight: 600;
+  padding: 3px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rental-cal-event:hover {
+  transform: translateX(2px);
+}
+
+.rc-active {
+  background: rgba(34,197,94,0.2);
+  color: #4ade80;
+  border-left: 3px solid #22c55e;
+}
+
+.rc-pending {
+  background: rgba(245,158,11,0.2);
+  color: #fbbf24;
+  border-left: 3px solid #f59e0b;
+}
+
+.rc-overdue {
+  background: rgba(244,63,94,0.2);
+  color: #fb7185;
+  border-left: 3px solid #f43f5e;
+}
+
+.rc-default {
+  background: rgba(148,163,184,0.15);
+  color: #94a3b8;
+  border-left: 3px solid #64748b;
+}
+
+/* --- Rental Buttons --- */
+.btn-success {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: #fff;
+  border: none;
+  box-shadow: 0 4px 12px rgba(34,197,94,0.3);
+}
+
+.btn-success:hover {
+  filter: brightness(1.1);
+  box-shadow: 0 6px 18px rgba(34,197,94,0.45);
+}
+
+.btn-warning {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #fff;
+  border: none;
+  box-shadow: 0 4px 12px rgba(245,158,11,0.3);
+}
+
+.btn-warning:hover {
+  filter: brightness(1.1);
+}
+
+.btn-danger {
+  background: rgba(244,63,94,0.15);
+  color: #f43f5e;
+  border: 1px solid rgba(244,63,94,0.3);
+}
+
+.btn-danger:hover {
+  background: rgba(244,63,94,0.25);
+}
+
+/* --- Responsive Rental Calendar --- */
+@media (max-width: 768px) {
+  .rental-cal-grid {
+    grid-template-columns: repeat(7, minmax(60px, 1fr));
+    overflow-x: auto;
+  }
+
+  .rental-cal-day {
+    min-height: 70px;
+  }
+
+  .rental-cal-event {
+    font-size: 0.6rem;
+  }
+}
+

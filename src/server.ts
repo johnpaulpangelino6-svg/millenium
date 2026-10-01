@@ -41,14 +41,26 @@ app.use(express.static(publicPath));
 // API Router
 app.use('/api', apiRouter);
 
-// Health check
-app.get('/health', (req: Request, res: Response) => {
-  res.json({
-    status: 'online',
+// Health check — verifies the backend AND the database connection for real
+app.get('/health', async (req: Request, res: Response) => {
+  const dbOnline = await db.ping();
+  res.status(dbOnline ? 200 : 503).json({
+    status: dbOnline ? 'online' : 'degraded',
     system: 'Millennium SmartBoard Management System',
     company: 'Brains Infinite Innovations',
     database: 'Supabase PostgreSQL',
+    databaseConnected: dbOnline,
     timestamp: new Date().toISOString(),
+  });
+});
+
+// Unmatched API routes must return JSON, never the SPA HTML shell.
+// (Without this, a typo'd/renamed endpoint silently returns index.html and the
+// frontend reports a confusing JSON parse error instead of a clear 404.)
+app.use('/api', (req: Request, res: Response) => {
+  res.status(404).json({
+    success: false,
+    error: `API endpoint not found: ${req.method} /api${req.path}`,
   });
 });
 
@@ -69,8 +81,20 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 // Verify database connection before accepting traffic
 db.testConnection()
   .then(async () => {
-    // Initialize schema to ensure tables exist
-    await db.initSchemaAsync();
+    // Initialize schema to ensure tables exist (retry on transient pooler errors)
+    for (let attempt = 1; ; attempt++) {
+      try {
+        await db.initSchemaAsync();
+        break;
+      } catch (err: any) {
+        const transient = /ECONNRESET|ETIMEDOUT|ECONNREFUSED|EPIPE|Connection terminated|timeout expired/i.test(
+          err?.message || ''
+        );
+        if (!transient || attempt >= 5) throw err;
+        console.warn(`  ⚠️  Schema init attempt ${attempt}/5 failed (${err.message}) — retrying...`);
+        await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
+      }
+    }
     console.log('  ✅ Database schema initialized.');
     
     app.listen(PORT, HOST, () => {
@@ -100,5 +124,25 @@ db.testConnection()
     console.error('================================================================');
     process.exit(1);
   });
+
+// Prevent server crash on unhandled promise rejections (e.g. Supabase pooler ECONNRESET)
+process.on('unhandledRejection', (reason: any) => {
+  const msg = reason?.message || String(reason);
+  if (msg.includes('ECONNRESET') || msg.includes('ECONNREFUSED') || msg.includes('ETIMEDOUT')) {
+    console.error('⚠️  Transient DB connection error (non-fatal):', msg);
+  } else {
+    console.error('⚠️  Unhandled promise rejection:', msg);
+  }
+});
+
+process.on('uncaughtException', (err: Error) => {
+  const msg = err.message || String(err);
+  if (msg.includes('ECONNRESET') || msg.includes('ECONNREFUSED') || msg.includes('ETIMEDOUT')) {
+    console.error('⚠️  Transient DB connection error (non-fatal):', msg);
+  } else {
+    console.error('💥 Uncaught exception:', msg);
+    console.error(err.stack);
+  }
+});
 
 export default app;

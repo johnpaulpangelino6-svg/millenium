@@ -19,6 +19,9 @@ import {
   UserRole,
   Customer,
   ClientType,
+  Rental,
+  RentalStatus,
+  RentalPriority,
 } from '../types/index.js';
 
 // ---------------------------------------------------------------------------
@@ -39,7 +42,20 @@ const pool = new Pool({
   },
   max: 20,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  // Supabase's connection pooler (aws-0-<region>.pooler.supabase.com) can take
+  // several seconds to hand out a connection, especially on a cold start or from
+  // a distant region. The previous 2s timeout caused spurious "connection
+  // timeout" failures on boot and under load.
+  connectionTimeoutMillis: 15000,
+  // Keep TCP sockets warm so the pooler does not silently drop idle connections.
+  keepAlive: true,
+  keepAliveInitialDelayMillis: 10000,
+});
+
+// Handle idle connection errors from Supabase pooler (ECONNRESET, etc.)
+// Without this, the process crashes when Supabase drops idle connections.
+pool.on('error', (err: any, _client: any) => {
+  console.error('⚠️  Pool error (non-fatal):', err.message);
 });
 
 console.log('🌐 Supabase PostgreSQL Database: CONNECTED');
@@ -68,6 +84,35 @@ function timeAgo(date: Date): string {
 }
 
 // ---------------------------------------------------------------------------
+// Retry helper — Supabase's pooler occasionally drops connections
+// (ECONNRESET / ETIMEDOUT / "Connection terminated unexpectedly"). These are
+// transient, so retry with a short backoff instead of failing the request.
+// ---------------------------------------------------------------------------
+const TRANSIENT_DB_ERROR =
+  /ECONNRESET|ETIMEDOUT|ECONNREFUSED|EPIPE|ENOTFOUND|EHOSTUNREACH|Connection terminated|terminating connection|timeout expired|Connection closed/i;
+
+async function withRetry<T>(
+  label: string,
+  fn: () => Promise<T>,
+  attempts = 5,
+  baseDelayMs = 1000
+): Promise<T> {
+  let lastErr: any;
+  for (let i = 1; i <= attempts; i++) {
+    try {
+      return await fn();
+    } catch (err: any) {
+      lastErr = err;
+      const transient = TRANSIENT_DB_ERROR.test(err?.message || '');
+      if (!transient || i === attempts) break;
+      console.warn(`  ⚠️  ${label} attempt ${i}/${attempts} failed (${err.message}) — retrying...`);
+      await new Promise((resolve) => setTimeout(resolve, baseDelayMs * i));
+    }
+  }
+  throw lastErr;
+}
+
+// ---------------------------------------------------------------------------
 // Database Class
 // ---------------------------------------------------------------------------
 
@@ -77,11 +122,18 @@ class MillenniumDatabase {
   // -------------------------------------------------------------------------
 
   async testConnection(): Promise<void> {
+    // Retry: a single transient pooler hiccup must not prevent the server from booting.
+    await withRetry('Supabase connect', () => pool.query('SELECT 1'), 5, 1000);
+    console.log('  ✅ Supabase connection successful.');
+  }
+
+  /** Lightweight reachability probe used by the /health endpoint. */
+  async ping(): Promise<boolean> {
     try {
       await pool.query('SELECT 1');
-      console.log('  ✅ Supabase connection successful.');
-    } catch (err: any) {
-      throw new Error(`Supabase connection failed: ${err.message}`);
+      return true;
+    } catch {
+      return false;
     }
   }
 
@@ -328,6 +380,48 @@ class MillenniumDatabase {
           timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
       `);
+
+      // ======================================================================
+      // RENTAL SCHEDULING TABLE — Device Rental & Booking Management
+      // ======================================================================
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS rentals (
+          id TEXT PRIMARY KEY,
+          rental_number TEXT UNIQUE NOT NULL,
+          customer_id TEXT NOT NULL,
+          customer_name TEXT NOT NULL,
+          device_id TEXT NOT NULL,
+          device_model TEXT NOT NULL,
+          serial_number TEXT NOT NULL,
+          start_date DATE NOT NULL,
+          end_date DATE NOT NULL,
+          actual_return_date DATE,
+          status TEXT DEFAULT 'Pending' CHECK(status IN ('Pending','Approved','Active','Returned','Overdue','Cancelled')),
+          priority TEXT DEFAULT 'Medium' CHECK(priority IN ('Low','Medium','High')),
+          purpose TEXT DEFAULT '',
+          delivery_address TEXT DEFAULT '',
+          delivery_date DATE,
+          pickup_date DATE,
+          daily_rate REAL DEFAULT 0.0,
+          total_cost REAL DEFAULT 0.0,
+          deposit_amount REAL DEFAULT 0.0,
+          deposit_status TEXT DEFAULT 'Pending' CHECK(deposit_status IN ('Collected','Refunded','Pending')),
+          contact_person TEXT DEFAULT '',
+          contact_phone TEXT DEFAULT '',
+          contact_email TEXT DEFAULT '',
+          notes TEXT DEFAULT '',
+          condition_checklist_pre TEXT DEFAULT '',
+          condition_checklist_post TEXT DEFAULT '',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
+          FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE
+        );
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_rentals_customer_id ON rentals(customer_id);`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_rentals_device_id ON rentals(device_id);`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_rentals_status ON rentals(status);`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_rentals_date_range ON rentals(start_date, end_date);`);
 
       console.log('  ✅ PostgreSQL schema initialized.');
     } finally {
@@ -1322,6 +1416,306 @@ class MillenniumDatabase {
     `;
     const result = await pool.query(query, [limit]);
     return result.rows;
+  }
+
+  // -------------------------------------------------------------------------
+  // RENTAL SCHEDULING & DEVICE RENTAL MANAGEMENT
+  // -------------------------------------------------------------------------
+
+  private mapRentalRow(row: any): Rental {
+    return {
+      id: row.id,
+      rentalNumber: row.rental_number,
+      customerId: row.customer_id,
+      customerName: row.customer_name,
+      deviceId: row.device_id,
+      deviceModel: row.device_model,
+      serialNumber: row.serial_number,
+      startDate: row.start_date ? new Date(row.start_date).toISOString().split('T')[0] : '',
+      endDate: row.end_date ? new Date(row.end_date).toISOString().split('T')[0] : '',
+      actualReturnDate: row.actual_return_date
+        ? new Date(row.actual_return_date).toISOString().split('T')[0]
+        : null,
+      status: row.status,
+      priority: row.priority,
+      purpose: row.purpose || '',
+      deliveryAddress: row.delivery_address || '',
+      deliveryDate: row.delivery_date
+        ? new Date(row.delivery_date).toISOString().split('T')[0]
+        : null,
+      pickupDate: row.pickup_date
+        ? new Date(row.pickup_date).toISOString().split('T')[0]
+        : null,
+      dailyRate: parseFloat(row.daily_rate) || 0,
+      totalCost: parseFloat(row.total_cost) || 0,
+      depositAmount: parseFloat(row.deposit_amount) || 0,
+      depositStatus: row.deposit_status,
+      contactPerson: row.contact_person || '',
+      contactPhone: row.contact_phone || '',
+      contactEmail: row.contact_email || '',
+      notes: row.notes || '',
+      conditionChecklistPre: row.condition_checklist_pre || '',
+      conditionChecklistPost: row.condition_checklist_post || '',
+      createdAt: row.created_at ? new Date(row.created_at).toISOString() : '',
+      updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : '',
+    };
+  }
+
+  async getAllRentals(): Promise<Rental[]> {
+    const result = await pool.query(`
+      SELECT * FROM rentals ORDER BY created_at DESC
+    `);
+    return result.rows.map(this.mapRentalRow);
+  }
+
+  async getRentalById(id: string): Promise<Rental | null> {
+    const result = await pool.query(`SELECT * FROM rentals WHERE id = $1`, [id]);
+    if (result.rows.length === 0) return null;
+    return this.mapRentalRow(result.rows[0]);
+  }
+
+  async createRental(data: Partial<Rental> & {
+    customerId: string; deviceId: string; startDate: string; endDate: string;
+  }): Promise<Rental> {
+    const id = `RENT-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const rentalNumber = `RNT-2026-${String(await this.getNextRentalNumber()).padStart(4, '0')}`;
+
+    // Look up device info
+    const device = await pool.query(`SELECT * FROM devices WHERE id = $1`, [data.deviceId]);
+    if (device.rows.length === 0) throw new Error('Device not found');
+    const dev = device.rows[0];
+
+    // Look up customer info
+    const customer = await pool.query(`SELECT * FROM customers WHERE id = $1`, [data.customerId]);
+    if (customer.rows.length === 0) throw new Error('Customer not found');
+    const cust = customer.rows[0];
+
+    // Check for booking conflicts
+    const conflict = await this.checkRentalConflict(data.deviceId, data.startDate, data.endDate);
+    if (conflict) {
+      throw new Error(`Booking conflict: Device ${data.deviceId} is already booked from ${conflict.startDate} to ${conflict.endDate} (Rental ${conflict.rentalNumber})`);
+    }
+
+    // Calculate total cost
+    const days = Math.ceil(
+      (new Date(data.endDate).getTime() - new Date(data.startDate).getTime()) / (1000 * 60 * 60 * 24)
+    ) + 1;
+    const dailyRate = data.dailyRate || 500;
+    const totalCost = days * dailyRate;
+
+    const result = await pool.query(`
+      INSERT INTO rentals (
+        id, rental_number, customer_id, customer_name, device_id, device_model, serial_number,
+        start_date, end_date, status, priority, purpose, delivery_address, delivery_date, pickup_date,
+        daily_rate, total_cost, deposit_amount, deposit_status,
+        contact_person, contact_phone, contact_email, notes, condition_checklist_pre, condition_checklist_post
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
+        $16, $17, $18, $19, $20, $21, $22, $23, $24, $25
+      ) RETURNING *
+    `, [
+      id, rentalNumber, data.customerId, cust.organization_name,
+      data.deviceId, dev.model, dev.serial_number,
+      data.startDate, data.endDate,
+      data.status || 'Pending', data.priority || 'Medium',
+      data.purpose || '', data.deliveryAddress || cust.address || '',
+      data.deliveryDate || null, data.pickupDate || null,
+      dailyRate, totalCost, data.depositAmount || 0, data.depositStatus || 'Pending',
+      data.contactPerson || cust.contact_person || '',
+      data.contactPhone || cust.phone || '',
+      data.contactEmail || cust.email || '',
+      data.notes || '', data.conditionChecklistPre || '', data.conditionChecklistPost || '',
+    ]);
+
+    // Log to audit
+    try {
+      await this.logAudit({
+        deviceId: data.deviceId,
+        userName: data.contactPerson || 'System',
+        action: 'RENTAL_CREATED',
+        details: `Rental ${rentalNumber} created for ${cust.organization_name} (${data.startDate} to ${data.endDate})`,
+      });
+    } catch (auditErr: any) {
+      console.error('Audit log failed (non-blocking):', auditErr.message);
+    }
+
+    return this.mapRentalRow(result.rows[0]);
+  }
+
+  private rentalCounter = 0;
+  private async getNextRentalNumber(): Promise<number> {
+    if (this.rentalCounter === 0) {
+      const result = await pool.query(`SELECT COUNT(*) as count FROM rentals`);
+      this.rentalCounter = parseInt(result.rows[0].count) + 1;
+    } else {
+      this.rentalCounter++;
+    }
+    return this.rentalCounter;
+  }
+
+  async checkRentalConflict(deviceId: string, startDate: string, endDate: string): Promise<Rental | null> {
+    const result = await pool.query(`
+      SELECT * FROM rentals
+      WHERE device_id = $1
+        AND status NOT IN ('Returned', 'Cancelled')
+        AND (start_date, end_date) OVERLAPS ($2::date, $3::date)
+      LIMIT 1
+    `, [deviceId, startDate, endDate]);
+    if (result.rows.length === 0) return null;
+    return this.mapRentalRow(result.rows[0]);
+  }
+
+  async updateRentalStatus(id: string, status: RentalStatus): Promise<Rental | null> {
+    const updates: string[] = [`status = $2`, `updated_at = CURRENT_TIMESTAMP`];
+    const params: any[] = [id, status];
+    let paramIdx = 3;
+
+    if (status === 'Returned') {
+      updates.push(`actual_return_date = CURRENT_DATE`);
+    }
+    if (status === 'Active') {
+      updates.push(`deposit_status = $${paramIdx}`);
+      params.push('Collected');
+      paramIdx++;
+    }
+
+    const sql = `UPDATE rentals SET ${updates.join(', ')} WHERE id = $1 RETURNING *`;
+    const result = await pool.query(sql, params);
+
+    if (result.rows.length === 0) return null;
+
+    // Log to audit
+    const rental = this.mapRentalRow(result.rows[0]);
+    try {
+      await this.logAudit({
+        deviceId: rental.deviceId,
+        userName: 'System',
+        action: 'RENTAL_STATUS_CHANGED',
+        details: `Rental ${rental.rentalNumber} status changed to ${status}`,
+      });
+    } catch (auditErr: any) {
+      console.error('Audit log failed (non-blocking):', auditErr.message);
+    }
+
+    return rental;
+  }
+
+  async updateRental(id: string, updates: Partial<Rental>): Promise<Rental | null> {
+    const fields: string[] = [];
+    const values: any[] = [];
+    let paramIdx = 1;
+
+    const fieldMap: Record<string, string> = {
+      startDate: 'start_date',
+      endDate: 'end_date',
+      purpose: 'purpose',
+      deliveryAddress: 'delivery_address',
+      deliveryDate: 'delivery_date',
+      pickupDate: 'pickup_date',
+      dailyRate: 'daily_rate',
+      depositAmount: 'deposit_amount',
+      depositStatus: 'deposit_status',
+      contactPerson: 'contact_person',
+      contactPhone: 'contact_phone',
+      contactEmail: 'contact_email',
+      notes: 'notes',
+      priority: 'priority',
+      conditionChecklistPre: 'condition_checklist_pre',
+      conditionChecklistPost: 'condition_checklist_post',
+    };
+
+    for (const [key, col] of Object.entries(fieldMap)) {
+      if (updates[key as keyof Rental] !== undefined) {
+        fields.push(`${col} = $${paramIdx}`);
+        values.push(updates[key as keyof Rental]);
+        paramIdx++;
+      }
+    }
+
+    // Recalculate total cost if dates or rate changed
+    if (updates.startDate || updates.endDate || updates.dailyRate) {
+      const current = await this.getRentalById(id);
+      if (current) {
+        const start = updates.startDate || current.startDate;
+        const end = updates.endDate || current.endDate;
+        const rate = updates.dailyRate || current.dailyRate;
+        const days = Math.ceil(
+          (new Date(end).getTime() - new Date(start).getTime()) / (1000 * 60 * 60 * 24)
+        ) + 1;
+        fields.push(`total_cost = $${paramIdx}`);
+        values.push(days * rate);
+        paramIdx++;
+      }
+    }
+
+    if (fields.length === 0) return await this.getRentalById(id);
+
+    fields.push(`updated_at = CURRENT_TIMESTAMP`);
+    values.push(id);
+
+    const result = await pool.query(`
+      UPDATE rentals SET ${fields.join(', ')} WHERE id = $${paramIdx} RETURNING *
+    `, values);
+
+    if (result.rows.length === 0) return null;
+    return this.mapRentalRow(result.rows[0]);
+  }
+
+  async deleteRental(id: string): Promise<boolean> {
+    const result = await pool.query(`DELETE FROM rentals WHERE id = $1`, [id]);
+    return (result.rowCount || 0) > 0;
+  }
+
+  async getRentalStats(): Promise<any> {
+    const totalResult = await pool.query(`SELECT COUNT(*) as total FROM rentals`);
+    const statusResult = await pool.query(`
+      SELECT status, COUNT(*) as count FROM rentals GROUP BY status
+    `);
+    const revenueResult = await pool.query(`
+      SELECT COALESCE(SUM(total_cost), 0) as revenue FROM rentals WHERE status IN ('Active', 'Returned')
+    `);
+    const upcomingResult = await pool.query(`
+      SELECT COUNT(*) as count FROM rentals
+      WHERE start_date >= CURRENT_DATE AND status IN ('Pending', 'Approved')
+    `);
+    const overdueResult = await pool.query(`
+      SELECT COUNT(*) as count FROM rentals WHERE status = 'Overdue'
+    `);
+
+    const statusBreakdown: Record<string, number> = {};
+    statusResult.rows.forEach((r: any) => {
+      statusBreakdown[r.status] = parseInt(r.count);
+    });
+
+    return {
+      totalRentals: parseInt(totalResult.rows[0].total) || 0,
+      revenue: parseFloat(revenueResult.rows[0].revenue) || 0,
+      upcoming: parseInt(upcomingResult.rows[0].count) || 0,
+      overdue: parseInt(overdueResult.rows[0].count) || 0,
+      statusBreakdown,
+    };
+  }
+
+  async getAvailableDevices(startDate: string, endDate: string): Promise<any[]> {
+    // Get all devices that are NOT booked during the given range
+    const result = await pool.query(`
+      SELECT d.* FROM devices d
+      WHERE d.status IN ('online', 'offline')
+        AND d.id NOT IN (
+          SELECT r.device_id FROM rentals r
+          WHERE r.status NOT IN ('Returned', 'Cancelled')
+            AND (r.start_date, r.end_date) OVERLAPS ($1::date, $2::date)
+        )
+      ORDER BY d.model
+    `, [startDate, endDate]);
+
+    return result.rows.map((row: any) => ({
+      id: row.id,
+      model: row.model,
+      serialNumber: row.serial_number,
+      customerName: row.customer_name,
+      status: row.status,
+    }));
   }
 }
 

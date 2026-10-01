@@ -207,3 +207,48 @@ export interface Customer {
   deviceCount?: number;
 }
 
+// ---------------------------------------------------------------------------
+// RENTAL SCHEDULING & DEVICE RENTAL MANAGEMENT
+// ---------------------------------------------------------------------------
+
+export type RentalStatus =
+  | 'Pending'
+  | 'Approved'
+  | 'Active'
+  | 'Returned'
+  | 'Overdue'
+  | 'Cancelled';
+
+export type RentalPriority = 'Low' | 'Medium' | 'High';
+
+export interface Rental {
+  id: string;
+  rentalNumber: string;             // e.g. 'RNT-2026-001'
+  customerId: string;
+  customerName: string;
+  deviceId: string;
+  deviceModel: string;
+  serialNumber: string;
+  startDate: string;                // ISO date 'YYYY-MM-DD'
+  endDate: string;                  // ISO date 'YYYY-MM-DD'
+  actualReturnDate?: string | null; // filled when device is returned
+  status: RentalStatus;
+  priority: RentalPriority;
+  purpose: string;                  // e.g. 'Conference', 'Training', 'Exhibit'
+  deliveryAddress: string;
+  deliveryDate?: string | null;     // scheduled delivery date
+  pickupDate?: string | null;       // scheduled pickup date
+  dailyRate: number;                // per-day rental cost
+  totalCost: number;                // computed: days × dailyRate
+  depositAmount: number;
+  depositStatus: 'Collected' | 'Refunded' | 'Pending';
+  contactPerson: string;
+  contactPhone: string;
+  contactEmail: string;
+  notes: string;
+  conditionChecklistPre: string;    // JSON string of pre-rental inspection
+  conditionChecklistPost: string;   // JSON string of post-rental inspection
+  createdAt: string;
+  updatedAt: string;
+}
+

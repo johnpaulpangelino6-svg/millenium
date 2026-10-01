@@ -8,9 +8,9 @@ const API_BASE = '/api';
 // --- Role Access Configuration ---
 // Defines which tabs each role can access
 const ROLE_ACCESS = {
-  admin:      ['dashboard','showcase','devices','tickets','customer-portal','warranty','inventory','data-manager','cms','predictive','analytics'],
+  admin:      ['dashboard','showcase','devices','tickets','customer-portal','warranty','inventory','data-manager','cms','predictive','analytics','rentals'],
   technician: ['devices','tickets','inventory','showcase'],
-  customer:   ['devices','tickets','customer-portal','showcase'],
+  customer:   ['devices','tickets','customer-portal','showcase','rentals'],
 };
 
 // Role display metadata
@@ -36,6 +36,12 @@ const state = {
   notifDropdownOpen: false,
   customers: [],
   allUsers: [],
+  rentals: [],
+  rentalStats: null,
+  rentalFilterStatus: '',
+  rentalCalendarMonth: new Date().getMonth(),
+  rentalCalendarYear: new Date().getFullYear(),
+  rentalViewMode: 'list', // 'list' | 'calendar'
   dataManagerSubTab: 'users', // 'users' | 'customers' | 'allocation'
   stats: null,
   selectedDeviceForRemote: null,
@@ -120,6 +126,36 @@ function saveAuthSession(user) {
 /** Clear user session */
 function clearAuthSession() {
   localStorage.removeItem(AUTH_SESSION_KEY);
+}
+
+/**
+ * Re-read the signed-in account from the server and refresh the stored session.
+ *
+ * The localStorage session is a cache. If the underlying account changed since
+ * it was written (e.g. it was deleted and recreated, so it now has a different
+ * id), the cached object would silently disagree with the database: the chip
+ * would show the old name while the server resolved the new identity. Refreshing
+ * on load keeps what the user sees and what the server enforces in step.
+ */
+async function refreshAuthSession() {
+  const cached = getAuthSession();
+  if (!cached) return null;
+
+  try {
+    const list = await (await fetch(`${API_BASE}/auth/users`, { cache: 'no-store' })).json();
+    const live = (list.data || []).find(u => u.id === cached.id);
+
+    if (!live) {
+      // The account behind this session no longer exists — force a fresh login.
+      clearAuthSession();
+      return null;
+    }
+    saveAuthSession(live);
+    return live;
+  } catch {
+    // Offline / server down: fall back to the cached copy rather than locking out.
+    return cached;
+  }
 }
 
 /** Show / hide the auth overlay */
@@ -271,6 +307,30 @@ document.addEventListener('DOMContentLoaded', () => {
       console.warn('⚠️ Modal might be visible! Check CSS cache.');
     }
   }
+
+  // Ping the server on page load to detect connection issues early
+  const banner = document.getElementById('backendStatusBanner');
+  const bannerText = document.getElementById('backendStatusText');
+  if (banner) banner.style.display = 'block';
+  if (bannerText) bannerText.textContent = 'Connecting to backend server...';
+
+  fetch(`${API_BASE}/stats/dashboard`, { cache: 'no-store' })
+    .then(r => {
+      if (!r.ok) throw new Error(`Server returned ${r.status}`);
+      if (banner) {
+        banner.style.background = 'linear-gradient(90deg,#059669,#047857)';
+        if (bannerText) bannerText.textContent = '✅ Backend connected — Database online';
+        setTimeout(() => { banner.style.display = 'none'; }, 3000);
+      }
+      console.log('✅ Backend server is reachable');
+    })
+    .catch(err => {
+      console.error('❌ Backend server unreachable on page load:', err.message);
+      if (banner) {
+        banner.style.background = 'linear-gradient(90deg,#dc2626,#991b1b)';
+        if (bannerText) bannerText.innerHTML = '❌ Backend server not reachable. Please start the server: <code style="background:rgba(0,0,0,0.3);padding:2px 6px;border-radius:4px;">cd c:\\xampp\\htdocs\\millenium-smartboard-main && npx tsx src/server.ts</code>';
+      }
+    });
 });
 
 
@@ -583,6 +643,33 @@ function showToast(message, type = 'info') {
   }, 4000);
 }
 
+// --- Rental ownership helpers ---
+// A rental belongs to the signed-in customer if the stable customer id matches,
+// or failing that the organization name matches (compared case/whitespace-insensitively,
+// because users.organization and customers.organization_name are not always spelled the same).
+function rentalMatchesUser(rental, user) {
+  if (!rental || !user) return false;
+  const userOrg    = (user.organization || '').trim().toLowerCase();
+  const userCustId = (user.customerId   || '').trim().toLowerCase();
+  const rCustId    = (rental.customerId   || '').trim().toLowerCase();
+  const rCustName  = (rental.customerName || '').trim().toLowerCase();
+
+  if (userCustId && rCustId && rCustId === userCustId) return true;
+  if (userOrg    && rCustName && rCustName === userOrg) return true;
+  return false;
+}
+
+/**
+ * The single source of truth for "which rentals may this user see".
+ * Admins/technicians see everything; customers see only their own bookings.
+ * Used by BOTH the Rentals page and the customer portal so the two never disagree.
+ */
+function getVisibleRentals() {
+  const all = state.rentals || [];
+  if (state.currentRole !== 'customer' || !state.currentUser) return all;
+  return all.filter(r => rentalMatchesUser(r, state.currentUser));
+}
+
 // --- Data Fetchers ---
 async function fetchAllData() {
   try {
@@ -607,57 +694,80 @@ async function fetchAllData() {
       devicesUrl += `?${params.toString()}`;
     }
     
-    const fetchPromises = [
-      fetch(`${API_BASE}/stats/dashboard`),
-      fetch(devicesUrl),  // Use filtered URL
-      fetch(ticketsUrl),
-      fetch(`${API_BASE}/warranties`),
-      fetch(`${API_BASE}/inventory`),
-      fetch(`${API_BASE}/cms`),
-      fetch(`${API_BASE}/predictive/alerts`),
-      fetch(`${API_BASE}/audit-logs`),
-      fetch(`${API_BASE}/customers`),
-      fetch(`${API_BASE}/notifications`),
+    // Build rentals URL with role-based filtering — the server returns only
+    // the customer's own bookings when userRole=customer.
+    const rentalParams = new URLSearchParams();
+    if (state.currentUser) {
+      rentalParams.append('userId', state.currentUser.id);
+      rentalParams.append('userRole', state.currentUser.role);
+      if (state.currentUser.organization) {
+        rentalParams.append('userOrganization', state.currentUser.organization);
+      }
+    }
+    const rentalQuery = rentalParams.toString();
+    const rentalsUrl      = rentalQuery ? `${API_BASE}/rentals?${rentalQuery}`               : `${API_BASE}/rentals`;
+    const rentalStatsUrl  = rentalQuery ? `${API_BASE}/rentals/stats/summary?${rentalQuery}` : `${API_BASE}/rentals/stats/summary`;
+
+    // Use named entries so we can identify which fetch failed
+    const fetchEntries = [
+      { name: 'stats/dashboard', url: `${API_BASE}/stats/dashboard`, stateKey: 'stats' },
+      { name: 'devices',        url: devicesUrl,                        stateKey: 'devices' },
+      { name: 'tickets',        url: ticketsUrl,                        stateKey: 'tickets' },
+      { name: 'warranties',     url: `${API_BASE}/warranties`,          stateKey: 'warranties' },
+      { name: 'inventory',      url: `${API_BASE}/inventory`,           stateKey: 'inventory' },
+      { name: 'cms',            url: `${API_BASE}/cms`,                 stateKey: 'cms' },
+      { name: 'predictive/alerts', url: `${API_BASE}/predictive/alerts`, stateKey: 'predictiveAlerts' },
+      { name: 'audit-logs',     url: `${API_BASE}/audit-logs`,          stateKey: 'auditLogs' },
+      { name: 'customers',      url: `${API_BASE}/customers`,          stateKey: 'customers' },
+      { name: 'notifications',  url: `${API_BASE}/notifications`,      stateKey: 'notifications' },
+      { name: 'rentals',        url: rentalsUrl,                       stateKey: 'rentals' },
+      { name: 'rentals/stats',  url: rentalStatsUrl,                   stateKey: 'rentalStats' },
     ];
 
     if (state.currentRole === 'admin') {
-      fetchPromises.push(fetch(`${API_BASE}/auth/users`));
+      fetchEntries.push({ name: 'auth/users', url: `${API_BASE}/auth/users`, stateKey: 'allUsers' });
     }
 
-    const responses = await Promise.all(fetchPromises);
-    const [statsRes, devRes, tckRes, warRes, invRes, cmsRes, predRes, logsRes, custRes, notifRes] = responses;
+    // Use allSettled so one failure doesn't kill everything
+    const results = await Promise.allSettled(
+      fetchEntries.map(async (e) => {
+        try {
+          const res = await fetch(e.url, { cache: 'no-store' });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const json = await res.json();
+          if (json.success) state[e.stateKey] = json.data;
+          return e.name;
+        } catch (err) {
+          console.error(`Fetch failed: ${e.name}`, err);
+          throw err;
+        }
+      })
+    );
 
-    const statsData = await statsRes.json();
-    const devData = await devRes.json();
-    const tckData = await tckRes.json();
-    const warData = await warRes.json();
-    const invData = await invRes.json();
-    const cmsData = await cmsRes.json();
-    const predData = await predRes.json();
-    const logsData = await logsRes.json();
-    const custData = await custRes.json();
-    const notifData = await notifRes.json();
+    // Count failures
+    const failures = results.filter(r => r.status === 'rejected');
+    const succeeded = results.filter(r => r.status === 'fulfilled');
 
-    if (statsData.success) state.stats = statsData.data;
-    if (devData.success) state.devices = devData.data;
-    if (tckData.success) state.tickets = tckData.data;
-    if (warData.success) state.warranties = warData.data;
-    if (invData.success) state.inventory = invData.data;
-    if (cmsData.success) state.cms = cmsData.data;
-    if (predData.success) state.predictiveAlerts = predData.data;
-    if (logsData.success) state.auditLogs = logsData.data;
-    if (custData.success) state.customers = custData.data;
-    if (notifData.success) state.notifications = notifData.data;
-
-    if (responses[10]) {
-      const userData = await responses[10].json();
-      if (userData.success) state.allUsers = userData.data;
+    if (failures.length === fetchEntries.length) {
+      // Everything failed — server is down
+      console.error('All API endpoints failed. Server may be down.');
+      showToast('Failed to connect to backend server at http://localhost:3000', 'error');
+    } else if (failures.length > 0) {
+      // Some endpoints failed — partial load
+      console.warn(`${succeeded.length}/${fetchEntries.length} endpoints OK, ${failures.length} failed`);
+      showToast(`Loaded ${succeeded.length}/${fetchEntries.length} data sources. Some data may be incomplete.`, 'warning');
     }
 
     renderApp();
   } catch (err) {
     console.error('Failed to fetch data from backend API:', err);
-    showToast('Failed to connect to backend server. Make sure the server is running.', 'error');
+    const isAbort = err && err.name === 'AbortError';
+    const msg = isAbort
+      ? 'Backend request timed out. Check your network or server performance.'
+      : 'Failed to connect to backend server. Make sure the server is running at http://localhost:3000';
+    showToast(msg, 'error');
+    // Also surface the raw error in the toast for debugging
+    console.error('Error detail:', err.message || err, err.stack || '');
   }
 }
 
@@ -720,6 +830,9 @@ function renderApp() {
       break;
     case 'analytics':
       mainContent.innerHTML = renderAnalyticsView();
+      break;
+    case 'rentals':
+      mainContent.innerHTML = renderRentalsView();
       break;
     default:
       mainContent.innerHTML = renderDashboardView();
@@ -3133,13 +3246,12 @@ function renderDevicesView() {
               <th>Customer & Location</th>
               <th>Status</th>
               <th>OS & OPS Module</th>
-              <th>Temp / CPU</th>
               <th>Last Ping</th>
               <th>Central Remote Controls</th>
             </tr>
           </thead>
           <tbody>
-            ${filtered.length === 0 ? `<tr><td colspan="8" style="text-align: center; padding: 40px; color: var(--text-muted);">No devices matching current criteria.</td></tr>` : ''}
+            ${filtered.length === 0 ? `<tr><td colspan="7" style="text-align: center; padding: 40px; color: var(--text-muted);">No devices matching current criteria.</td></tr>` : ''}
             ${filtered
               .map((dev) => {
                 const statusClass =
@@ -3181,12 +3293,6 @@ function renderDevicesView() {
                   <td>
                     <div style="font-size: 0.8rem; font-weight: 600;">${dev.osVersion}</div>
                     <div style="font-size: 0.75rem; color: var(--text-muted);">${dev.opsSpec}</div>
-                  </td>
-                  <td>
-                    <div style="font-family: 'JetBrains Mono'; font-weight: 700; color: ${dev.temperatureC > 75 ? '#f43f5e' : dev.temperatureC > 60 ? '#f59e0b' : '#34d399'};">
-                      ${dev.temperatureC > 0 ? `${dev.temperatureC}°C` : 'N/A'}
-                    </div>
-                    <div style="font-size: 0.72rem; color: var(--text-muted);">CPU: ${dev.cpuUsagePct}% | RAM: ${dev.ramUsagePct}%</div>
                   </td>
                   <td>
                     <div style="font-size: 0.78rem;">${timeAgo(new Date(dev.lastPing))}</div>
@@ -3519,6 +3625,7 @@ function renderCustomerPortalView() {
       </div>
       <div class="page-actions">
         ${customerDevices.length > 0 ? `<button class="btn btn-primary" onclick="openCreateTicketModal('${firstDevId}')">🚨 Report Problem / Request Service</button>` : ''}
+        <button class="btn btn-secondary" onclick="openRentalModal()" style="background:linear-gradient(135deg,#8b5cf6,#7c3aed);color:#fff;font-weight:700;">📅 Book a Device</button>
         <button class="btn btn-secondary btn-sm" onclick="fetchAllData()">🔄 Refresh</button>
       </div>
     </div>
@@ -3575,7 +3682,10 @@ function renderCustomerPortalView() {
             <div style="color: var(--text-muted); font-size: 0.8rem; margin-top: 4px;">📍 Suite 1004 Atlanta Center, 31 Annapolis St., Greenhills, San Juan City Philippines</div>
           </div>
         </div>
-        <button class="btn btn-secondary" onclick="fetchAllData()">🔄 Check Again for Linked Devices</button>
+        <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+          <button class="btn btn-secondary" onclick="fetchAllData()">🔄 Check Again for Linked Devices</button>
+          <button class="btn" style="background:linear-gradient(135deg,#8b5cf6,#7c3aed);color:#fff;font-weight:700;border:none;" onclick="openRentalModal()">📅 Book a Device for Rent</button>
+        </div>
       </div>
     ` : `
       <!-- My Registered Millennium Devices -->
@@ -3601,9 +3711,10 @@ function renderCustomerPortalView() {
               <div><strong>Installed:</strong> ${dev.installedAt}</div>
             </div>
 
-            <div style="display: flex; gap: 8px; margin-top: 10px;">
+            <div style="display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap;">
               <button class="btn btn-secondary btn-sm" style="flex: 1;" onclick="openQRModal('${dev.id}')">📱 Digital ID</button>
               <button class="btn btn-primary btn-sm" style="flex: 1;" onclick="openCreateTicketModal('${dev.id}')">Request Tech</button>
+              <button class="btn btn-sm" style="flex: 1 1 100%; background:linear-gradient(135deg,#8b5cf6,#7c3aed);color:#fff;font-weight:700;border:none;" onclick="openRentalModal(null,'${dev.id}')">📅 Book This Device</button>
             </div>
           </div>
         `
@@ -3611,6 +3722,9 @@ function renderCustomerPortalView() {
           .join('')}
       </div>
     `}
+
+    <!-- My Rental Bookings -->
+    ${renderCustomerBookings(user)}
 
     <!-- Downloadable Resources & Manuals -->
     <div class="glass-panel">
@@ -3642,6 +3756,61 @@ function renderCustomerPortalView() {
           <button class="btn btn-secondary btn-sm" onclick="showToast('Downloading Whiteboard Suite v5.1...', 'success')">⬇️ APK</button>
         </div>
       </div>
+    </div>
+  `;
+}
+
+// --- Customer Rental Bookings Section ---
+function renderCustomerBookings(user) {
+  // Same ownership rule as the Rentals page — one helper, one behaviour.
+  const myBookings = getVisibleRentals()
+    .slice()
+    .sort((a, b) => new Date(b.startDate) - new Date(a.startDate));
+
+  const statusColors = {
+    'Pending':  { bg: 'rgba(234, 179, 8, 0.15)',  border: 'rgba(234, 179, 8, 0.4)',  text: '#facc15' },
+    'Approved': { bg: 'rgba(14, 165, 233, 0.15)', border: 'rgba(14, 165, 233, 0.4)', text: '#0ea5e9' },
+    'Active':   { bg: 'rgba(16, 185, 129, 0.15)', border: 'rgba(16, 185, 129, 0.4)', text: '#10b981' },
+    'Returned': { bg: 'rgba(148, 163, 184, 0.15)',border: 'rgba(148, 163, 184, 0.4)',text: '#94a3b8' },
+    'Overdue':  { bg: 'rgba(239, 68, 68, 0.15)',  border: 'rgba(239, 68, 68, 0.4)',  text: '#ef4444' },
+    'Cancelled':{ bg: 'rgba(107, 114, 128, 0.15)',border: 'rgba(107, 114, 128, 0.4)',text: '#6b7280' },
+  };
+
+  return `
+    <div class="glass-panel" style="margin-top: 20px;">
+      <div class="panel-header">
+        <div class="panel-title">📅 My Rental Bookings</div>
+        <button class="btn btn-primary btn-sm" onclick="openRentalModal()">➕ New Booking</button>
+      </div>
+      ${myBookings.length === 0 ? `
+        <div style="text-align:center;padding:32px 16px;">
+          <div style="font-size:2.5rem;margin-bottom:8px;">📅</div>
+          <p style="color:var(--text-secondary);font-size:0.9rem;">You have no rental bookings yet. Click <strong>New Booking</strong> to rent a Millennium SmartBoard for your event or project.</p>
+        </div>
+      ` : `
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          ${myBookings.map(r => {
+            const sc = statusColors[r.status] || statusColors['Pending'];
+            const days = Math.ceil((new Date(r.endDate) - new Date(r.startDate)) / (1000*60*60*24)) + 1;
+            return `
+              <div style="background:var(--bg-surface,#15151f);border:1px solid var(--border-subtle,rgba(255,255,255,0.08));border-radius:12px;padding:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+                <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+                  <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#8b5cf6,#7c3aed);display:flex;align-items:center;justify-content:center;font-size:1.4rem;flex-shrink:0;">🖥️</div>
+                  <div>
+                    <div style="font-weight:700;font-size:0.95rem;color:#fff;">${r.deviceModel || 'Millennium SmartBoard'}</div>
+                    <div style="font-size:0.78rem;color:var(--text-muted);">${r.ticketNumber || r.rentalNumber || ''} · ${days} day${days > 1 ? 's' : ''} · ${r.startDate} → ${r.endDate}</div>
+                    ${r.purpose ? `<div style="font-size:0.78rem;color:var(--text-secondary);margin-top:2px;">📌 ${r.purpose}</div>` : ''}
+                  </div>
+                </div>
+                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                  <span style="padding:5px 12px;border-radius:20px;font-size:0.75rem;font-weight:700;background:${sc.bg};border:1px solid ${sc.border};color:${sc.text};">${r.status}</span>
+                  <button class="btn btn-secondary btn-sm" onclick="viewRentalDetail('${r.id}')">📋 Details</button>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `}
     </div>
   `;
 }
@@ -4070,7 +4239,7 @@ function renderDataManagerView() {
 
   const tabs = [
     { id: 'users',      icon: '👥', label: 'System Users' },
-    { id: 'customers',  icon: '🏢', label: 'Customer Organizations' },
+    { id: 'customers',  icon: '🏢', label: 'Registered Customers' },
     { id: 'allocation', icon: '🔗', label: 'Device Allocation' },
   ];
 
@@ -4096,7 +4265,7 @@ function renderDataManagerView() {
           ">
           ${t.icon} ${t.label}
           ${t.id === 'users' ? `<span style="margin-left:6px;background:rgba(0,242,254,0.2);border-radius:999px;padding:1px 8px;font-size:0.78rem;">${(state.allUsers||[]).length}</span>` : ''}
-          ${t.id === 'customers' ? `<span style="margin-left:6px;background:rgba(0,242,254,0.2);border-radius:999px;padding:1px 8px;font-size:0.78rem;">${(state.customers||[]).length}</span>` : ''}
+          ${t.id === 'customers' ? `<span style="margin-left:6px;background:rgba(0,242,254,0.2);border-radius:999px;padding:1px 8px;font-size:0.78rem;">${(state.allUsers||[]).filter(u=>u.role==='customer').length}</span>` : ''}
         </button>
       `).join('')}
     </div>
@@ -4180,64 +4349,85 @@ function renderDMUsersTab() {
 }
 
 // --- Data Manager: Customers Sub-tab ---
+// Lists every REGISTERED CUSTOMER account (users with role = 'customer').
+// Who may register is controlled by the Registration Mode switch in the Users tab.
 function renderDMCustomersTab() {
   const customers = state.customers || [];
+  const devices = state.devices || [];
+  const registeredCustomers = (state.allUsers || []).filter(u => u.role === 'customer');
+
+  // Resolve each account to its customer organization (by organization name).
+  const rows = registeredCustomers.map(u => {
+    const orgName = (u.organization || '').trim();
+    const org = customers.find(
+      c => c.organizationName.trim().toLowerCase() === orgName.toLowerCase()
+    );
+    return {
+      user: u,
+      org,
+      deviceCount: org ? devices.filter(d => d.customerId === org.id).length : 0,
+    };
+  });
 
   return `
     <div class="glass-panel">
       <div class="panel-header" style="margin-bottom: 16px;">
-        <div class="panel-title">🏢 Customer Organizations</div>
-        <button class="btn btn-primary btn-sm" onclick="openCreateCustomerModal()">➕ Add Customer</button>
+        <div class="panel-title">👤 Registered Customers</div>
+        <span style="font-size:0.82rem;color:var(--text-muted);">
+          ${registeredCustomers.length} account${registeredCustomers.length !== 1 ? 's' : ''}
+        </span>
       </div>
+      <p style="font-size:0.82rem;color:var(--text-muted);margin:-8px 0 16px;">
+        Every customer account registered on the platform.
+      </p>
 
       <div class="data-table-wrapper">
         <table class="data-table">
           <thead>
             <tr>
-              <th>Organization</th>
-              <th>Customer ID</th>
-              <th>Type</th>
-              <th>Contact</th>
+              <th>Customer</th>
+              <th>Username</th>
               <th>Email</th>
-              <th>City</th>
+              <th>Organization</th>
+              <th>Location</th>
               <th>Devices</th>
-              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            ${customers.length === 0 ? `<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted);">No customer organizations found.</td></tr>` : ''}
-            ${customers.map(c => {
-              const deviceCount = (state.devices || []).filter(d => d.customerId === c.id).length;
-              return `
+            ${rows.length === 0 ? `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted);">No registered customers found.</td></tr>` : ''}
+            ${rows.map(({ user: u, org, deviceCount }) => `
               <tr>
                 <td>
-                  <strong>${c.organizationName}</strong>
-                  ${c.address ? `<div style="font-size:0.72rem;color:var(--text-muted);">📍 ${c.address}</div>` : ''}
+                  <div style="display:flex;align-items:center;gap:10px;">
+                    <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#667eea,#764ba2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1rem;color:#fff;flex-shrink:0;">
+                      ${(u.fullName || u.username).charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <strong>${u.fullName || u.username}</strong>
+                      <div style="font-size:0.72rem;color:var(--text-muted);">ID: ${u.id}</div>
+                    </div>
+                  </div>
                 </td>
-                <td><span style="font-family:var(--font-mono);color:var(--neon-cyan);font-size:0.82rem;">${c.id}</span></td>
-                <td>
-                  <span class="status-pill ${c.clientType === 'school' ? 'status-online' : 'status-maintenance'}" style="font-size:0.75rem;">
-                    ${c.clientType === 'school' ? '🏫 School' : '🏢 Corporate'}
-                  </span>
+                <td><span style="font-family:var(--font-mono);color:var(--neon-cyan);">@${u.username}</span></td>
+                <td style="font-size:0.82rem;">${u.email || '—'}</td>
+                <td style="font-size:0.82rem;">
+                  ${org
+                    ? `<strong>${org.organizationName}</strong>
+                       <span class="status-pill ${org.clientType === 'school' ? 'status-online' : 'status-maintenance'}" style="font-size:0.72rem;margin-left:6px;">
+                         ${org.clientType === 'school' ? '🏫 School' : '🏢 Corporate'}
+                       </span>`
+                    : `<span style="color:#f59e0b;">${orgName || 'Not linked'}</span>
+                       <div style="font-size:0.72rem;color:var(--text-muted);">No customer record</div>`}
                 </td>
-                <td style="font-size:0.82rem;">${c.contactPerson || '—'}</td>
-                <td style="font-size:0.82rem;">${c.email || '—'}</td>
-                <td style="font-size:0.82rem;">${c.city || '—'}</td>
+                <td style="font-size:0.82rem;">${u.location || '—'}</td>
                 <td>
                   <span style="font-size:0.9rem;font-weight:800;color:${deviceCount > 0 ? 'var(--neon-cyan)' : 'var(--text-muted)'};">
                     ${deviceCount}
                   </span>
                   <span style="font-size:0.72rem;color:var(--text-muted);"> unit${deviceCount !== 1 ? 's' : ''}</span>
                 </td>
-                <td>
-                  <div style="display:flex;gap:6px;">
-                    <button class="btn btn-secondary btn-sm" onclick="switchDataManagerTab('allocation')">🔗 Assign</button>
-                    <button class="action-btn" style="color:#f43f5e;border-color:#f43f5e44;" onclick="deleteCustomerOrg('${c.id}','${(c.organizationName||'').replace(/'/g,"\\'")}')">🗑️</button>
-                  </div>
-                </td>
               </tr>
-              `;
-            }).join('')}
+            `).join('')}
           </tbody>
         </table>
       </div>
@@ -5970,7 +6160,35 @@ async function submitRegisterDeviceForm(e) {
 // WARRANTY SCANNER MODULE — Camera QR/Barcode Scanner & Validation
 // ==========================================================================
 
-let html5QrCode = null; // Global scanner instance
+let html5QrCode = null;   // Global scanner instance
+let scannerCameras = [];  // Cameras discovered on this device
+let scannerHandlingResult = false; // Debounce: one result per scan
+
+/** True when the html5-qrcode library actually loaded (it is CDN-hosted). */
+function isScannerLibraryAvailable() {
+  return typeof Html5Qrcode !== 'undefined' && typeof Html5QrcodeSupportedFormats !== 'undefined';
+}
+
+/** Human-readable camera error. */
+function describeCameraError(err) {
+  const name = (err && (err.name || err.code)) ? String(err.name || err.code) : '';
+  const msg = String((err && err.message) || err || '');
+  const probe = (name + ' ' + msg).toLowerCase();
+
+  if (probe.includes('notallowed') || probe.includes('permission')) {
+    return 'Camera permission was denied. Allow camera access in your browser, then try again.';
+  }
+  if (probe.includes('notfound') || probe.includes('devicesnotfound') || probe.includes('no camera')) {
+    return 'No camera found on this device. Use "Upload Image" or type the serial number instead.';
+  }
+  if (probe.includes('notreadable') || probe.includes('trackstarterror')) {
+    return 'The camera is already in use by another app or tab. Close it and try again.';
+  }
+  if (probe.includes('insecure') || probe.includes('securityerror') || probe.includes('https')) {
+    return 'Camera access needs a secure (https) connection or localhost. Use "Upload Image" instead.';
+  }
+  return 'Unable to start the camera. Use "Upload Image" or type the serial number instead.';
+}
 
 // Open Warranty Scanner Modal
 function openWarrantyScannerModal() {
@@ -6015,18 +6233,25 @@ function resetWarrantyScanner() {
 async function startWarrantyScanner() {
   const instructionsDiv = document.getElementById('scannerInstructions');
   const cameraDiv = document.getElementById('scannerCameraView');
-  const statusDiv = document.getElementById('scannerStatus');
-  
+
+  // The library is loaded from a CDN — if it is blocked/offline, fail clearly
+  // instead of throwing a ReferenceError and leaving a blank modal.
+  if (!isScannerLibraryAvailable()) {
+    updateScannerStatus('❌ Scanner library failed to load (offline?).', 'error');
+    showToast('Scanner library unavailable. Check your connection, or use "Upload Image" / manual entry.', 'error');
+    return;
+  }
+
   // Hide instructions, show camera view
   instructionsDiv.style.display = 'none';
   cameraDiv.style.display = 'block';
-  
+
   try {
     // Initialize scanner if not already created
     if (!html5QrCode) {
       html5QrCode = new Html5Qrcode("qrReaderContainer");
     }
-    
+
     // Configure scanner for multiple formats
     const config = {
       fps: 10,
@@ -6041,26 +6266,43 @@ async function startWarrantyScanner() {
         Html5QrcodeSupportedFormats.UPC_E,
       ],
     };
-    
+
+    // Desktop machines can have several cameras; default to the rear/environment
+    // one, and fall back to whatever is available if that is not offered.
+    let cameraConfig = { facingMode: "environment" };
+    try {
+      scannerCameras = await Html5Qrcode.getCameras();
+      if (scannerCameras && scannerCameras.length) {
+        const rear = scannerCameras.find(c => /back|rear|environment/i.test(c.label || ''));
+        cameraConfig = (rear || scannerCameras[scannerCameras.length - 1]).id;
+      }
+    } catch {
+      // Enumeration can fail (e.g. permission not yet granted) — keep facingMode.
+    }
+
     // Start scanning
     await html5QrCode.start(
-      { facingMode: "environment" }, // Use back camera
+      cameraConfig,
       config,
       onScanSuccess,
       onScanFailure
     );
     
-    updateScannerStatus('🔍 Scanning... Point camera at QR code or barcode', 'scanning');
+    const camLabel = Array.isArray(scannerCameras) && scannerCameras.length > 1
+      ? ` (${scannerCameras.length} cameras detected)`
+      : '';
+    updateScannerStatus('🔍 Scanning... Point camera at QR code or barcode' + camLabel, 'scanning');
     
   } catch (err) {
     console.error('Failed to start scanner:', err);
-    updateScannerStatus('❌ Camera access denied or unavailable', 'error');
-    showToast('Unable to access camera. Please check permissions.', 'error');
-    
-    // Show instructions again
+    const friendly = describeCameraError(err);
+    updateScannerStatus('❌ ' + friendly, 'error');
+    showToast(friendly, 'error');
+
+    // Return to the instructions panel so the alternative methods stay reachable.
     setTimeout(() => {
       resetWarrantyScanner();
-    }, 2000);
+    }, 2600);
   }
 }
 
@@ -6078,16 +6320,22 @@ async function stopWarrantyScanner() {
 
 // Scanner Success Callback
 function onScanSuccess(decodedText, decodedResult) {
+  // Guard against the callback firing more than once for the same frame.
+  if (scannerHandlingResult) return;
+  scannerHandlingResult = true;
+
   console.log('Scan successful:', decodedText);
-  
+
   // Stop scanner immediately
   stopWarrantyScanner();
-  
+
   // Update status
   updateScannerStatus('✅ Code detected! Validating warranty...', 'success');
-  
+
   // Validate the scanned code
-  validateWarrantyBySerial(decodedText);
+  Promise.resolve(validateWarrantyBySerial(decodedText)).finally(() => {
+    scannerHandlingResult = false;
+  });
 }
 
 // Scanner Failure Callback (for logging, not errors)
@@ -6140,53 +6388,72 @@ function validateManualSerial() {
 // Trigger File Input for Barcode Image Upload
 function triggerBarcodeImageUpload() {
   const fileInput = document.getElementById('barcodeImageInput');
-  if (fileInput) {
-    fileInput.click();
+  if (!fileInput) {
+    showToast('Upload control is unavailable. Type the serial number instead.', 'error');
+    return;
   }
+  // Allow re-selecting the same file twice in a row (change would not fire otherwise).
+  fileInput.value = '';
+  fileInput.click();
 }
 
 // Handle Barcode Image Upload
 function handleBarcodeImageUpload(event) {
-  const file = event.target.files[0];
-  
+  const file = event && event.target && event.target.files ? event.target.files[0] : null;
+
   if (!file) {
     return;
   }
-  
-  // Validate file type
-  if (!file.type.startsWith('image/')) {
+
+  const statusDiv = document.getElementById('imageScanStatus');
+  const imagePreviewArea = document.getElementById('imagePreviewArea');
+  const uploadedImage = document.getElementById('uploadedBarcodeImage');
+
+  // Validate file type — accept by MIME, and fall back to extension because some
+  // Android/Windows pickers report an empty file.type.
+  const looksLikeImage = (file.type && file.type.startsWith('image/')) ||
+    /\.(png|jpe?g|gif|bmp|webp|heic|heif)$/i.test(file.name || '');
+  if (!looksLikeImage) {
     showToast('Please upload a valid image file', 'error');
+    if (statusDiv) {
+      statusDiv.innerHTML = '<span style="color: var(--danger);">❌ That file is not an image.</span>';
+    }
     return;
   }
-  
+
   // Check file size (max 10MB)
   if (file.size > 10 * 1024 * 1024) {
     showToast('Image file is too large. Maximum size is 10MB', 'error');
+    if (statusDiv) {
+      statusDiv.innerHTML = '<span style="color: var(--danger);">❌ Image is larger than 10MB.</span>';
+    }
     return;
   }
-  
+
   // Read and display image
   const reader = new FileReader();
-  
-  reader.onload = function(e) {
-    const imagePreviewArea = document.getElementById('imagePreviewArea');
-    const uploadedImage = document.getElementById('uploadedBarcodeImage');
-    const statusDiv = document.getElementById('imageScanStatus');
-    
+
+  reader.onload = function (e) {
     if (uploadedImage && imagePreviewArea) {
       uploadedImage.src = e.target.result;
       imagePreviewArea.style.display = 'block';
-      statusDiv.textContent = 'Image uploaded. Click "Scan Image" to decode barcode.';
-      statusDiv.style.color = 'var(--text-secondary)';
-      
+      if (statusDiv) {
+        statusDiv.textContent = 'Image uploaded. Click "Scan Image" to decode barcode.';
+        statusDiv.style.color = 'var(--text-secondary)';
+      }
       showToast('Image uploaded successfully', 'success');
+    } else {
+      showToast('Image preview is unavailable on this page.', 'error');
     }
   };
-  
-  reader.onerror = function() {
+
+  reader.onerror = function () {
     showToast('Failed to read image file', 'error');
+    if (statusDiv) {
+      statusDiv.innerHTML = '<span style="color: var(--danger);">❌ Could not read that image file.</span>';
+    }
   };
-  
+
   reader.readAsDataURL(file);
 }
 
@@ -6218,93 +6485,278 @@ function clearUploadedImage() {
 async function scanUploadedImage() {
   const uploadedImage = document.getElementById('uploadedBarcodeImage');
   const statusDiv = document.getElementById('imageScanStatus');
-  
+
   if (!uploadedImage || !uploadedImage.src) {
     showToast('No image to scan', 'error');
     return;
   }
-  
+
+  // The decoding library is CDN-hosted — degrade gracefully if it never loaded.
+  if (!isScannerLibraryAvailable()) {
+    if (statusDiv) {
+      statusDiv.innerHTML = '<span style="color: var(--danger);">❌ Scanner library failed to load (offline?). Type the serial number instead.</span>';
+    }
+    showToast('Scanner library unavailable. Check your connection, or type the serial number manually.', 'error');
+    return;
+  }
+
   // Update status
   if (statusDiv) {
     statusDiv.innerHTML = '<span style="color: var(--primary);">🔍 Scanning image for barcode...</span>';
   }
-  
-  try {
-    // Use Html5Qrcode to scan from image file
-    const html5QrCode = new Html5Qrcode("qrReaderContainer");
-    
-    // Scan the image
-    const decodedText = await html5QrCode.scanFile(uploadedImage.src, true);
-    
-    // Success
+
+  const imageFile = document.getElementById('barcodeImageInput')?.files?.[0] || null;
+  const decode = await decodeBarcodeFromImage(uploadedImage.src, imageFile);
+
+  if (decode.text) {
     if (statusDiv) {
       statusDiv.innerHTML = '<span style="color: var(--success);">✅ Barcode detected! Validating warranty...</span>';
     }
-    
     showToast('Barcode detected successfully', 'success');
-    
+
     // Hide instructions, show results
     document.getElementById('scannerInstructions').style.display = 'none';
     document.getElementById('scannerResults').style.display = 'block';
-    
-    // Validate the scanned code
-    validateWarrantyBySerial(decodedText);
-    
-    // Clean up
-    html5QrCode.clear();
-    
-  } catch (error) {
-    console.error('Failed to scan image:', error);
-    
-    // Try alternative method using Html5QrcodeScanner for image files
-    try {
-      const imageFile = document.getElementById('barcodeImageInput').files[0];
-      if (!imageFile) {
-        throw new Error('No image file available');
-      }
-      
-      // Create a temporary scanner instance
-      const tempScanner = new Html5Qrcode("qrReaderContainer");
-      
-      // Scan the file directly
-      const result = await tempScanner.scanFileV2(imageFile, true);
-      
-      if (result && result.decodedText) {
-        if (statusDiv) {
-          statusDiv.innerHTML = '<span style="color: var(--success);">✅ Barcode detected! Validating warranty...</span>';
-        }
-        
-        showToast('Barcode detected successfully', 'success');
-        
-        // Hide instructions, show results
-        document.getElementById('scannerInstructions').style.display = 'none';
-        document.getElementById('scannerResults').style.display = 'block';
-        
-        // Validate the scanned code
-        validateWarrantyBySerial(result.decodedText);
-        
-        // Clean up
-        tempScanner.clear();
-        return;
-      }
-    } catch (altError) {
-      console.error('Alternative scan method also failed:', altError);
-    }
-    
-    // Both methods failed
-    if (statusDiv) {
-      statusDiv.innerHTML = '<span style="color: var(--danger);">❌ No barcode detected in image. Try a clearer image or use camera scanner.</span>';
-    }
-    
-    showToast('No barcode found in image. Please try a clearer image or use the camera scanner.', 'error');
+
+    validateWarrantyBySerial(decode.text);
+    return;
   }
+
+  // All methods failed
+  if (statusDiv) {
+    statusDiv.innerHTML = '<span style="color: var(--danger);">❌ No barcode detected in image. Try a clearer image or use camera scanner.</span>';
+  }
+  showToast('No barcode found in image. Please try a clearer image or use the camera scanner.', 'error');
+}
+
+/**
+ * Decode a barcode/QR from a still image.
+ *
+ * Tries, in order:
+ *   1. scanFileV2 with the raw File  (best quality, auto-detects format)
+ *   2. scanFileV2 with a downscaled canvas  (very large photos fail on iOS)
+ *   3. scanFile with the FileReference/URL  (older API surface)
+ *
+ * Always resolves — never throws — so the caller can show one clear error.
+ * Returns { text: string|null, method: string|null }.
+ */
+async function decodeBarcodeFromImage(imageSrc, imageFile) {
+  const attempts = [];
+
+  // -- 1) Native file handle -------------------------------------------------
+  if (imageFile && typeof imageFile === 'object') {
+    attempts.push({
+      method: 'scanFileV2(file)',
+      run: async (scanner) => {
+        const res = await scanner.scanFileV2(imageFile, /* showImage */ false);
+        return res && res.decodedText;
+      },
+    });
+  }
+
+  // -- 2) Downscaled canvas (phone photos can be 12MP+, which stalls the WASM
+  //       decoder). 1600px keeps thin 1D barcode bars resolvable; going lower
+  //       makes CODE128 stripes bleed into each other and decode as nothing.
+  attempts.push({
+    method: 'scanFileV2(downscaled)',
+    run: async (scanner) => {
+      const scaled = await downscaleImageToDataUrl(imageSrc, 1600);
+      if (!scaled) throw new Error('Could not downscale image');
+      const res = await scanner.scanFileV2(scaled, false);
+      return res && res.decodedText;
+    },
+  });
+
+  // -- 3) Upscaled + contrast-boosted (small/blurry barcode crops) -----------
+  attempts.push({
+    method: 'scanFileV2(enhanced)',
+    run: async (scanner) => {
+      const enhanced = await enhanceImageForBarcode(imageSrc);
+      if (!enhanced) throw new Error('Could not enhance image');
+      const res = await scanner.scanFileV2(enhanced, false);
+      return res && res.decodedText;
+    },
+  });
+
+  // -- 4) Legacy URL-based API ----------------------------------------------
+  attempts.push({
+    method: 'scanFile(src)',
+    run: async (scanner) => scanner.scanFile(imageSrc, false),
+  });
+
+  for (const attempt of attempts) {
+    let scanner = null;
+    let host = null;
+    try {
+      // The scanner renders into the element it is given. `#qrReaderContainer`
+      // lives inside #scannerCameraView, which is display:none during upload —
+      // a zero-size host makes the decoder fail. Use a real offscreen host.
+      host = createOffscreenScannerHost();
+      scanner = new Html5Qrcode(host.id);
+      const text = await attempt.run(scanner);
+      if (text) return { text: String(text), method: attempt.method };
+    } catch (err) {
+      console.warn(`Image scan attempt "${attempt.method}" failed:`, err);
+    } finally {
+      try { if (scanner) scanner.clear(); } catch { /* element already cleared */ }
+      try { if (host) host.remove(); } catch { /* already gone */ }
+    }
+  }
+
+  return { text: null, method: null };
+}
+
+/**
+ * A real, rendered, but off-screen element for the decoder to draw into.
+ * Giving Html5Qrcode a hidden/zero-size node is what silently produced
+ * "No barcode detected" on every upload.
+ */
+function createOffscreenScannerHost() {
+  const host = document.createElement('div');
+  host.id = 'qrReaderOffscreen-' + Date.now() + '-' + Math.floor(Math.random() * 1e6);
+  host.style.cssText = 'position:fixed;left:-10000px;top:0;width:640px;height:480px;overflow:hidden;opacity:0;pointer-events:none;';
+  document.body.appendChild(host);
+  return host;
+}
+
+/**
+ * Normalise and enlarge an image for stubborn barcodes: grayscale + contrast
+ * stretch, then scale so the shorter edge is ~800px. Helps small, dim, or
+ * slightly blurred captures that the raw decode misses.
+ */
+function enhanceImageForBarcode(src, maxEdge) {
+  maxEdge = maxEdge || 1800;
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = function () {
+      try {
+        const scale = Math.min(Math.max(1, maxEdge / Math.max(img.width, img.height)), 4);
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, w, h);
+
+        const data = ctx.getImageData(0, 0, w, h);
+        const px = data.data;
+        let min = 255;
+        let max = 0;
+        for (let i = 0; i < px.length; i += 4) {
+          const lum = (px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114) | 0;
+          px[i] = px[i + 1] = px[i + 2] = lum;
+          if (lum < min) min = lum;
+          if (lum > max) max = lum;
+        }
+        // Stretch the histogram to pure black/white for maximum bar contrast.
+        const range = Math.max(1, max - min);
+        const midpoint = (min + max) / 2;
+        for (let i = 0; i < px.length; i += 4) {
+          const boosted = ((px[i] - midpoint) * (255 / range)) + 127.5;
+          const v = boosted < 0 ? 0 : boosted > 255 ? 255 : boosted | 0;
+          px[i] = px[i + 1] = px[i + 2] = v;
+        }
+        ctx.putImageData(data, 0, 0);
+        resolve(canvas.toDataURL('image/png'));
+      } catch (err) {
+        console.warn('Enhance failed:', err);
+        resolve(null);
+      }
+    };
+    img.onerror = function () { resolve(null); };
+    img.src = src;
+  });
+}
+
+/** Downscale an image to a max edge length and return a PNG data URL. */
+function downscaleImageToDataUrl(src, maxEdge) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = function () {
+      try {
+        const scale = Math.min(1, maxEdge / Math.max(img.width, img.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/png'));
+      } catch (err) {
+        console.warn('Downscale failed:', err);
+        resolve(null);
+      }
+    };
+    img.onerror = function () { resolve(null); };
+    img.src = src;
+  });
+}
+
+// --- Scanned-payload parsing -----------------------------------------------
+// A scanned string is not always a bare serial number. Device QR codes encode a
+// full URL such as:
+//   https://millennium-smartboard.local/device/MIL-2026-00788?serial=SN-MIL86-2026-00788&customer=QCU
+// Comparing that whole string against serialNumber/id never matches, which is
+// why scanning a device QR used to always fail. Extract the identifying token.
+function extractScannableToken(text) {
+  let candidate = String(text == null ? '' : text).trim();
+  if (!candidate) return '';
+
+  // 1) Explicit query parameter, most reliable: ?serial= / &sn= / &device= / &id=
+  const queryMatch = candidate.match(/[?&](?:serial|serial_number|sn|device|device_id|id)=([^&#]+)/i);
+  if (queryMatch) return decodeURIComponent(queryMatch[1]).trim();
+
+  // 2) .../device/<ID> path segment
+  const pathMatch = candidate.match(/\/device\/([^/?#]+)/i);
+  if (pathMatch) return decodeURIComponent(pathMatch[1]).trim();
+
+  // 3) Last path segment of any URL (covers /warranty/<ID> style payloads)
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(candidate)) {
+    const parts = candidate.split(/[?#]/)[0].split('/').filter(Boolean);
+    if (parts.length > 1) return decodeURIComponent(parts[parts.length - 1]).trim();
+  }
+
+  // 4) Plain serial / barcode text
+  return candidate;
+}
+
+/**
+ * Find a device from a scanned payload.
+ * Tries exact id/serial first, then a tolerant substring match, so partially
+ * printed codes and case differences still resolve.
+ */
+function findDeviceByScannedCode(rawCode, devices) {
+  const list = devices || [];
+  const token = extractScannableToken(rawCode);
+  if (!token) return null;
+
+  const t = token.toLowerCase();
+  const norm = (v) => String(v == null ? '' : v).trim().toLowerCase();
+
+  // Exact matches win.
+  let hit = list.find((d) => norm(d.id) === t || norm(d.serialNumber) === t);
+  if (hit) return hit;
+
+  // Tolerant: either side may be a prefix/suffix of the other.
+  hit = list.find((d) => {
+    const id = norm(d.id);
+    const sn = norm(d.serialNumber);
+    return (id && (id.includes(t) || t.includes(id))) || (sn && (sn.includes(t) || t.includes(sn)));
+  });
+  return hit || null;
 }
 
 // Validate Warranty by Serial Number or Device ID
 async function validateWarrantyBySerial(serialNumber) {
   const resultsDiv = document.getElementById('warrantyValidationDisplay');
   if (!resultsDiv) return;
-  
+
+  // Pull the identifying token out of whatever was scanned (URL, QR, barcode, text).
+  const scannedToken = extractScannableToken(serialNumber);
+
   // Show loading state
   resultsDiv.innerHTML = `
     <div style="text-align: center; padding: 40px;">
@@ -6318,31 +6770,20 @@ async function validateWarrantyBySerial(serialNumber) {
   document.getElementById('scannerResults').style.display = 'block';
   
   try {
-    // First, try to find device by serial number
-    let device = state.devices.find(d => 
-      d.serialNumber === serialNumber || 
-      d.id === serialNumber ||
-      d.serialNumber.includes(serialNumber) ||
-      d.id.includes(serialNumber)
-    );
+    // First, try to find device by serial number / id
+    let device = findDeviceByScannedCode(scannedToken, state.devices);
     
     // If not found in local state, fetch from API
     if (!device) {
       const response = await fetch(`${API_BASE}/devices`);
       const data = await response.json();
       if (data.success && data.data) {
-        const allDevices = data.data;
-        device = allDevices.find(d => 
-          d.serialNumber === serialNumber || 
-          d.id === serialNumber ||
-          d.serialNumber.includes(serialNumber) ||
-          d.id.includes(serialNumber)
-        );
+        device = findDeviceByScannedCode(scannedToken, data.data);
       }
     }
     
     if (!device) {
-      displayWarrantyNotFound(serialNumber);
+      displayWarrantyNotFound(scannedToken);
       return;
     }
     
@@ -6683,6 +7124,28 @@ function displayNoWarrantyRecord(device) {
 
 let currentWarrantyForBarcode = null;
 
+/**
+ * The canonical payload encoded into every printed warranty barcode.
+ *
+ * It MUST be a value the app's own scanner round-trips:
+ *   printed code  ->  scanner  ->  extractScannableToken  ->  findDeviceByScannedCode
+ * A bare serial number satisfies all three. The URL-style payload holds extra
+ * context and still resolves because extractScannableToken understands ?serial=.
+ */
+function buildWarrantyBarcodePayload(device, opts = {}) {
+  const serial = String(device?.serialNumber || '').trim();
+  const id = String(device?.id || '').trim();
+  const token = serial || id;
+  if (!token) return '';
+
+  // Keep the encoded value ASCII-safe for CODE128.
+  if (opts.asUrl) {
+    const base = opts.baseUrl || 'https://millennium-smartboard.local/device';
+    return `${base}/${encodeURIComponent(id || token)}?serial=${encodeURIComponent(token)}`;
+  }
+  return token;
+}
+
 // Open Warranty Barcode Modal
 function openWarrantyBarcodeModal(warrantyId) {
   const warranty = state.warranties.find(w => w.id === warrantyId);
@@ -6724,9 +7187,21 @@ function closeWarrantyBarcodeModal() {
 // Generate Warranty Barcode
 function generateWarrantyBarcode(warranty, device) {
   try {
-    // Generate barcode using device serial number or ID
-    const barcodeValue = device.serialNumber || device.id;
-    
+    // A bare serial/ID keeps the sticker scannable by this app's own scanner
+    // AND by generic 1D barcode readers. (A URL payload would not fit CODE128
+    // legibly at sticker size, and would break external readers.)
+    const barcodeValue = buildWarrantyBarcodePayload(device);
+
+    if (!barcodeValue) {
+      showToast('This device has no serial number or ID to encode', 'error');
+      return;
+    }
+
+    if (typeof JsBarcode === 'undefined') {
+      showToast('Barcode library failed to load (offline?). Check your connection.', 'error');
+      return;
+    }
+
     // Generate barcode using JsBarcode with reduced width for better fit
     JsBarcode("#warrantyBarcode", barcodeValue, {
       format: "CODE128",
@@ -6807,11 +7282,24 @@ function printWarrantyBarcode() {
   
   // Create print-friendly content
   const { warranty, device } = currentWarrantyForBarcode;
-  const barcodeValue = device.serialNumber || device.id;
-  
+  // Same helper as the on-screen barcode, so the sticker and the on-screen
+  // code always encode an identical value.
+  const barcodeValue = buildWarrantyBarcodePayload(device);
+  if (!barcodeValue) {
+    showToast('This device has no serial number or ID to encode', 'error');
+    return;
+  }
+  // Escape for safe embedding inside the inline <script> of the print window.
+  const barcodeValueJs = barcodeValue.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
   // Open new window for printing
   const printWindow = window.open('', '_blank', 'width=600,height=800');
-  
+
+  if (!printWindow) {
+    showToast('Pop-up blocked. Allow pop-ups to print the barcode.', 'error');
+    return;
+  }
+
   printWindow.document.write(`
     <!DOCTYPE html>
     <html>
@@ -6917,7 +7405,7 @@ function printWarrantyBarcode() {
       </div>
       
       <script>
-        JsBarcode("#printBarcode", "${barcodeValue}", {
+        JsBarcode("#printBarcode", "${barcodeValueJs}", {
           format: "CODE128",
           width: 1.5,
           height: 60,
@@ -7104,6 +7592,794 @@ function handleRoleChange(role) {
 
 // --- DELETE Operations ---
 
+// ==========================================================================
+// RENTAL SCHEDULING & DEVICE RENTAL MANAGEMENT
+// ==========================================================================
+
+function renderRentalsView() {
+  const isAdmin = state.currentRole === 'admin';
+  const isCustomer = state.currentRole === 'customer';
+  const stats = state.rentalStats || { totalRentals: 0, revenue: 0, upcoming: 0, overdue: 0, statusBreakdown: {} };
+  const filterStatus = state.rentalFilterStatus || '';
+
+  // Customers only ever see their own bookings. The server already scopes the
+  // data; this is a second layer so both rental views can never disagree.
+  let rentals = getVisibleRentals();
+  if (filterStatus) {
+    rentals = rentals.filter(r => r.status === filterStatus);
+  }
+
+  // Sort by start date descending
+  rentals.sort((a, b) => new Date(b.startDate) - new Date(a.startDate));
+
+  // Calculate stats cards
+  const activeCount = rentals.filter(r => r.status === 'Active').length;
+  const pendingCount = rentals.filter(r => r.status === 'Pending').length;
+  const overdueCount = rentals.filter(r => r.status === 'Overdue').length;
+  // Company-wide stats are admin-only; customers count their own upcoming bookings.
+  const todayStr = new Date().toISOString().split('T')[0];
+  const upcomingCount = isAdmin
+    ? (stats.upcoming || 0)
+    : rentals.filter(r => ['Pending', 'Approved'].includes(r.status) && r.startDate >= todayStr).length;
+
+  return `
+    <div class="page-header-row">
+      <div>
+        <h1 class="page-title">📅 Device Rental Scheduling</h1>
+        <p class="page-description">Manage device rentals, bookings, deliveries, and returns for the Millennium SmartBoard.</p>
+      </div>
+      <div class="page-actions">
+        ${isAdmin || isCustomer ? `<button class="btn btn-primary" onclick="openRentalModal()">📅 New Booking</button>` : ''}
+        <button class="btn btn-secondary" onclick="toggleRentalViewMode()">
+          ${state.rentalViewMode === 'list' ? '🗓️ Calendar View' : '📋 List View'}
+        </button>
+      </div>
+    </div>
+
+    <!-- Rental Stats Cards -->
+    <div class="stat-cards-grid">
+      <div class="stat-card card-online">
+        <div class="stat-header">
+          <span class="ticket-id">Active Rentals</span>
+          <span class="status-pill status-online">Active</span>
+        </div>
+        <div style="font-size:2rem;font-weight:800;font-family:'JetBrains Mono';">${activeCount}</div>
+        <div style="font-size:0.8rem;color:var(--text-muted);">Devices currently rented out</div>
+      </div>
+
+      <div class="stat-card card-warning">
+        <div class="stat-header">
+          <span class="ticket-id">Pending</span>
+          <span class="status-pill status-warning">Pending</span>
+        </div>
+        <div style="font-size:2rem;font-weight:800;font-family:'JetBrains Mono';">${pendingCount}</div>
+        <div style="font-size:0.8rem;color:var(--text-muted);">Awaiting approval</div>
+      </div>
+
+      <div class="stat-card ${overdueCount > 0 ? 'card-offline' : 'card-online'}">
+        <div class="stat-header">
+          <span class="ticket-id">Overdue</span>
+          <span class="status-pill ${overdueCount > 0 ? 'status-offline' : 'status-online'}">${overdueCount > 0 ? 'Overdue' : 'OK'}</span>
+        </div>
+        <div style="font-size:2rem;font-weight:800;font-family:'JetBrains Mono';">${overdueCount}</div>
+        <div style="font-size:0.8rem;color:var(--text-muted);">Past return date</div>
+      </div>
+
+      <div class="stat-card card-online">
+        <div class="stat-header">
+          <span class="ticket-id">Upcoming</span>
+          <span class="status-pill status-online">Soon</span>
+        </div>
+        <div style="font-size:2rem;font-weight:800;font-family:'JetBrains Mono';">${upcomingCount}</div>
+        <div style="font-size:0.8rem;color:var(--text-muted);">Scheduled deliveries</div>
+      </div>
+
+      ${isAdmin ? `
+      <div class="stat-card card-online">
+        <div class="stat-header">
+          <span class="ticket-id">Revenue</span>
+          <span class="status-pill status-online">Total</span>
+        </div>
+        <div style="font-size:2rem;font-weight:800;font-family:'JetBrains Mono';">₱${(stats.revenue || 0).toLocaleString()}</div>
+        <div style="font-size:0.8rem;color:var(--text-muted);">From active & returned rentals</div>
+      </div>
+      ` : ''}
+    </div>
+
+    ${state.rentalViewMode === 'calendar' ? renderRentalCalendar(rentals) : renderRentalList(rentals, isAdmin)}
+  `;
+}
+
+// --- Rental List View ---
+function renderRentalList(rentals, isAdmin) {
+  if (rentals.length === 0) {
+    return `
+      <div class="glass-panel" style="padding:48px;text-align:center;">
+        <div style="font-size:3rem;margin-bottom:16px;">📅</div>
+        <h3 style="font-size:1.2rem;font-weight:700;margin-bottom:8px;">No Rentals Found</h3>
+        <p style="font-size:0.88rem;color:var(--text-muted);">${isAdmin ? 'Click "New Booking" to schedule a device rental.' : 'No rental history yet.'}</p>
+      </div>
+    `;
+  }
+
+  // Filter bar
+  const statusOptions = ['Pending', 'Approved', 'Active', 'Returned', 'Overdue', 'Cancelled'];
+
+  return `
+    <!-- Filter Bar -->
+    <div class="glass-panel" style="padding:12px 18px;display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+      <span style="font-size:0.85rem;font-weight:600;color:var(--text-muted);">Filter:</span>
+      <select id="rentalStatusFilter" onchange="setRentalFilter(this.value)" style="
+        padding:6px 14px;border-radius:8px;border:1px solid var(--border-subtle,rgba(255,255,255,0.1));
+        background:var(--surface-elevated,#1e1e2e);color:var(--text-primary,#fff);font-size:0.82rem;
+      ">
+        <option value="">All Rentals</option>
+        ${statusOptions.map(s => `<option value="${s}" ${state.rentalFilterStatus === s ? 'selected' : ''}>${s}</option>`).join('')}
+      </select>
+      <span style="margin-left:auto;font-size:0.82rem;color:var(--text-muted);">${rentals.length} rental(s) found</span>
+    </div>
+
+    <!-- Rentals Table -->
+    <div class="glass-panel" style="padding:0;overflow:hidden;">
+      <div class="data-table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Rental #</th>
+              <th>Customer</th>
+              <th>Device</th>
+              <th>Period</th>
+              <th>Cost</th>
+              <th>Status</th>
+              <th>Priority</th>
+              ${isAdmin ? '<th>Actions</th>' : ''}
+            </tr>
+          </thead>
+          <tbody>
+            ${rentals.map(r => {
+              const statusClass = r.status === 'Active' ? 'status-online'
+                : r.status === 'Pending' ? 'status-warning'
+                : r.status === 'Overdue' ? 'status-offline'
+                : r.status === 'Cancelled' ? 'status-offline'
+                : r.status === 'Returned' ? 'status-online'
+                : 'status-online';
+
+              const days = Math.ceil((new Date(r.endDate) - new Date(r.startDate)) / (1000 * 60 * 60 * 24)) + 1;
+
+              return `
+                <tr style="cursor:pointer;" onclick="viewRentalDetail('${r.id}')">
+                  <td><span class="ticket-id">${r.rentalNumber}</span></td>
+                  <td><strong>${r.customerName}</strong></td>
+                  <td>${r.deviceModel}<br><span style="font-size:0.76rem;color:var(--text-muted);">${r.serialNumber}</span></td>
+                  <td>
+                    <div style="font-size:0.82rem;">${formatDate(r.startDate)} → ${formatDate(r.endDate)}</div>
+                    <div style="font-size:0.74rem;color:var(--text-muted);">${days} day(s)</div>
+                  </td>
+                  <td><strong>₱${r.totalCost.toLocaleString()}</strong><br><span style="font-size:0.74rem;color:var(--text-muted);">₱${r.dailyRate}/day</span></td>
+                  <td><span class="status-pill ${statusClass}">${r.status}</span></td>
+                  <td>
+                    <span style="
+                      font-size:0.74rem;padding:3px 8px;border-radius:6px;font-weight:600;
+                      ${r.priority === 'High' ? 'background:rgba(244,63,94,0.15);color:#f43f5e;' :
+                        r.priority === 'Medium' ? 'background:rgba(245,158,11,0.15);color:#f59e0b;' :
+                        'background:rgba(34,197,94,0.15);color:#22c55e;'}
+                    ">${r.priority}</span>
+                  </td>
+                  ${isAdmin ? `
+                  <td onclick="event.stopPropagation();">
+                    ${r.status === 'Pending' ? `<button class="btn btn-success btn-sm" onclick="approveRental('${r.id}')" style="font-size:0.74rem;padding:4px 10px;">✓ Approve</button>` : ''}
+                    ${r.status === 'Approved' ? `<button class="btn btn-primary btn-sm" onclick="activateRental('${r.id}')" style="font-size:0.74rem;padding:4px 10px;">▶ Activate</button>` : ''}
+                    ${r.status === 'Active' ? `<button class="btn btn-secondary btn-sm" onclick="returnRental('${r.id}')" style="font-size:0.74rem;padding:4px 10px;">↩ Return</button>` : ''}
+                    <button class="btn btn-secondary btn-sm" onclick="editRental('${r.id}')" style="font-size:0.74rem;padding:4px 10px;">✏️</button>
+                  </td>
+                  ` : ''}
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+// --- Rental Calendar View ---
+function renderRentalCalendar(rentals) {
+  const month = state.rentalCalendarMonth;
+  const year = state.rentalCalendarYear;
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  // Build calendar cells
+  let cells = '';
+  // Empty cells before first day
+  for (let i = 0; i < firstDay; i++) {
+    cells += `<div class="rental-cal-day rental-cal-day-empty"></div>`;
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const dayRentals = rentals.filter(r => {
+      const start = new Date(r.startDate);
+      const end = new Date(r.endDate);
+      const check = new Date(dateStr);
+      return check >= start && check <= end;
+    });
+
+    const hasActive = dayRentals.some(r => r.status === 'Active');
+    const hasPending = dayRentals.some(r => r.status === 'Pending');
+    const hasOverdue = dayRentals.some(r => r.status === 'Overdue');
+
+    const bgColor = hasActive ? 'rgba(34,197,94,0.12)' : hasOverdue ? 'rgba(244,63,94,0.12)' : hasPending ? 'rgba(245,158,11,0.12)' : 'transparent';
+
+    cells += `
+      <div class="rental-cal-day" style="background:${bgColor};" onclick="openRentalDate('${dateStr}')">
+        <div class="rental-cal-day-num">${d}</div>
+        ${dayRentals.slice(0, 3).map(r => {
+          const sClass = r.status === 'Active' ? 'rc-active' : r.status === 'Overdue' ? 'rc-overdue' : r.status === 'Pending' ? 'rc-pending' : 'rc-default';
+          return `<div class="rental-cal-event ${sClass}" onclick="event.stopPropagation();viewRentalDetail('${r.id}')" title="${r.rentalNumber} - ${r.customerName}">${r.rentalNumber}</div>`;
+        }).join('')}
+        ${dayRentals.length > 3 ? `<div style="font-size:0.68rem;color:var(--text-muted);padding:2px 4px;">+${dayRentals.length - 3} more</div>` : ''}
+      </div>
+    `;
+  }
+
+  return `
+    <div class="glass-panel" style="padding:20px;">
+      <!-- Calendar Header -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <button class="btn btn-secondary btn-sm" onclick="changeRentalMonth(-1)">◀ Prev</button>
+        <h3 style="font-size:1.15rem;font-weight:800;">${monthNames[month]} ${year}</h3>
+        <button class="btn btn-secondary btn-sm" onclick="changeRentalMonth(1)">Next ▶</button>
+      </div>
+
+      <!-- Calendar Grid -->
+      <div class="rental-cal-grid">
+        <div class="rental-cal-dow">Sun</div>
+        <div class="rental-cal-dow">Mon</div>
+        <div class="rental-cal-dow">Tue</div>
+        <div class="rental-cal-dow">Wed</div>
+        <div class="rental-cal-dow">Thu</div>
+        <div class="rental-cal-dow">Fri</div>
+        <div class="rental-cal-dow">Sat</div>
+        ${cells}
+      </div>
+
+      <!-- Legend -->
+      <div style="display:flex;gap:16px;margin-top:16px;font-size:0.78rem;">
+        <div style="display:flex;align-items:center;gap:6px;"><span style="width:12px;height:12px;border-radius:4px;background:rgba(34,197,94,0.4);"></span>Active</div>
+        <div style="display:flex;align-items:center;gap:6px;"><span style="width:12px;height:12px;border-radius:4px;background:rgba(245,158,11,0.4);"></span>Pending</div>
+        <div style="display:flex;align-items:center;gap:6px;"><span style="width:12px;height:12px;border-radius:4px;background:rgba(244,63,94,0.4);"></span>Overdue</div>
+      </div>
+    </div>
+  `;
+}
+
+// --- Rental Helper Functions ---
+function formatDate(dateStr) {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function setRentalFilter(status) {
+  state.rentalFilterStatus = status;
+  renderApp();
+}
+
+function toggleRentalViewMode() {
+  state.rentalViewMode = state.rentalViewMode === 'list' ? 'calendar' : 'list';
+  renderApp();
+}
+
+function changeRentalMonth(delta) {
+  let m = state.rentalCalendarMonth + delta;
+  let y = state.rentalCalendarYear;
+  if (m < 0) { m = 11; y--; }
+  if (m > 11) { m = 0; y++; }
+  state.rentalCalendarMonth = m;
+  state.rentalCalendarYear = y;
+  renderApp();
+}
+
+function openRentalDate(dateStr) {
+  // Just show rentals for that date - could open a modal
+  const dayRentals = getVisibleRentals().filter(r => {
+    const check = new Date(dateStr);
+    return check >= new Date(r.startDate) && check <= new Date(r.endDate);
+  });
+  if (dayRentals.length === 0) {
+    showToast(`No rentals on ${formatDate(dateStr)}`, 'info');
+  } else {
+    showToast(`${dayRentals.length} rental(s) on ${formatDate(dateStr)}`, 'info');
+  }
+}
+
+// --- Create/Edit Rental Modal ---
+function openRentalModal(rentalId, prefillDeviceId) {
+  const editing = rentalId ? getVisibleRentals().find(r => r.id === rentalId) : null;
+  const isAdmin = state.currentRole === 'admin';
+  const isCustomer = state.currentRole === 'customer';
+  const today = new Date().toISOString().split('T')[0];
+
+  const customers = state.customers || [];
+  const devices = state.devices || [];
+
+  // For customers, auto-match their linked customer record
+  let matchedCustomer = null;
+  if (isCustomer) {
+    const userOrg = (state.currentUser.organization || '').trim().toLowerCase();
+    const userCustId = (state.currentUser.customerId || '').trim().toLowerCase();
+    matchedCustomer = customers.find(c =>
+      (userCustId && c.id.toLowerCase() === userCustId) ||
+      (userOrg && c.organizationName.trim().toLowerCase() === userOrg)
+    ) || null;
+
+    // A booking must be attributable to a real customer record, otherwise it
+    // would never show up in the customer's own list.
+    if (!matchedCustomer) {
+      showToast(
+        `Your account isn't linked to an organization yet${state.currentUser.organization ? ` ("${state.currentUser.organization}")` : ''}. Please contact an administrator before booking.`,
+        'error'
+      );
+      return;
+    }
+  }
+
+  // Remove existing modal
+  const existing = document.getElementById('rentalModalOverlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'rentalModalOverlay';
+  overlay.style.cssText = `
+    position:fixed;inset:0;z-index:9999;
+    background:rgba(0,0,0,0.65);
+    display:flex;align-items:center;justify-content:center;
+    backdrop-filter:blur(4px);animation:fadeIn 0.2s ease;
+    overflow-y:auto;padding:20px;
+  `;
+
+  overlay.innerHTML = `
+    <div style="
+      background:var(--surface-elevated,#1e1e2e);
+      border:1px solid var(--border-subtle,rgba(255,255,255,0.1));
+      border-radius:16px;padding:32px;max-width:680px;width:95%;
+      box-shadow:0 20px 60px rgba(0,0,0,0.6);
+    ">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;">
+        <h3 style="font-size:1.3rem;font-weight:800;">${editing ? '✏️ Edit Rental' : '📅 New Device Rental Booking'}</h3>
+        <button onclick="document.getElementById('rentalModalOverlay').remove()" style="
+          background:none;border:none;color:var(--text-muted);font-size:1.5rem;cursor:pointer;
+        ">×</button>
+      </div>
+
+      <form id="rentalForm" onsubmit="submitRentalForm(event, '${rentalId || ''}')" style="display:flex;flex-direction:column;gap:16px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div>
+            <label style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:6px;">Customer / Company *</label>
+            ${isCustomer ? `
+              <input type="text" value="${matchedCustomer.organizationName}" disabled style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border-subtle,rgba(255,255,255,0.1));background:var(--surface,#15151f);color:var(--text-muted,#94a3b8);font-size:0.86rem;" />
+              <input type="hidden" name="customerId" value="${matchedCustomer.id}">
+              <div style="font-size:0.72rem;color:var(--text-muted);margin-top:4px;">Your booking is filed under your own organization.</div>
+            ` : `
+              <select name="customerId" required ${editing ? 'disabled' : ''} style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border-subtle,rgba(255,255,255,0.1));background:var(--surface,#15151f);color:var(--text-primary,#fff);font-size:0.86rem;">
+                <option value="">Select company...</option>
+                ${customers.map(c => `<option value="${c.id}" ${(editing && editing.customerId === c.id) ? 'selected' : ''}>${c.organizationName}</option>`).join('')}
+              </select>
+            `}
+          </div>
+          <div>
+            <label style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:6px;">Device *</label>
+            <select name="deviceId" required ${editing ? 'disabled' : ''} style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border-subtle,rgba(255,255,255,0.1));background:var(--surface,#15151f);color:var(--text-primary,#fff);font-size:0.86rem;">
+              <option value="">Select device...</option>
+              ${devices.map(d => `<option value="${d.id}" ${(editing && editing.deviceId === d.id) || (prefillDeviceId === d.id) ? 'selected' : ''}>${d.model} (${d.serialNumber})</option>`).join('')}
+            </select>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div>
+            <label style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:6px;">Start Date *</label>
+            <input type="date" name="startDate" required value="${editing ? editing.startDate : today}" min="${today}" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border-subtle,rgba(255,255,255,0.1));background:var(--surface,#15151f);color:var(--text-primary,#fff);font-size:0.86rem;" />
+          </div>
+          <div>
+            <label style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:6px;">End Date *</label>
+            <input type="date" name="endDate" required value="${editing ? editing.endDate : today}" min="${today}" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border-subtle,rgba(255,255,255,0.1));background:var(--surface,#15151f);color:var(--text-primary,#fff);font-size:0.86rem;" />
+          </div>
+        </div>
+
+        ${isAdmin ? `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div>
+            <label style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:6px;">Daily Rate (₱)</label>
+            <input type="number" name="dailyRate" value="${editing ? editing.dailyRate : 500}" min="0" step="50" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border-subtle,rgba(255,255,255,0.1));background:var(--surface,#15151f);color:var(--text-primary,#fff);font-size:0.86rem;" />
+          </div>
+          <div>
+            <label style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:6px;">Deposit (₱)</label>
+            <input type="number" name="depositAmount" value="${editing ? editing.depositAmount : 5000}" min="0" step="100" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border-subtle,rgba(255,255,255,0.1));background:var(--surface,#15151f);color:var(--text-primary,#fff);font-size:0.86rem;" />
+          </div>
+        </div>
+        ` : `
+        <div style="background:rgba(0,242,254,0.06);border:1px solid rgba(0,242,254,0.15);border-radius:8px;padding:12px 16px;font-size:0.82rem;color:var(--text-muted);">
+          💡 Pricing (daily rate & deposit) will be set by our admin team after your booking is reviewed. You will be notified once your booking is approved.
+        </div>
+        `}
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div>
+            <label style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:6px;">Priority</label>
+            <select name="priority" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border-subtle,rgba(255,255,255,0.1));background:var(--surface,#15151f);color:var(--text-primary,#fff);font-size:0.86rem;">
+              <option value="Low" ${editing && editing.priority === 'Low' ? 'selected' : ''}>Low</option>
+              <option value="Medium" ${(!editing || editing.priority === 'Medium') ? 'selected' : ''}>Medium</option>
+              <option value="High" ${editing && editing.priority === 'High' ? 'selected' : ''}>High</option>
+            </select>
+          </div>
+          <div>
+            <label style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:6px;">Purpose / Event Type</label>
+            <input type="text" name="purpose" value="${editing ? editing.purpose : ''}" placeholder="e.g. Conference, Training, Exhibit" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border-subtle,rgba(255,255,255,0.1));background:var(--surface,#15151f);color:var(--text-primary,#fff);font-size:0.86rem;" />
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div>
+            <label style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:6px;">Delivery Date</label>
+            <input type="date" name="deliveryDate" value="${editing && editing.deliveryDate ? editing.deliveryDate.split('T')[0] : ''}" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border-subtle,rgba(255,255,255,0.1));background:var(--surface,#15151f);color:var(--text-primary,#fff);font-size:0.86rem;" />
+          </div>
+          <div>
+            <label style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:6px;">Pickup Date</label>
+            <input type="date" name="pickupDate" value="${editing && editing.pickupDate ? editing.pickupDate.split('T')[0] : ''}" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border-subtle,rgba(255,255,255,0.1));background:var(--surface,#15151f);color:var(--text-primary,#fff);font-size:0.86rem;" />
+          </div>
+        </div>
+
+        <div>
+          <label style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:6px;">Delivery Address</label>
+          <input type="text" name="deliveryAddress" value="${editing ? editing.deliveryAddress : ''}" placeholder="Where should the device be delivered?" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border-subtle,rgba(255,255,255,0.1));background:var(--surface,#15151f);color:var(--text-primary,#fff);font-size:0.86rem;" />
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div>
+            <label style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:6px;">Contact Person</label>
+            <input type="text" name="contactPerson" value="${editing ? editing.contactPerson : isCustomer ? (state.currentUser.fullName || state.currentUser.username) : ''}" placeholder="Full name" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border-subtle,rgba(255,255,255,0.1));background:var(--surface,#15151f);color:var(--text-primary,#fff);font-size:0.86rem;" />
+          </div>
+          <div>
+            <label style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:6px;">Contact Phone</label>
+            <input type="text" name="contactPhone" value="${editing ? editing.contactPhone : ''}" placeholder="+63..." style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border-subtle,rgba(255,255,255,0.1));background:var(--surface,#15151f);color:var(--text-primary,#fff);font-size:0.86rem;" />
+          </div>
+        </div>
+
+        <div>
+          <label style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:6px;">Contact Email</label>
+          <input type="email" name="contactEmail" value="${editing ? editing.contactEmail : isCustomer ? (state.currentUser.email || '') : ''}" placeholder="email@company.com" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border-subtle,rgba(255,255,255,0.1));background:var(--surface,#15151f);color:var(--text-primary,#fff);font-size:0.86rem;" />
+        </div>
+
+        <div>
+          <label style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:6px;">Notes</label>
+          <textarea name="notes" rows="3" placeholder="Any special instructions or remarks..." style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border-subtle,rgba(255,255,255,0.1));background:var(--surface,#15151f);color:var(--text-primary,#fff);font-size:0.86rem;resize:vertical;">${editing ? editing.notes : ''}</textarea>
+        </div>
+
+        <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:8px;">
+          <button type="button" onclick="document.getElementById('rentalModalOverlay').remove()" style="
+            padding:12px 24px;border-radius:8px;border:1px solid var(--border-subtle,#333);
+            background:transparent;color:var(--text-primary,#fff);font-size:0.88rem;
+            font-weight:600;cursor:pointer;
+          ">Cancel</button>
+          <button type="submit" style="
+            padding:12px 24px;border-radius:8px;border:none;
+            background:linear-gradient(135deg,#0ea5e9,#0284c7);
+            color:#fff;font-size:0.88rem;font-weight:700;cursor:pointer;
+            box-shadow:0 4px 15px rgba(14,165,233,0.4);
+          ">${editing ? '💾 Update Booking' : '📅 Create Booking'}</button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+}
+
+async function submitRentalForm(event, rentalId) {
+  event.preventDefault();
+  const form = event.target;
+  const formData = new FormData(form);
+  const data = Object.fromEntries(formData.entries());
+
+  // Convert numeric fields
+  data.dailyRate = parseFloat(data.dailyRate) || 500;
+  data.depositAmount = parseFloat(data.depositAmount) || 0;
+
+  try {
+    let res, json;
+    if (rentalId) {
+      // Editing
+      res = await fetch(`${API_BASE}/rentals/${rentalId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+    } else {
+      // Creating
+      res = await fetch(`${API_BASE}/rentals`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+    }
+    json = await res.json();
+
+    if (json.success) {
+      showToast(`✅ Rental ${rentalId ? 'updated' : 'created'} successfully!`, 'success');
+      document.getElementById('rentalModalOverlay')?.remove();
+      await fetchAllData();
+    } else {
+      showToast(`❌ ${json.error}`, 'error');
+    }
+  } catch (err) {
+    showToast('Network error. Could not save rental.', 'error');
+  }
+}
+
+// --- View Rental Detail Modal ---
+function viewRentalDetail(id) {
+  // Scoped lookup: a customer can only ever open a rental they own.
+  const rental = getVisibleRentals().find(r => r.id === id);
+  if (!rental) return;
+
+  const isAdmin = state.currentRole === 'admin';
+  const days = Math.ceil((new Date(rental.endDate) - new Date(rental.startDate)) / (1000 * 60 * 60 * 24)) + 1;
+
+  const statusClass = rental.status === 'Active' ? 'status-online'
+    : rental.status === 'Pending' ? 'status-warning'
+    : rental.status === 'Overdue' ? 'status-offline'
+    : rental.status === 'Cancelled' ? 'status-offline'
+    : 'status-online';
+
+  const existing = document.getElementById('rentalDetailOverlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'rentalDetailOverlay';
+  overlay.style.cssText = `
+    position:fixed;inset:0;z-index:9999;
+    background:rgba(0,0,0,0.65);
+    display:flex;align-items:center;justify-content:center;
+    backdrop-filter:blur(4px);animation:fadeIn 0.2s ease;
+    overflow-y:auto;padding:20px;
+  `;
+
+  overlay.innerHTML = `
+    <div style="
+      background:var(--surface-elevated,#1e1e2e);
+      border:1px solid var(--border-subtle,rgba(255,255,255,0.1));
+      border-radius:16px;padding:32px;max-width:600px;width:95%;
+      box-shadow:0 20px 60px rgba(0,0,0,0.6);
+    ">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+        <div>
+          <span class="ticket-id" style="font-size:1rem;">${rental.rentalNumber}</span>
+          <h3 style="font-size:1.2rem;font-weight:800;margin-top:4px;">${rental.customerName}</h3>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <span class="status-pill ${statusClass}">${rental.status}</span>
+          <button onclick="document.getElementById('rentalDetailOverlay').remove()" style="background:none;border:none;color:var(--text-muted);font-size:1.5rem;cursor:pointer;">×</button>
+        </div>
+      </div>
+
+      <!-- Rental Details -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+        <div style="background:var(--surface,#15151f);padding:14px;border-radius:10px;">
+          <div style="font-size:0.74rem;color:var(--text-muted);margin-bottom:4px;">Device</div>
+          <div style="font-weight:700;">${rental.deviceModel}</div>
+          <div style="font-size:0.8rem;color:var(--text-muted);">S/N: ${rental.serialNumber}</div>
+        </div>
+        <div style="background:var(--surface,#15151f);padding:14px;border-radius:10px;">
+          <div style="font-size:0.74rem;color:var(--text-muted);margin-bottom:4px;">Rental Period</div>
+          <div style="font-weight:700;">${formatDate(rental.startDate)}</div>
+          <div style="font-size:0.8rem;color:var(--text-muted);">to ${formatDate(rental.endDate)} (${days} days)</div>
+        </div>
+        <div style="background:var(--surface,#15151f);padding:14px;border-radius:10px;">
+          <div style="font-size:0.74rem;color:var(--text-muted);margin-bottom:4px;">Total Cost</div>
+          <div style="font-weight:700;font-size:1.15rem;">₱${rental.totalCost.toLocaleString()}</div>
+          <div style="font-size:0.8rem;color:var(--text-muted);">₱${rental.dailyRate}/day + ₱${rental.depositAmount} deposit</div>
+        </div>
+        <div style="background:var(--surface,#15151f);padding:14px;border-radius:10px;">
+          <div style="font-size:0.74rem;color:var(--text-muted);margin-bottom:4px;">Priority</div>
+          <div style="font-weight:700;">${rental.priority}</div>
+          <div style="font-size:0.8rem;color:var(--text-muted);">${rental.purpose || 'No purpose specified'}</div>
+        </div>
+      </div>
+
+      ${rental.deliveryAddress ? `
+        <div style="background:var(--surface,#15151f);padding:14px;border-radius:10px;margin-bottom:16px;">
+          <div style="font-size:0.74rem;color:var(--text-muted);margin-bottom:4px;">Delivery Address</div>
+          <div style="font-weight:600;">${rental.deliveryAddress}</div>
+        </div>
+      ` : ''}
+
+      ${(rental.contactPerson || rental.contactPhone || rental.contactEmail) ? `
+        <div style="background:var(--surface,#15151f);padding:14px;border-radius:10px;margin-bottom:16px;">
+          <div style="font-size:0.74rem;color:var(--text-muted);margin-bottom:4px;">Contact</div>
+          <div style="font-weight:600;">${rental.contactPerson || '—'}</div>
+          <div style="font-size:0.8rem;color:var(--text-muted);">${rental.contactPhone || ''} ${rental.contactEmail ? '· ' + rental.contactEmail : ''}</div>
+        </div>
+      ` : ''}
+
+      ${rental.notes ? `
+        <div style="background:var(--surface,#15151f);padding:14px;border-radius:10px;margin-bottom:16px;">
+          <div style="font-size:0.74rem;color:var(--text-muted);margin-bottom:4px;">Notes</div>
+          <div style="font-size:0.86rem;">${rental.notes}</div>
+        </div>
+      ` : ''}
+
+      ${rental.actualReturnDate ? `
+        <div style="background:rgba(34,197,94,0.08);padding:14px;border-radius:10px;margin-bottom:16px;border:1px solid rgba(34,197,94,0.2);">
+          <div style="font-size:0.74rem;color:#22c55e;margin-bottom:4px;">✓ Device Returned</div>
+          <div style="font-weight:600;">Return Date: ${formatDate(rental.actualReturnDate)}</div>
+        </div>
+      ` : ''}
+
+      <!-- Action Buttons -->
+      ${isAdmin ? `
+        <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid var(--border-subtle,rgba(255,255,255,0.08));">
+          ${rental.status === 'Pending' ? `<button class="btn btn-success btn-sm" onclick="approveRental('${rental.id}')" style="padding:8px 16px;">✓ Approve</button>` : ''}
+          ${rental.status === 'Approved' ? `<button class="btn btn-primary btn-sm" onclick="activateRental('${rental.id}')" style="padding:8px 16px;">▶ Activate</button>` : ''}
+          ${rental.status === 'Active' ? `<button class="btn btn-secondary btn-sm" onclick="returnRental('${rental.id}')" style="padding:8px 16px;">↩ Mark Returned</button>` : ''}
+          ${rental.status === 'Active' ? `<button class="btn btn-warning btn-sm" onclick="markOverdue('${rental.id}')" style="padding:8px 16px;">⚠ Mark Overdue</button>` : ''}
+          ${(rental.status === 'Pending' || rental.status === 'Approved') ? `<button class="btn btn-secondary btn-sm" onclick="cancelRental('${rental.id}')" style="padding:8px 16px;">✕ Cancel</button>` : ''}
+          <button class="btn btn-secondary btn-sm" onclick="editRental('${rental.id}')" style="padding:8px 16px;">✏️ Edit</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteRental('${rental.id}')" style="padding:8px 16px;background:rgba(244,63,94,0.15);color:#f43f5e;border:1px solid #f43f5e55;">🗑️ Delete</button>
+        </div>
+      ` : ''}
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+}
+
+// --- Rental Status Actions ---
+async function approveRental(id) {
+  try {
+    const res = await fetch(`${API_BASE}/rentals/${id}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'Approved' }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast('✅ Rental approved.', 'success');
+      document.getElementById('rentalDetailOverlay')?.remove();
+      await fetchAllData();
+    } else {
+      showToast(`❌ ${data.error}`, 'error');
+    }
+  } catch (e) {
+    showToast('Network error.', 'error');
+  }
+}
+
+async function activateRental(id) {
+  try {
+    const res = await fetch(`${API_BASE}/rentals/${id}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'Active' }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast('▶ Rental activated. Device is now rented out.', 'success');
+      document.getElementById('rentalDetailOverlay')?.remove();
+      await fetchAllData();
+    } else {
+      showToast(`❌ ${data.error}`, 'error');
+    }
+  } catch (e) {
+    showToast('Network error.', 'error');
+  }
+}
+
+async function returnRental(id) {
+  showDeleteConfirm(
+    `Mark this rental as <strong>Returned</strong>?<br><br>The device will be available for booking again.`,
+    async () => {
+      try {
+        const res = await fetch(`${API_BASE}/rentals/${id}/status`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'Returned' }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast('↩ Rental marked as returned.', 'success');
+          document.getElementById('rentalDetailOverlay')?.remove();
+          await fetchAllData();
+        } else {
+          showToast(`❌ ${data.error}`, 'error');
+        }
+      } catch (e) {
+        showToast('Network error.', 'error');
+      }
+    }
+  );
+}
+
+async function markOverdue(id) {
+  try {
+    const res = await fetch(`${API_BASE}/rentals/${id}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'Overdue' }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast('⚠ Rental marked as overdue.', 'warning');
+      document.getElementById('rentalDetailOverlay')?.remove();
+      await fetchAllData();
+    } else {
+      showToast(`❌ ${data.error}`, 'error');
+    }
+  } catch (e) {
+    showToast('Network error.', 'error');
+  }
+}
+
+async function cancelRental(id) {
+  showDeleteConfirm(
+    `Cancel this rental booking?<br><br>This action cannot be undone.`,
+    async () => {
+      try {
+        const res = await fetch(`${API_BASE}/rentals/${id}/status`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'Cancelled' }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast('✕ Rental cancelled.', 'info');
+          document.getElementById('rentalDetailOverlay')?.remove();
+          await fetchAllData();
+        } else {
+          showToast(`❌ ${data.error}`, 'error');
+        }
+      } catch (e) {
+        showToast('Network error.', 'error');
+      }
+    }
+  );
+}
+
+function editRental(id) {
+  document.getElementById('rentalDetailOverlay')?.remove();
+  openRentalModal(id);
+}
+
+async function deleteRental(id) {
+  // Scoped lookup: only an admin can reach this, and only for a rental they can see.
+  const rental = getVisibleRentals().find(r => r.id === id);
+  if (!rental) return;
+  showDeleteConfirm(
+    `Permanently delete rental <strong>${rental.rentalNumber}</strong>?<br><br>Customer: ${rental.customerName}<br>Device: ${rental.deviceModel}<br>This action cannot be undone.`,
+    async () => {
+      try {
+        const res = await fetch(`${API_BASE}/rentals/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) {
+          showToast(`✅ Rental ${rental.rentalNumber} deleted.`, 'success');
+          document.getElementById('rentalDetailOverlay')?.remove();
+          await fetchAllData();
+        } else {
+          showToast(`❌ ${data.error}`, 'error');
+        }
+      } catch (e) {
+        showToast('Network error. Could not delete rental.', 'error');
+      }
+    }
+  );
+}
+
+// --- DELETE Operations ---
+
 function showDeleteConfirm(message, onConfirm) {
   // Remove existing if any
   const existing = document.getElementById('deleteConfirmOverlay');
@@ -7266,12 +8542,16 @@ function toggleMobileSidebar(open) {
 }
 
 // Initialize Application on Page Load
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
   // Initialize theme first to avoid flash
   initTheme();
 
   // --- AUTH GATE: check for existing session ---
-  const savedUser = getAuthSession();
+  let savedUser = getAuthSession();
+  if (savedUser) {
+    // Reconcile the cached session with the database before trusting it.
+    savedUser = await refreshAuthSession();
+  }
   if (savedUser) {
     // Restore session without showing login
     state.currentUser = savedUser;
