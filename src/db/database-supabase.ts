@@ -534,7 +534,14 @@ class MillenniumDatabase {
       values.push(id);
       await pool.query(`UPDATE users SET ${updates.join(', ')} WHERE id = $${paramCount}`, values);
 
-      const result = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
+      // Return the same camelCase shape as getUsers(), and never the password
+      // hash. (A raw `SELECT *` here leaked password_hash and returned
+      // snake_case keys, so callers reading `fullName` silently got undefined.)
+      const result = await pool.query(`
+        SELECT id, username, email, full_name as "fullName", role, location,
+               allowed_locations as "allowedLocations", organization, created_at as "createdAt"
+        FROM users WHERE id = $1
+      `, [id]);
       return { success: true, user: result.rows[0] };
     } catch (err: any) {
       return { success: false, error: err.message };

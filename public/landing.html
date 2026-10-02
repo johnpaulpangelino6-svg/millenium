@@ -1,0 +1,1039 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0284c7" />
+  <title>Getting Started | Millennium SmartBoard Management System</title>
+  <meta name="description" content="A guided tour of the Millennium SmartBoard Management System — features, how it works, and what each user role can do." />
+
+  <!--
+    BOOT SCRIPT — must stay here, BEFORE the stylesheets, so it runs before the
+    first paint. <html> defaults to dark; without this the page painted dark and
+    then flipped to light for anyone whose saved theme is light, because the
+    theme script at the bottom of the body runs only after the whole page has
+    already rendered.
+  -->
+  <script>
+    (function () {
+      var root = document.documentElement;
+      try {
+        var saved = localStorage.getItem('millennium-theme');
+        if (saved === 'light') { root.removeAttribute('data-theme'); }
+        else { root.setAttribute('data-theme', 'dark'); }
+      } catch (e) {
+        // localStorage throws in some private-browsing modes; dark is fine.
+      }
+    })();
+  </script>
+
+  <link rel="icon" href="/images/millennium-logo.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;800;900&family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    /* ==================================================================
+       MILLENNIUM SMARTBOARD — NEW USER LANDING / GUIDE
+       Self-contained styles. Deliberately does NOT load /css/style.css so
+       this page cannot inherit the app's global theme overrides.
+       Scroll behaviour: normal document flow. Nothing is position:fixed.
+       ================================================================== */
+
+    :root {
+      --bg:            #f5f7fb;
+      --surface:       #ffffff;
+      --surface-2:     #fbfcfe;
+      --border:        #e4e9f2;
+      --border-strong: #cfd8e6;
+      --text:          #0d1526;
+      --text-2:        #47536b;
+      --text-3:        #6b7891;
+      --brand:         #0284c7;
+      --brand-ink:     #0369a1;
+      --accent:        #00c2d1;
+      --violet:        #7c3aed;
+      --grad:          linear-gradient(135deg, #0284c7 0%, #2563eb 48%, #7c3aed 100%);
+      --grad-text:     linear-gradient(120deg, #0284c7 0%, #2563eb 45%, #7c3aed 100%);
+      --ring:          rgba(2, 132, 199, 0.28);
+      --shadow-sm:     0 1px 2px rgba(13, 21, 38, .05), 0 1px 3px rgba(13, 21, 38, .04);
+      --shadow-md:     0 8px 24px -6px rgba(13, 21, 38, .10), 0 2px 8px -2px rgba(13, 21, 38, .05);
+      --shadow-lg:     0 24px 56px -18px rgba(13, 21, 38, .22), 0 8px 20px -8px rgba(13, 21, 38, .08);
+      --header-bg:     rgba(255, 255, 255, .86);
+      --code-bg:       #eef2f8;
+      --radius:        16px;
+      --radius-lg:     22px;
+      --maxw:          1180px;
+      --ease:          cubic-bezier(.4, 0, .2, 1);
+    }
+
+    [data-theme="dark"] {
+      --bg:            #060b19;
+      --surface:       #0c1424;
+      --surface-2:     #111c31;
+      --border:        #1d2a44;
+      --border-strong: #2b3c5e;
+      --text:          #e9eefb;
+      --text-2:        #a8b6d1;
+      --text-3:        #7e8dab;
+      --brand:         #38bdf8;
+      --brand-ink:     #7dd3fc;
+      --accent:        #00f2fe;
+      --violet:        #a78bfa;
+      --grad:          linear-gradient(135deg, #0ea5e9 0%, #3b82f6 48%, #8b5cf6 100%);
+      --grad-text:     linear-gradient(120deg, #38bdf8 0%, #60a5fa 45%, #c084fc 100%);
+      --ring:          rgba(56, 189, 248, .32);
+      --shadow-sm:     0 1px 2px rgba(0, 0, 0, .4);
+      --shadow-md:     0 10px 30px -8px rgba(0, 0, 0, .6);
+      --shadow-lg:     0 28px 64px -20px rgba(0, 0, 0, .75);
+      --header-bg:     rgba(6, 11, 25, .86);
+      --code-bg:       #16203a;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+      font-size: 16px;
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+      /* NOTE: must be `clip`, not `hidden`. `overflow-x: hidden` turns <body>
+         into a scroll container, which silently breaks position:sticky on the
+         header below. `clip` clips the overflow without creating one. */
+      overflow-x: clip;
+    }
+
+    h1, h2, h3, h4 {
+      font-family: 'Outfit', 'Plus Jakarta Sans', system-ui, sans-serif;
+      line-height: 1.15;
+      letter-spacing: -0.022em;
+      margin: 0;
+      color: var(--text);
+    }
+    p { margin: 0; }
+    a { color: inherit; text-decoration: none; }
+    img { max-width: 100%; display: block; }
+
+    .wrap { width: 100%; max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
+
+    /* ---------- Ambient background (scrolls with the page) ---------- */
+    .aurora {
+      position: absolute; inset: 0 0 auto 0; height: 900px;
+      pointer-events: none; overflow: hidden; z-index: 0;
+    }
+    .aurora span {
+      position: absolute; border-radius: 50%; filter: blur(90px); opacity: .5;
+    }
+    .aurora .a1 { width: 620px; height: 620px; top: -240px; left: -160px; background: radial-gradient(circle, rgba(2,132,199,.55), transparent 68%); }
+    .aurora .a2 { width: 560px; height: 560px; top: -180px; right: -140px; background: radial-gradient(circle, rgba(124,58,237,.45), transparent 68%); }
+    .aurora .a3 { width: 520px; height: 520px; top: 300px; left: 40%; background: radial-gradient(circle, rgba(0,242,254,.30), transparent 70%); }
+    [data-theme="dark"] .aurora span { opacity: .42; }
+
+    /* ============================ HEADER ============================
+       Sticky — it stays pinned to the top of the viewport while the page
+       content scrolls underneath it. `.is-stuck` (toggled on scroll) adds
+       the hairline border + shadow so it separates from the content. */
+    .site-head {
+      position: sticky; top: 0; z-index: 50;
+      background: var(--header-bg);
+      -webkit-backdrop-filter: blur(16px) saturate(1.7);
+      backdrop-filter: blur(16px) saturate(1.7);
+      border-bottom: 1px solid transparent;
+      transition: border-color .25s var(--ease), box-shadow .25s var(--ease);
+    }
+    .site-head.is-stuck {
+      border-bottom-color: var(--border);
+      box-shadow: 0 8px 28px -14px rgba(13, 21, 38, .4);
+    }
+    [data-theme="dark"] .site-head.is-stuck {
+      box-shadow: 0 8px 28px -14px rgba(0, 0, 0, .85);
+    }
+    .head-inner {
+      display: flex; align-items: center; gap: 20px;
+      padding: 18px 0 14px;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+    .brand-logo {
+      width: 42px; height: 42px; border-radius: 11px; flex-shrink: 0;
+      background: var(--surface); border: 1px solid var(--border);
+      display: grid; place-items: center; box-shadow: var(--shadow-sm);
+    }
+    .brand-logo img { width: 26px; height: 26px; object-fit: contain; }
+    .brand-text { display: flex; flex-direction: column; line-height: 1.1; }
+    /* ------------------------------------------------------------------
+       "MILLENNIUM" — mirrors .millennium-word in public/css/style.css so the
+       brand reads identically here and inside the app: Cinzel 900 with the
+       metallic platinum/chrome gradient clipped to the text.
+
+       Theme selectors are INVERTED relative to style.css. There, :root is the
+       dark palette and [data-theme="light"] overrides it. Here the base :root
+       IS the light palette and [data-theme="dark"] overrides it — so the
+       darker chrome (for a light background) is the base rule and the bright
+       chrome (for a dark background) is the [data-theme="dark"] rule.
+
+       Keep both gradients in sync with style.css if the brand is ever restyled.
+       ------------------------------------------------------------------ */
+    .brand-name {
+      font-family: 'Cinzel', 'Playfair Display', Didot, 'Bodoni MT', Georgia, serif;
+      font-weight: 900;
+      font-size: 1.02rem;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      line-height: 1;
+      /* Darker chrome — legible on the light background */
+      background: linear-gradient(90deg,
+        #525252 0%,
+        #737373 10%,
+        #b0b0b0 22%,
+        #d4d4d4 30%,
+        #a3a3a3 38%,
+        #525252 58%,
+        #737373 67%,
+        #a3a3a3 78%,
+        #737373 89%,
+        #525252 100%
+      );
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      color: transparent;
+      filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.45));
+    }
+
+    /* Bright platinum/chrome — matches .millennium-word in dark mode */
+    [data-theme="dark"] .brand-name {
+      background: linear-gradient(90deg,
+        #737373 0%,
+        #9c9c9c 10%,
+        #dbdbdb 22%,
+        #f2f2f2 30%,
+        #d8d8d8 38%,
+        #787878 58%,
+        #999999 67%,
+        #c4c4c4 78%,
+        #9b9b9b 89%,
+        #737373 100%
+      );
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .brand-sub { font-size: .68rem; letter-spacing: .16em; text-transform: uppercase; color: var(--text-3); font-weight: 600; }
+
+    .nav-links {
+      display: flex; align-items: center; gap: 4px;
+      margin-left: auto; flex-wrap: wrap; justify-content: flex-end;
+    }
+    .nav-links a {
+      font-size: .88rem; font-weight: 600; color: var(--text-2);
+      padding: 8px 14px; border-radius: 999px;
+      transition: color .2s var(--ease), background .2s var(--ease);
+      white-space: nowrap;
+    }
+    .nav-links a:hover { color: var(--text); background: var(--surface); }
+    .nav-links a.is-active { color: var(--brand); background: var(--surface); box-shadow: var(--shadow-sm); }
+
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      font-family: 'Outfit', sans-serif; font-weight: 700; font-size: .92rem;
+      padding: 12px 22px; border-radius: 999px; border: 1px solid transparent;
+      cursor: pointer; white-space: nowrap;
+      transition: transform .18s var(--ease), box-shadow .18s var(--ease), background .18s var(--ease), border-color .18s var(--ease);
+    }
+    .btn-primary {
+      background: var(--grad); color: #fff;
+      box-shadow: 0 8px 22px -8px rgba(2, 132, 199, .7);
+    }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 14px 30px -10px rgba(2, 132, 199, .8); }
+    .btn-ghost {
+      background: var(--surface); color: var(--text);
+      border-color: var(--border-strong); box-shadow: var(--shadow-sm);
+    }
+    .btn-ghost:hover { transform: translateY(-2px); border-color: var(--brand); color: var(--brand); }
+    .btn-lg { padding: 15px 30px; font-size: 1rem; }
+    .btn-head { padding: 10px 20px; font-size: .88rem; }
+
+    .icon-btn {
+      width: 40px; height: 40px; border-radius: 11px; flex-shrink: 0;
+      display: grid; place-items: center; cursor: pointer;
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--text-2); box-shadow: var(--shadow-sm);
+      transition: transform .18s var(--ease), color .18s var(--ease);
+    }
+    .icon-btn:hover { transform: translateY(-2px); color: var(--brand); }
+
+    /* ============================= HERO ============================= */
+    .hero { position: relative; z-index: 1; padding: 56px 0 20px; }
+    .hero-grid {
+      display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr);
+      gap: 56px; align-items: center;
+    }
+    .eyebrow {
+      display: inline-flex; align-items: center; gap: 9px;
+      font-size: .74rem; font-weight: 800; letter-spacing: .16em; text-transform: uppercase;
+      color: var(--brand); background: var(--surface);
+      border: 1px solid var(--border); border-radius: 999px;
+      padding: 7px 15px; margin-bottom: 22px; box-shadow: var(--shadow-sm);
+    }
+    .eyebrow .pulse {
+      width: 7px; height: 7px; border-radius: 50%; background: var(--accent);
+      box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent);
+    }
+    /* Sized so the two headline lines ("Everything you need to" /
+       "run your SmartBoards") each fit on one line without wrapping. */
+    .hero h1 { font-size: clamp(1.8rem, 4.2vw, 3.25rem); font-weight: 900; }
+    .hero h1 .grad { background: var(--grad-text); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .hero-lede {
+      margin-top: 20px; font-size: 1.06rem; color: var(--text-2); max-width: 56ch;
+    }
+    .hero-cta { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 32px; }
+    .hero-note { margin-top: 16px; font-size: .84rem; color: var(--text-3); }
+
+    .hero-visual { position: relative; }
+    .shot {
+      border-radius: var(--radius-lg); overflow: hidden;
+      border: 1px solid var(--border); background: var(--surface);
+      box-shadow: var(--shadow-lg);
+    }
+    .shot img { width: 100%; height: 340px; object-fit: cover; }
+    .shot-bar {
+      display: flex; align-items: center; gap: 7px;
+      padding: 11px 14px; border-bottom: 1px solid var(--border); background: var(--surface-2);
+    }
+    .shot-bar i { width: 10px; height: 10px; border-radius: 50%; background: var(--border-strong); }
+    .shot-bar i:nth-child(1) { background: #f87171; }
+    .shot-bar i:nth-child(2) { background: #fbbf24; }
+    .shot-bar i:nth-child(3) { background: #34d399; }
+    .shot-bar span { margin-left: 8px; font-size: .74rem; color: var(--text-3); font-weight: 600; letter-spacing: .04em; }
+
+    .stat-strip {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 26px;
+    }
+    .stat {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow-sm);
+    }
+    .stat b { display: block; font-family: 'Outfit', sans-serif; font-size: 1.5rem; font-weight: 900; }
+    .stat span { font-size: .76rem; color: var(--text-3); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+
+    /* =========================== SECTIONS =========================== */
+    /* Offset for the sticky header when jumping to a section by hash */
+    section { scroll-margin-top: 96px; }
+    .band { position: relative; z-index: 1; padding: 88px 0; }
+    .band-alt { background: var(--surface-2); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+
+    .sec-head { max-width: 720px; margin-bottom: 46px; }
+    .sec-tag {
+      display: inline-block; font-size: .72rem; font-weight: 800; letter-spacing: .18em;
+      text-transform: uppercase; color: var(--brand); margin-bottom: 12px;
+    }
+    .sec-head h2 { font-size: clamp(1.65rem, 3.4vw, 2.4rem); font-weight: 800; }
+    .sec-head p { margin-top: 14px; color: var(--text-2); font-size: 1.02rem; }
+
+    /* ---------- Features ---------- */
+    .feat-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+    .feat {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 26px 24px 24px;
+      box-shadow: var(--shadow-sm); position: relative; overflow: hidden;
+      transition: transform .22s var(--ease), box-shadow .22s var(--ease), border-color .22s var(--ease);
+    }
+    .feat::after {
+      content: ''; position: absolute; inset: 0 0 auto 0; height: 3px;
+      background: var(--grad); opacity: 0; transition: opacity .22s var(--ease);
+    }
+    .feat:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); border-color: var(--border-strong); }
+    .feat:hover::after { opacity: 1; }
+    .feat-ico {
+      width: 46px; height: 46px; border-radius: 13px; margin-bottom: 18px;
+      display: grid; place-items: center; color: #fff; background: var(--grad);
+      box-shadow: 0 8px 18px -8px rgba(2, 132, 199, .8);
+    }
+    .feat h3 { font-size: 1.06rem; font-weight: 700; margin-bottom: 8px; }
+    .feat p { font-size: .9rem; color: var(--text-2); }
+    .feat-tag {
+      display: inline-block; margin-top: 14px; font-size: .7rem; font-weight: 700;
+      letter-spacing: .08em; text-transform: uppercase; color: var(--text-3);
+      background: var(--code-bg); border-radius: 999px; padding: 4px 10px;
+    }
+
+    /* ---------- How it works ---------- */
+    .steps { display: grid; gap: 16px; }
+    .step {
+      display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 22px;
+      align-items: start; background: var(--surface);
+      border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 26px 28px; box-shadow: var(--shadow-sm);
+      transition: transform .22s var(--ease), box-shadow .22s var(--ease);
+    }
+    .step:hover { transform: translateX(4px); box-shadow: var(--shadow-md); }
+    .step-num {
+      font-family: 'Outfit', sans-serif; font-size: 1.7rem; font-weight: 900;
+      line-height: 1; background: var(--grad-text);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .step h3 { font-size: 1.08rem; font-weight: 700; margin-bottom: 8px; }
+    .step p { font-size: .93rem; color: var(--text-2); }
+    .step-meta {
+      display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px;
+    }
+    .chip {
+      font-size: .74rem; font-weight: 700; color: var(--brand);
+      background: var(--code-bg); border-radius: 999px; padding: 5px 11px;
+      border: 1px solid var(--border);
+    }
+    .chip-muted { color: var(--text-3); }
+
+    /* ---------- User roles ---------- */
+    .role-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+    .role {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); box-shadow: var(--shadow-sm);
+      padding: 28px 26px; position: relative; overflow: hidden;
+      transition: transform .22s var(--ease), box-shadow .22s var(--ease);
+    }
+    .role:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); }
+    /* coloured left rail, like the reference cards */
+    .role::before {
+      content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 5px;
+      background: var(--role-c, var(--brand));
+    }
+    .role-admin    { --role-c: linear-gradient(180deg, #0284c7, #7c3aed); }
+    .role-tech     { --role-c: linear-gradient(180deg, #f59e0b, #f97316); }
+    .role-customer { --role-c: linear-gradient(180deg, #10b981, #059669); }
+
+    .role-ico {
+      width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center;
+      background: var(--code-bg); border: 1px solid var(--border);
+      color: var(--role-ink, var(--brand)); margin-bottom: 16px;
+    }
+    .role-admin    .role-ico { --role-ink: #0284c7; }
+    .role-tech     .role-ico { --role-ink: #d97706; }
+    .role-customer .role-ico { --role-ink: #059669; }
+    .role h3 { font-size: 1.12rem; font-weight: 800; }
+    .role-sub { font-size: .84rem; color: var(--text-3); margin-top: 4px; }
+    .role ul { list-style: none; margin: 18px 0 0; padding: 0; display: grid; gap: 9px; }
+    .role li {
+      position: relative; padding-left: 22px; font-size: .9rem; color: var(--text-2);
+    }
+    .role li::before {
+      content: ''; position: absolute; left: 4px; top: .62em;
+      width: 6px; height: 6px; border-radius: 50%; background: var(--role-dot, var(--brand));
+    }
+    .role-admin    li::before { background: #0284c7; }
+    .role-tech     li::before { background: #f59e0b; }
+    .role-customer li::before { background: #10b981; }
+    .role-foot {
+      margin-top: 20px; padding-top: 16px; border-top: 1px dashed var(--border);
+      font-size: .78rem; color: var(--text-3); font-weight: 600;
+    }
+    .role-foot code {
+      font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: .74rem;
+      background: var(--code-bg); border-radius: 6px; padding: 2px 7px; color: var(--text-2);
+    }
+
+    /* ---------- About ---------- */
+    .about-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr); gap: 48px; align-items: start; }
+    .about-copy p + p { margin-top: 16px; }
+    .about-copy p { color: var(--text-2); font-size: 1rem; }
+    .about-list { list-style: none; margin: 26px 0 0; padding: 0; display: grid; gap: 12px; }
+    .about-list li {
+      display: flex; gap: 12px; align-items: flex-start;
+      font-size: .93rem; color: var(--text-2);
+    }
+    .about-list svg { flex-shrink: 0; margin-top: 3px; color: var(--brand); }
+
+    .about-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); padding: 30px 28px; box-shadow: var(--shadow-md);
+    }
+    .about-card h3 { font-size: 1.05rem; font-weight: 800; margin-bottom: 6px; }
+    .about-card > p { font-size: .88rem; color: var(--text-3); }
+    .spec { display: grid; gap: 14px; margin-top: 22px; }
+    .spec-row {
+      display: flex; justify-content: space-between; gap: 16px; align-items: baseline;
+      padding-bottom: 13px; border-bottom: 1px dashed var(--border); font-size: .87rem;
+    }
+    .spec-row:last-child { border-bottom: 0; padding-bottom: 0; }
+    .spec-row span { color: var(--text-3); font-weight: 600; }
+    .spec-row b { font-weight: 700; text-align: right; }
+
+    /* ---------- Final CTA ---------- */
+    .final-cta {
+      position: relative; overflow: hidden; border-radius: var(--radius-lg);
+      background: var(--grad); color: #fff; padding: 56px 44px;
+      box-shadow: var(--shadow-lg); text-align: center;
+    }
+    .final-cta h2 { color: #fff; font-size: clamp(1.6rem, 3.2vw, 2.2rem); font-weight: 900; }
+    .final-cta p { margin: 14px auto 0; max-width: 60ch; color: rgba(255, 255, 255, .9); }
+    .final-cta .btn-ghost { background: rgba(255, 255, 255, .14); border-color: rgba(255, 255, 255, .5); color: #fff; backdrop-filter: blur(6px); }
+    .final-cta .btn-ghost:hover { background: #fff; color: #0d1526; }
+    .final-cta .btn-white { background: #fff; color: #0d1526; box-shadow: 0 10px 26px -10px rgba(0, 0, 0, .5); }
+    .final-cta .btn-white:hover { transform: translateY(-2px); }
+    .cta-row { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; margin-top: 30px; }
+
+    /* ---------- Footer ---------- */
+    .site-foot {
+      border-top: 1px solid var(--border); background: var(--surface-2);
+      padding: 40px 0; margin-top: 0;
+    }
+    .foot-inner {
+      display: flex; flex-wrap: wrap; gap: 20px;
+      align-items: center; justify-content: space-between;
+    }
+    .foot-brand { display: flex; align-items: center; gap: 12px; }
+    .foot-brand img { width: 30px; height: 30px; object-fit: contain; }
+    .foot-brand strong { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: .92rem; display: block; }
+    .foot-brand small { color: var(--text-3); font-size: .78rem; }
+    .foot-links { display: flex; flex-wrap: wrap; gap: 20px; font-size: .84rem; color: var(--text-3); font-weight: 600; }
+    .foot-links a:hover { color: var(--brand); }
+
+    /* ---------- Reveal on scroll ---------- */
+    .reveal { opacity: 0; transform: translateY(18px); transition: opacity .6s var(--ease), transform .6s var(--ease); }
+    .reveal.in { opacity: 1; transform: none; }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .reveal { opacity: 1; transform: none; transition: none; }
+      .feat:hover, .role:hover, .btn:hover, .step:hover { transform: none; }
+    }
+
+    /* ========================== RESPONSIVE ========================== */
+    @media (max-width: 1000px) {
+      .hero-grid { grid-template-columns: 1fr; gap: 40px; }
+      .feat-grid, .role-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .about-grid { grid-template-columns: 1fr; gap: 34px; }
+    }
+    @media (max-width: 720px) {
+      .head-inner { flex-wrap: wrap; gap: 12px; padding: 14px 0 12px; }
+      /* Trim the brand so the theme button and CTA stay on the same row */
+      .brand-logo { width: 38px; height: 38px; border-radius: 10px; }
+      .brand-logo img { width: 23px; height: 23px; }
+      .brand-name { font-size: .96rem; }
+      .brand-sub { display: none; }
+      .btn-head { margin-left: auto; padding: 10px 17px; font-size: .84rem; }
+      /* Nav drops to its own full-width row and scrolls sideways if needed */
+      .nav-links {
+        order: 3; width: 100%; margin-left: 0; justify-content: flex-start;
+        overflow-x: auto; flex-wrap: nowrap; padding-bottom: 4px;
+        -webkit-overflow-scrolling: touch; scrollbar-width: none;
+      }
+      .nav-links::-webkit-scrollbar { display: none; }
+      .nav-links a { padding: 8px 12px; font-size: .85rem; }
+      .feat-grid, .role-grid { grid-template-columns: 1fr; }
+      .band { padding: 62px 0; }
+      .step { grid-template-columns: 1fr; gap: 12px; padding: 22px; }
+      .final-cta { padding: 40px 24px; }
+      .hero { padding-top: 34px; }
+      .shot img { height: 230px; }
+      .stat-strip { grid-template-columns: 1fr 1fr; }
+      .spec-row { flex-direction: column; gap: 4px; }
+      .spec-row b { text-align: left; }
+    }
+    @media (max-width: 420px) {
+      .stat-strip { grid-template-columns: 1fr; }
+      .wrap { padding: 0 18px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="aurora" aria-hidden="true"><span class="a1"></span><span class="a2"></span><span class="a3"></span></div>
+
+<!-- ============================== HEADER ==============================
+     Sits in normal document flow — it scrolls away with the page. -->
+<header class="site-head">
+  <div class="wrap head-inner">
+    <a class="brand" href="/" aria-label="Millennium SmartBoard home">
+      <span class="brand-logo"><img src="/images/brains-logo.svg" alt="" /></span>
+      <span class="brand-text">
+        <span class="brand-name">MILLENNIUM</span>
+        <span class="brand-sub">SmartBoard</span>
+      </span>
+    </a>
+
+    <nav class="nav-links" id="navLinks" aria-label="Page sections">
+      <a href="#features">Features</a>
+      <a href="#how-it-works">How it works</a>
+      <a href="#user-roles">User roles</a>
+      <a href="#about">About</a>
+    </nav>
+
+    <button class="icon-btn" id="themeBtn" type="button" title="Switch theme" aria-label="Switch theme">
+      <svg id="themeIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+      </svg>
+    </button>
+
+    <a class="btn btn-primary btn-head" href="/">Get started</a>
+  </div>
+</header>
+
+<!-- =============================== HERO =============================== -->
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <span class="eyebrow"><span class="pulse"></span>New user guide</span>
+      <h1>Everything you need to<br /><span class="grad">run your SmartBoards</span></h1>
+      <p class="hero-lede">
+        The Millennium SmartBoard Management System keeps every interactive board in your
+        fleet monitored, maintained and under warranty — from a single dashboard.
+        This page is a quick guided tour of what the system does and how to use it.
+      </p>
+      <div class="hero-cta">
+        <a class="btn btn-primary btn-lg" href="/">
+          Get started
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </a>
+        <a class="btn btn-ghost btn-lg" href="#how-it-works">See how it works</a>
+      </div>
+      <p class="hero-note">Scroll down to read the full guide — or jump straight in, it takes a minute.</p>
+    </div>
+
+    <div class="hero-visual">
+      <div class="shot">
+        <div class="shot-bar"><i></i><i></i><i></i><span>millennium-smartboard / dashboard</span></div>
+        <img src="/images/smartboard-boardroom.jpg" alt="A Millennium SmartBoard in a conference room" />
+      </div>
+      <div class="stat-strip">
+        <div class="stat"><b>11</b><span>Modules</span></div>
+        <div class="stat"><b>3</b><span>User roles</span></div>
+        <div class="stat"><b>24/7</b><span>Monitoring</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================= FEATURES ============================= -->
+<section class="band" id="features">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-tag">Features</span>
+      <h2>One system for the whole lifecycle of a board</h2>
+      <p>From the moment a board is registered to the day it is retired, every record, repair and report lives in the same place.</p>
+    </div>
+
+    <div class="feat-grid">
+      <article class="feat reveal">
+        <div class="feat-ico">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+        </div>
+        <h3>Executive dashboard</h3>
+        <p>Fleet health, open tickets, low stock and recent activity at a glance — so you know what needs attention before it becomes a problem.</p>
+        <span class="feat-tag">Admin</span>
+      </article>
+
+      <article class="feat reveal">
+        <div class="feat-ico">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        </div>
+        <h3>Device fleet management</h3>
+        <p>Register each board, track serial numbers, OS and OPS module, location and live status. Search by ID, client, serial or room.</p>
+        <span class="feat-tag">All roles</span>
+      </article>
+
+      <article class="feat reveal">
+        <div class="feat-ico">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V5a2 2 0 0 1 2-2h2"/><path d="M4 17v2a2 2 0 0 0 2 2h2"/><path d="M20 7V5a2 2 0 0 0-2-2h-2"/><path d="M20 17v2a2 2 0 0 1-2 2h-2"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+        </div>
+        <h3>Maintenance ticketing</h3>
+        <p>Report a fault, attach it to the right board, assign a technician and follow the repair through every stage to resolution.</p>
+        <span class="feat-tag">All roles</span>
+      </article>
+
+      <article class="feat reveal">
+        <div class="feat-ico">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
+        </div>
+        <h3>Warranty tracking</h3>
+        <p>Know instantly whether a board is still covered. Scan the sticker on the unit and the system reports the remaining cover.</p>
+        <span class="feat-tag">Admin</span>
+      </article>
+
+      <article class="feat reveal">
+        <div class="feat-ico">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+        </div>
+        <h3>Inventory &amp; spare parts</h3>
+        <p>Track stock levels for panels, OPS modules and accessories, with automatic low-stock and out-of-stock alerts.</p>
+        <span class="feat-tag">Admin · Technician</span>
+      </article>
+
+      <article class="feat reveal">
+        <div class="feat-ico">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a7 7 0 0 0-4 12.7V17a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-2.3A7 7 0 0 0 12 2z"/><line x1="9" y1="22" x2="15" y2="22"/></svg>
+        </div>
+        <h3>Predictive maintenance</h3>
+        <p>Early-warning signals on units showing rising failure risk, so parts can be ordered and repairs scheduled before a board goes down.</p>
+        <span class="feat-tag">Admin</span>
+      </article>
+
+      <article class="feat reveal">
+        <div class="feat-ico">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        </div>
+        <h3>Analytics &amp; reports</h3>
+        <p>Business and service reporting — repair turnaround, recurring faults, stock consumption and per-client activity.</p>
+        <span class="feat-tag">Admin</span>
+      </article>
+
+      <article class="feat reveal">
+        <div class="feat-ico">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 9l5 3-5 3z"/></svg>
+        </div>
+        <h3>Content management</h3>
+        <p>Publish and schedule the playlists, lessons and welcome screens that run on the boards across your sites.</p>
+        <span class="feat-tag">Admin</span>
+      </article>
+
+      <article class="feat reveal">
+        <div class="feat-ico">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        </div>
+        <h3>Rentals &amp; scheduling</h3>
+        <p>Book a board for a date range, avoid double-booking, and let customers see and manage their own reservations.</p>
+        <span class="feat-tag">Admin · Customer</span>
+      </article>
+
+      <article class="feat reveal">
+        <div class="feat-ico">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg>
+        </div>
+        <h3>QR &amp; barcode scanning</h3>
+        <p>Scan a board's label with your camera or upload a photo of it to pull up the exact unit, its warranty and its history.</p>
+        <span class="feat-tag">All roles</span>
+      </article>
+
+      <article class="feat reveal">
+        <div class="feat-ico">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </div>
+        <h3>Customer self-service</h3>
+        <p>A portal where clients see only their own boards, raise their own tickets and chat directly with the service team.</p>
+        <span class="feat-tag">Customer</span>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- =========================== HOW IT WORKS =========================== -->
+<section class="band band-alt" id="how-it-works">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-tag">How it works</span>
+      <h2>From sign-in to a resolved repair</h2>
+      <p>The normal day-to-day flow, in the order you will actually use it. Skip to whichever step you need.</p>
+    </div>
+
+    <div class="steps">
+      <div class="step reveal">
+        <div class="step-num">01</div>
+        <div>
+          <h3>Sign in to your account</h3>
+          <p>Use the username and password issued to you. What you see afterwards depends on your role — the system loads only the modules you are allowed to use.</p>
+          <div class="step-meta"><span class="chip">Login screen</span><span class="chip chip-muted">Any role</span></div>
+        </div>
+      </div>
+
+      <div class="step reveal">
+        <div class="step-num">02</div>
+        <div>
+          <h3>Find the board you care about</h3>
+          <p>Open <b>Devices</b> and search by device ID, client, serial number or room. You get its live status, OS version, OPS module and last-seen time.</p>
+          <div class="step-meta"><span class="chip">Devices</span><span class="chip chip-muted">Any role</span></div>
+        </div>
+      </div>
+
+      <div class="step reveal">
+        <div class="step-num">03</div>
+        <div>
+          <h3>Raise a ticket when something breaks</h3>
+          <p>Open a ticket against the affected board, describe the fault and set a priority. Customers can do this from their own portal.</p>
+          <div class="step-meta"><span class="chip">Tickets</span><span class="chip chip-muted">Any role</span></div>
+        </div>
+      </div>
+
+      <div class="step reveal">
+        <div class="step-num">04</div>
+        <div>
+          <h3>Track the repair to completion</h3>
+          <p>Technicians pick up assigned jobs and move them through Received → Diagnosing → Repairing → Resolved. Parts come straight from Inventory.</p>
+          <div class="step-meta"><span class="chip">Tickets</span><span class="chip">Inventory</span><span class="chip chip-muted">Admin · Technician</span></div>
+        </div>
+      </div>
+
+      <div class="step reveal">
+        <div class="step-num">05</div>
+        <div>
+          <h3>Keep an eye on the bigger picture</h3>
+          <p>Use the dashboard, predictive alerts and reports to spot repeat offenders, watch stock, and check whether a board is still under warranty.</p>
+          <div class="step-meta"><span class="chip">Dashboard</span><span class="chip">Reports</span><span class="chip">Predictive</span><span class="chip chip-muted">Admin</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ USER ROLES ============================ -->
+<section class="band" id="user-roles">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-tag">User roles</span>
+      <h2>Three roles, three different views</h2>
+      <p>Your role decides which modules appear in the sidebar. If a module is not listed below, it will not be visible to that role at all.</p>
+    </div>
+
+    <div class="role-grid">
+      <article class="role role-admin reveal">
+        <div class="role-ico">
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <h3>Administrator</h3>
+        <p class="role-sub">Full system access</p>
+        <ul>
+          <li>See every board, ticket and client</li>
+          <li>Manage users, customers and allocations</li>
+          <li>Register and retire devices</li>
+          <li>Track warranty and inventory</li>
+          <li>Publish board content and playlists</li>
+          <li>Review analytics, reports and audit logs</li>
+          <li>Approve and schedule rentals</li>
+        </ul>
+        <div class="role-foot">Lands on <code>Dashboard</code> after signing in</div>
+      </article>
+
+      <article class="role role-tech reveal">
+        <div class="role-ico">
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+        </div>
+        <h3>Technician</h3>
+        <p class="role-sub">Assigned jobs &amp; parts</p>
+        <ul>
+          <li>View the boards on your jobs</li>
+          <li>Open and update service tickets</li>
+          <li>Move a repair through each stage</li>
+          <li>Chat with the customer on a ticket</li>
+          <li>Check and draw spare parts from stock</li>
+        </ul>
+        <div class="role-foot">Lands on <code>Tickets</code> after signing in</div>
+      </article>
+
+      <article class="role role-customer reveal">
+        <div class="role-ico">
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/><line x1="9" y1="9" x2="9" y2="9.01"/><line x1="9" y1="13" x2="9" y2="13.01"/><line x1="9" y1="17" x2="9" y2="17.01"/></svg>
+        </div>
+        <h3>Customer</h3>
+        <p class="role-sub">Your own devices only</p>
+        <ul>
+          <li>See only your organisation's boards</li>
+          <li>Raise your own service tickets</li>
+          <li>Chat with the technician on a job</li>
+          <li>Book a board for a date range</li>
+          <li>View and manage your own rentals</li>
+          <li>Update your own profile details</li>
+        </ul>
+        <div class="role-foot">Lands on <code>Devices</code> after signing in</div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- =============================== ABOUT =============================== -->
+<section class="band band-alt" id="about">
+  <div class="wrap">
+    <div class="about-grid">
+      <div class="about-copy reveal">
+        <span class="sec-tag">About</span>
+        <h2 style="font-size: clamp(1.65rem, 3.4vw, 2.4rem); font-weight: 800;">Built around the Millennium SmartBoard</h2>
+        <p style="margin-top:16px;">
+          Millennium is a dynamic interactive touch panel used for presentations in classrooms,
+          conference rooms and home theatres — anywhere that calls for collaborative, engaging
+          content. This management system is the operations layer behind those boards.
+        </p>
+        <p>
+          It was built by <b>Brains Infinite Innovations Inc.</b> so that schools, offices and
+          service teams could stop tracking boards in spreadsheets. Instead, every unit has a
+          permanent record: where it is, who owns it, what has been replaced on it, whether it
+          is still under warranty, and when it is due for attention.
+        </p>
+        <ul class="about-list">
+          <li>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            <span>One shared record for every board across all your sites.</span>
+          </li>
+          <li>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            <span>Role-based access — people see only what their job needs.</span>
+          </li>
+          <li>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            <span>Faults caught early, so fewer lessons and meetings are interrupted.</span>
+          </li>
+          <li>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            <span>Cloud-hosted, so it works from a phone in the corridor or a desk.</span>
+          </li>
+        </ul>
+      </div>
+
+      <aside class="about-card reveal">
+        <h3>At a glance</h3>
+        <p>What you are signing in to</p>
+        <div class="spec">
+          <div class="spec-row"><span>Product</span><b>Millennium SmartBoard</b></div>
+          <div class="spec-row"><span>System</span><b>Management Portal</b></div>
+          <div class="spec-row"><span>Built by</span><b>Brains Infinite Innovations Inc.</b></div>
+          <div class="spec-row"><span>Modules</span><b>11</b></div>
+          <div class="spec-row"><span>User roles</span><b>Admin · Technician · Customer</b></div>
+          <div class="spec-row"><span>Data store</span><b>Cloud PostgreSQL</b></div>
+          <div class="spec-row"><span>Access</span><b>Desktop &amp; mobile browser</b></div>
+        </div>
+      </aside>
+    </div>
+
+    <div class="final-cta reveal" style="margin-top: 76px;">
+      <h2>Ready to get started?</h2>
+      <p>Sign in with the account you were issued. If you do not have one yet, ask your administrator to create it for you.</p>
+      <div class="cta-row">
+        <a class="btn btn-white btn-lg" href="/">
+          Get started
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </a>
+        <a class="btn btn-ghost btn-lg" href="#features">Back to features</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== FOOTER ============================== -->
+<footer class="site-foot">
+  <div class="wrap foot-inner">
+    <div class="foot-brand">
+      <img src="/images/brains-logo.svg" alt="" />
+      <div>
+        <strong>Brains Infinite Innovations Inc.</strong>
+        <small>Creating Better Opportunities</small>
+      </div>
+    </div>
+    <nav class="foot-links" aria-label="Footer">
+      <a href="#features">Features</a>
+      <a href="#how-it-works">How it works</a>
+      <a href="#user-roles">User roles</a>
+      <a href="#about">About</a>
+      <a href="/">Sign in</a>
+    </nav>
+  </div>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------- Theme: shares the app's localStorage key ---------- */
+  var THEME_KEY = 'millennium-theme';
+  var root = document.documentElement;
+  var btn = document.getElementById('themeBtn');
+  var icon = document.getElementById('themeIcon');
+
+  var SUN = '<circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="4.9" y1="4.9" x2="6.3" y2="6.3"/><line x1="17.7" y1="17.7" x2="19.1" y2="19.1"/><line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/><line x1="4.9" y1="19.1" x2="6.3" y2="17.7"/><line x1="17.7" y1="6.3" x2="19.1" y2="4.9"/>';
+  var MOON = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
+
+  function paint() {
+    var dark = root.getAttribute('data-theme') === 'dark';
+    if (icon) icon.innerHTML = dark ? SUN : MOON;
+    if (btn) btn.title = dark ? 'Switch to light mode' : 'Switch to dark mode';
+  }
+
+  function setTheme(theme) {
+    if (theme === 'dark') root.setAttribute('data-theme', 'dark');
+    else root.removeAttribute('data-theme');
+    try { localStorage.setItem(THEME_KEY, theme); } catch (e) { /* private mode */ }
+    paint();
+  }
+
+  var saved = null;
+  try { saved = localStorage.getItem(THEME_KEY); } catch (e) { /* ignore */ }
+  if (saved === 'light' || saved === 'dark') setTheme(saved);
+  else setTheme('dark');
+  paint();
+
+  if (btn) {
+    btn.addEventListener('click', function () {
+      setTheme(root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+    });
+  }
+
+  /* ---------- Sticky header: add the separating border/shadow once the
+       page has scrolled away from the very top ---------- */
+  var head = document.querySelector('.site-head');
+  function onScroll() {
+    if (head) head.classList.toggle('is-stuck', window.pageYOffset > 8);
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', onScroll, { passive: true });
+  onScroll();
+
+  /* ---------- Smooth anchor scrolling. The header is sticky, so we scroll
+       the document and subtract the header's height to avoid landing with
+       the section title hidden underneath it. ---------- */
+  function scrollToSection(id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    var offset = (head ? head.offsetHeight : 0) + 16;
+    var y = el.getBoundingClientRect().top + window.pageYOffset - offset;
+    var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.scrollTo({ top: Math.max(0, y), behavior: reduce ? 'auto' : 'smooth' });
+  }
+
+  document.querySelectorAll('a[href^="#"]').forEach(function (a) {
+    a.addEventListener('click', function (e) {
+      var id = a.getAttribute('href').slice(1);
+      if (!id || !document.getElementById(id)) return;
+      e.preventDefault();
+      scrollToSection(id);
+      if (history.replaceState) history.replaceState(null, '', '#' + id);
+    });
+  });
+
+  /* ---------- Highlight the section you are currently reading ---------- */
+  var links = Array.prototype.slice.call(document.querySelectorAll('#navLinks a'));
+  var sections = links
+    .map(function (a) { return document.getElementById(a.getAttribute('href').slice(1)); })
+    .filter(Boolean);
+
+  if ('IntersectionObserver' in window && sections.length) {
+    var spy = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        links.forEach(function (a) {
+          a.classList.toggle('is-active', a.getAttribute('href') === '#' + entry.target.id);
+        });
+      });
+    }, { rootMargin: '-25% 0px -65% 0px', threshold: 0 });
+    sections.forEach(function (s) { spy.observe(s); });
+  }
+
+  /* ---------- Gentle reveal as sections scroll into view ---------- */
+  var reveals = document.querySelectorAll('.reveal');
+  if ('IntersectionObserver' in window && reveals.length) {
+    var ro = new IntersectionObserver(function (entries, obs) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        entry.target.classList.add('in');
+        obs.unobserve(entry.target);
+      });
+    }, { rootMargin: '0px 0px -8% 0px', threshold: 0.05 });
+    reveals.forEach(function (el) { ro.observe(el); });
+  } else {
+    reveals.forEach(function (el) { el.classList.add('in'); });
+  }
+})();
+</script>
+</body>
+</html>

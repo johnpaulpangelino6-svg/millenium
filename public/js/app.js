@@ -8,9 +8,9 @@ const API_BASE = '/api';
 // --- Role Access Configuration ---
 // Defines which tabs each role can access
 const ROLE_ACCESS = {
-  admin:      ['dashboard','showcase','devices','tickets','customer-portal','warranty','inventory','data-manager','cms','predictive','analytics','rentals'],
-  technician: ['devices','tickets','inventory','showcase'],
-  customer:   ['devices','tickets','customer-portal','showcase','rentals'],
+  admin:      ['dashboard','devices','tickets','customer-portal','warranty','inventory','data-manager','cms','predictive','analytics','rentals'],
+  technician: ['devices','tickets','inventory'],
+  customer:   ['devices','tickets','customer-portal','rentals'],
 };
 
 // Role display metadata
@@ -59,47 +59,6 @@ const state = {
     activity: true,
   },
   showAllKpiCards: false,
-
-  // Millennium Interactive SmartBoard Simulator State & Feature Demonstrations
-  simulatorMode: 'theater', // 'theater' | 'whiteboard' | 'windows' | 'android'
-  activeFeatureDemo: null,  // null | 'uhd'|'audio'|'stylus'|'cast'|'wireless'|'ops'|'dualos'|'camera'|'dongle'
-  demoTourActive: false,
-  dongleConnected: true,
-  stylusColor: '#00f2fe',
-  stylusSize: 3,
-  stylusTool: 'pen', // 'pen' | 'marker' | 'highlighter' | 'laser' | 'eraser'
-  stylusShape: 'freehand', // 'freehand' | 'line' | 'arrow' | 'rect' | 'circle'
-  isDrawing: false,
-  theaterState: {
-    playing: true,
-    channel: 'nature', // 'nature' | 'anatomy' | 'space'
-    resolution: '4K UHD', // '4K UHD' | '8K Cinema' | '1080p'
-    timeSeconds: 142,
-    totalSeconds: 360,
-    audioMode: 'Dolby Atmos',
-    antiGlareSplit: 50,
-    volume: 85,
-  },
-  windowsState: {
-    activeApp: 'powerpoint', // 'powerpoint' | 'teams' | 'edge' | 'ops'
-    slideIdx: 0,
-    startMenuOpen: false,
-    teamsMuted: false,
-    teamsCamera: true,
-    edgeUrl: 'https://brains.asia/millennium',
-  },
-  androidState: {
-    quickSettingsOpen: false,
-    eyeCare: false,
-    brightness: 90,
-    volume: 85,
-    wifiConnected: true,
-    hotspotActive: true,
-    screenCastActive: true,
-    activeApp: null, // null | 'screen-share' | 'file-explorer'
-  },
-  opsEjected: false,
-  noiseSuppressionActive: true,
 };
 
 // ==========================================================================
@@ -107,6 +66,7 @@ const state = {
 // ==========================================================================
 
 const AUTH_SESSION_KEY = 'millennium_auth_user';
+const AUTH_TOKEN_KEY = 'millennium_auth_token';
 
 /** Check if there is an active session (stored in localStorage) */
 function getAuthSession() {
@@ -128,6 +88,84 @@ function clearAuthSession() {
   localStorage.removeItem(AUTH_SESSION_KEY);
 }
 
+// ---------------------------------------------------------------------------
+// AUTH TOKEN
+// The server issues a signed token at login. It is the ONLY thing the server
+// trusts for identity — a client cannot widen its own access by editing a
+// query parameter any more.
+// ---------------------------------------------------------------------------
+
+function getAuthToken() {
+  try { return localStorage.getItem(AUTH_TOKEN_KEY); } catch { return null; }
+}
+
+function saveAuthToken(token) {
+  try { if (token) localStorage.setItem(AUTH_TOKEN_KEY, token); } catch { /* storage disabled */ }
+}
+
+function clearAuthToken() {
+  try { localStorage.removeItem(AUTH_TOKEN_KEY); } catch { /* storage disabled */ }
+}
+
+// ---------------------------------------------------------------------------
+// AUTHENTICATED FETCH
+// Wrapping fetch here means every existing API call site picks up the token
+// automatically, instead of having to add a header in ~40 separate places.
+// ---------------------------------------------------------------------------
+
+const nativeFetch = window.fetch.bind(window);
+let authExpiryHandled = false;
+
+/** The session is gone or invalid — drop it and send the user back to sign-in. */
+function handleAuthExpired() {
+  if (authExpiryHandled) return;
+  authExpiryHandled = true;
+
+  clearAuthToken();
+  clearAuthSession();
+  state.currentUser = null;
+
+  showAuthOverlay();
+  showToast('Your session has expired. Please sign in again.', 'error');
+
+  setTimeout(() => { authExpiryHandled = false; }, 4000);
+}
+
+window.fetch = function (input, init) {
+  const url = typeof input === 'string' ? input : (input && input.url) || '';
+
+  // Only touch calls to our own API. Never attach our token to a third party.
+  const isApiCall = url.startsWith(`${API_BASE}/`) || url.startsWith('/api/');
+  const isAbsolute = /^[a-z][a-z0-9+.-]*:\/\//i.test(url);
+  const isThirdParty = isAbsolute && !url.startsWith(window.location.origin);
+
+  if (!isApiCall || isThirdParty) {
+    return nativeFetch(input, init);
+  }
+
+  const opts = Object.assign({}, init);
+  const headers = new Headers(
+    opts.headers || (typeof input !== 'string' && input && input.headers) || undefined
+  );
+
+  const token = getAuthToken();
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  opts.headers = headers;
+
+  // A 401 on the login/register endpoints just means "wrong credentials" and is
+  // surfaced by the form itself — it must not trigger the global sign-out.
+  const isAuthEndpoint = /\/auth\/(login|register)\b/.test(url);
+
+  return nativeFetch(input, opts).then((res) => {
+    if (res.status === 401 && !isAuthEndpoint && getAuthToken()) {
+      handleAuthExpired();
+    }
+    return res;
+  });
+};
+
 /**
  * Re-read the signed-in account from the server and refresh the stored session.
  *
@@ -141,15 +179,28 @@ async function refreshAuthSession() {
   const cached = getAuthSession();
   if (!cached) return null;
 
-  try {
-    const list = await (await fetch(`${API_BASE}/auth/users`, { cache: 'no-store' })).json();
-    const live = (list.data || []).find(u => u.id === cached.id);
+  // No token means the session cannot be proven to the server — treat it as gone.
+  if (!getAuthToken()) {
+    clearAuthSession();
+    return null;
+  }
 
-    if (!live) {
-      // The account behind this session no longer exists — force a fresh login.
+  try {
+    const resp = await fetch(`${API_BASE}/auth/me`, { cache: 'no-store' });
+    if (resp.status === 401) {
+      // Token rejected (expired, tampered, or the account was removed).
+      clearAuthToken();
       clearAuthSession();
       return null;
     }
+
+    const body = await resp.json();
+    const live = body.user;
+    if (!body.success || !live) {
+      clearAuthSession();
+      return null;
+    }
+
     saveAuthSession(live);
     return live;
   } catch {
@@ -175,7 +226,8 @@ function updateAuthChip(user) {
   const locEl  = document.getElementById('authUserLoc');
   const avatarEl = document.getElementById('authUserAvatar');
   if (nameEl)   nameEl.textContent  = user.fullName || user.username;
-  if (locEl)    locEl.textContent   = user.location || 'All Locations';
+  // The trailing caret signals that the chip opens the profile dialog.
+  if (locEl)    locEl.textContent   = `${user.location || 'All Locations'} ▾`;
   if (avatarEl) avatarEl.textContent = (user.fullName || user.username).charAt(0).toUpperCase();
 }
 
@@ -370,6 +422,7 @@ async function quickDemoLogin(username, password, roleLabel) {
     }
 
     const user = data.user;
+    saveAuthToken(data.token);
     saveAuthSession(user);
     state.currentUser = user;
     state.currentRole = user.role;
@@ -480,6 +533,7 @@ async function handleLogin(event) {
 
     // Success — store session & update app
     const user = data.user;
+    saveAuthToken(data.token);
     saveAuthSession(user);
     state.currentUser = user;
     state.currentRole = user.role;
@@ -568,6 +622,7 @@ async function handleRegister(event) {
     // Auto-login after short delay
     setTimeout(() => {
       const user = data.user;
+      saveAuthToken(data.token);
       saveAuthSession(user);
       state.currentUser = user;
       state.currentRole = user.role;
@@ -590,13 +645,309 @@ async function handleRegister(event) {
 
 /** Handle logout */
 function handleLogout() {
+  clearAuthToken();
   clearAuthSession();
-  // Show a brief toast before redirecting, then do a clean page reload.
-  // This resets all client-side state and returns the user to the landing/auth page.
   showToast('You have been signed out.', 'info');
+
+  // Reset the app in place rather than navigating to '/'.
+  // A real navigation reloaded every asset and re-parsed the whole document
+  // just to show the sign-in portal again — a very visible full refresh.
+  // The state below is everything the signed-in UI had built up.
   setTimeout(() => {
-    window.location.href = '/';
-  }, 1200);
+    // Stop any in-flight ticket chat poll so it cannot fire after logout.
+    if (state.ticketChatPollInterval) {
+      clearInterval(state.ticketChatPollInterval);
+      state.ticketChatPollInterval = null;
+    }
+
+    state.currentUser = null;
+    state.currentRole = 'admin';
+    state.currentTab = ROLE_META.admin.defaultTab;
+    state.searchQuery = '';
+    state.filterModel = '';
+    state.filterStatus = '';
+    state.selectedDeviceForRemote = null;
+    state.selectedDeviceForQR = null;
+    state.selectedTicket = null;
+    state.notifDropdownOpen = false;
+
+    // Drop every cached collection so the next sign-in cannot flash the
+    // previous user's rows before its own fetch lands.
+    state.devices = [];
+    state.tickets = [];
+    state.warranties = [];
+    state.inventory = [];
+    state.cms = [];
+    state.predictiveAlerts = [];
+    state.auditLogs = [];
+    state.notifications = [];
+    state.customers = [];
+    state.allUsers = [];
+    state.rentals = [];
+    state.rentalStats = null;
+    state.stats = null;
+
+    // Forget the last-rendered signature so the next sign-in always paints.
+    lastDataSignature = null;
+
+    const mainContent = document.getElementById('mainContent');
+    if (mainContent) mainContent.innerHTML = '';
+    document.querySelectorAll('.nav-item').forEach((item) => item.classList.remove('active'));
+
+    updateSidebarRole('admin');
+
+    // Clear the previous user's identity out of the header chip.
+    const nameEl = document.getElementById('authUserName');
+    const locEl = document.getElementById('authUserLoc');
+    const avatarEl = document.getElementById('authUserAvatar');
+    if (nameEl) nameEl.textContent = '';
+    if (locEl) locEl.textContent = '';
+    if (avatarEl) avatarEl.textContent = '';
+
+    // Reset the sign-in form and make sure it opens on the login tab.
+    switchAuthTab('login');
+    const userInput = document.getElementById('loginUsername');
+    const passInput = document.getElementById('loginPassword');
+    const errEl = document.getElementById('loginError');
+    if (userInput) userInput.value = '';
+    if (passInput) passInput.value = '';
+    if (errEl) errEl.style.display = 'none';
+
+    closeMobileMenu();
+    showAuthOverlay();
+    window.scrollTo(0, 0);
+  }, 900);
+}
+
+// ==========================================================================
+// MY PROFILE — view and edit the signed-in account
+// ==========================================================================
+
+/**
+ * Open the profile dialog for the signed-in user.
+ * Re-reads the account from /auth/me first so the values shown are the live
+ * ones from the database rather than a possibly-stale cached copy.
+ */
+async function openProfileModal() {
+  if (!state.currentUser) {
+    showToast('Please sign in to view your profile.', 'error');
+    return;
+  }
+
+  // Remove an existing dialog if one is open.
+  document.getElementById('profileModalOverlay')?.remove();
+
+  let me = state.currentUser;
+  try {
+    const res = await fetch(`${API_BASE}/auth/me`, { cache: 'no-store' });
+    if (res.ok) {
+      const body = await res.json();
+      if (body.success && body.user) {
+        me = body.user;
+        state.currentUser = me;
+        saveAuthSession(me);
+      }
+    }
+  } catch {
+    // Offline: fall back to the cached session rather than blocking the dialog.
+  }
+
+  const esc = (v) => String(v == null ? '' : v)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+  const roleMeta = ROLE_META[me.role] || ROLE_META.admin;
+  const initial = (me.fullName || me.username || '?').charAt(0).toUpperCase();
+  const memberSince = me.createdAt ? new Date(me.createdAt).toLocaleDateString(undefined, {
+    year: 'numeric', month: 'long', day: 'numeric',
+  }) : '—';
+
+  const overlay = document.createElement('div');
+  overlay.id = 'profileModalOverlay';
+  overlay.className = 'modal-backdrop';
+
+  overlay.innerHTML = `
+    <div class="modal-content modal-form modal-wide" role="dialog" aria-modal="true" aria-labelledby="profileModalTitle">
+      <div class="modal-header">
+        <h3 class="modal-title" id="profileModalTitle">👤 My Profile</h3>
+        <button type="button" class="modal-close" aria-label="Close"
+          onclick="document.getElementById('profileModalOverlay').remove()">×</button>
+      </div>
+
+      <form id="profileForm" onsubmit="saveProfile(event)">
+        <div class="form-body">
+
+          <div class="profile-identity">
+            <div class="profile-avatar-lg">${esc(initial)}</div>
+            <div>
+              <div class="profile-identity-name">${esc(me.fullName || me.username)}</div>
+              <div class="profile-identity-sub">@${esc(me.username)} · ${esc(me.email || 'no email')}</div>
+              <span class="profile-role-pill">${esc(roleMeta.name)}</span>
+            </div>
+          </div>
+
+          <section class="form-section">
+            <div class="form-section-title">🔒 Account</div>
+            <div class="profile-grid">
+              <div class="profile-field">
+                <span class="profile-field-label">Username</span>
+                <span class="profile-field-value">${esc(me.username)}</span>
+              </div>
+              <div class="profile-field">
+                <span class="profile-field-label">Role</span>
+                <span class="profile-field-value">${esc(roleMeta.name)}</span>
+              </div>
+              <div class="profile-field">
+                <span class="profile-field-label">Organization</span>
+                <span class="profile-field-value">${esc(me.organization || '—')}</span>
+              </div>
+              <div class="profile-field">
+                <span class="profile-field-label">Member Since</span>
+                <span class="profile-field-value">${esc(memberSince)}</span>
+              </div>
+            </div>
+            <div class="form-hint">
+              Your username, role and organization are managed by an administrator.
+            </div>
+          </section>
+
+          <section class="form-section">
+            <div class="form-section-title">✏️ Editable Details</div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="profileFullName">Full Name</label>
+                <input class="form-input" id="profileFullName" type="text" name="fullName"
+                  value="${esc(me.fullName || '')}" required minlength="2" placeholder="Your full name" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="profileLocation">Location</label>
+                <input class="form-input" id="profileLocation" type="text" name="location"
+                  value="${esc(me.location || '')}" placeholder="e.g. Quezon City" />
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="profileEmail">Email Address</label>
+              <input class="form-input" id="profileEmail" type="email" name="email"
+                value="${esc(me.email || '')}" required placeholder="you@company.com" />
+              <div class="form-hint">Used to sign in and to receive booking updates.</div>
+            </div>
+          </section>
+
+          <section class="form-section">
+            <div class="form-section-title">🔑 Change Password</div>
+            <div class="form-hint" style="margin-top:0;margin-bottom:12px;">
+              Leave these blank to keep your current password.
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="profileCurrentPassword">Current Password</label>
+              <input class="form-input" id="profileCurrentPassword" type="password" name="currentPassword"
+                autocomplete="current-password" placeholder="Required only to change your password" />
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="profileNewPassword">New Password</label>
+                <input class="form-input" id="profileNewPassword" type="password" name="newPassword"
+                  autocomplete="new-password" minlength="6" placeholder="At least 6 characters" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="profileConfirmPassword">Confirm New Password</label>
+                <input class="form-input" id="profileConfirmPassword" type="password" name="confirmPassword"
+                  autocomplete="new-password" minlength="6" placeholder="Repeat the new password" />
+              </div>
+            </div>
+          </section>
+
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary"
+            onclick="document.getElementById('profileModalOverlay').remove()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="profileSaveBtn">💾 Save Changes</button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add('active'));
+
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+  const onKey = (e) => {
+    if (e.key === 'Escape') {
+      overlay.remove();
+      document.removeEventListener('keydown', onKey);
+    }
+  };
+  document.addEventListener('keydown', onKey);
+}
+
+/** Save the profile form to PATCH /api/auth/me. */
+async function saveProfile(event) {
+  event.preventDefault();
+  const form = event.target;
+  const btn = document.getElementById('profileSaveBtn');
+  const fd = new FormData(form);
+
+  const payload = {
+    fullName: String(fd.get('fullName') || '').trim(),
+    email: String(fd.get('email') || '').trim(),
+    location: String(fd.get('location') || '').trim(),
+  };
+
+  const currentPassword = String(fd.get('currentPassword') || '');
+  const newPassword = String(fd.get('newPassword') || '');
+  const confirmPassword = String(fd.get('confirmPassword') || '');
+
+  if (newPassword || confirmPassword) {
+    if (newPassword.length < 6) {
+      showToast('New password must be at least 6 characters.', 'error');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      showToast('The new passwords do not match.', 'error');
+      return;
+    }
+    if (!currentPassword) {
+      showToast('Enter your current password to change it.', 'error');
+      return;
+    }
+    payload.currentPassword = currentPassword;
+    payload.newPassword = newPassword;
+  }
+
+  const original = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
+  try {
+    const res = await fetch(`${API_BASE}/auth/me`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+
+    if (!res.ok || !data.success) {
+      showToast(`❌ ${data.error || 'Could not save your profile.'}`, 'error');
+      return;
+    }
+
+    // Reflect the saved values immediately in the session and the sidebar chip.
+    const updated = Object.assign({}, state.currentUser, data.data);
+    state.currentUser = updated;
+    saveAuthSession(updated);
+    updateAuthChip(updated);
+
+    document.getElementById('profileModalOverlay')?.remove();
+    showToast(
+      payload.newPassword ? '✅ Profile and password updated.' : '✅ Profile updated.',
+      'success'
+    );
+  } catch (err) {
+    showToast('Network error. Please try again.', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = original || '💾 Save Changes'; }
+  }
 }
 
 /** Display an auth error message */
@@ -671,7 +1022,32 @@ function getVisibleRentals() {
 }
 
 // --- Data Fetchers ---
-async function fetchAllData() {
+/**
+ * Signature of everything the views render from.
+ *
+ * Used to decide whether a background poll actually changed anything. Note it
+ * deliberately does NOT compare HTML: `element.innerHTML` returns the
+ * *serialised* DOM, which does not round-trip byte-for-byte with the template
+ * string (attribute quoting, self-closing tags, entity escaping), so an HTML
+ * comparison reports a difference even when the markup is logically identical.
+ * Comparing the source data is both cheaper and correct.
+ */
+let lastDataSignature = null;
+
+function dataSignature() {
+  // state.notifications is deliberately NOT included: it only feeds the header
+  // bell (renderNotifications -> #notifBadge/#notifList), never #mainContent,
+  // and the server reshuffles it on every poll. Including it made the
+  // signature differ every single time, so the "nothing changed" short-circuit
+  // never fired. The bell is still updated on every poll.
+  return [
+    state.stats, state.devices, state.tickets, state.warranties,
+    state.inventory, state.cms, state.predictiveAlerts, state.auditLogs,
+    state.customers, state.rentals, state.rentalStats, state.allUsers,
+  ].map((v) => (v === null || v === undefined ? '' : JSON.stringify(v))).join('|');
+}
+
+async function fetchAllData(options) {
   try {
     // Build tickets URL with role-based filtering
     const user = state.currentUser;
@@ -694,19 +1070,10 @@ async function fetchAllData() {
       devicesUrl += `?${params.toString()}`;
     }
     
-    // Build rentals URL with role-based filtering — the server returns only
-    // the customer's own bookings when userRole=customer.
-    const rentalParams = new URLSearchParams();
-    if (state.currentUser) {
-      rentalParams.append('userId', state.currentUser.id);
-      rentalParams.append('userRole', state.currentUser.role);
-      if (state.currentUser.organization) {
-        rentalParams.append('userOrganization', state.currentUser.organization);
-      }
-    }
-    const rentalQuery = rentalParams.toString();
-    const rentalsUrl      = rentalQuery ? `${API_BASE}/rentals?${rentalQuery}`               : `${API_BASE}/rentals`;
-    const rentalStatsUrl  = rentalQuery ? `${API_BASE}/rentals/stats/summary?${rentalQuery}` : `${API_BASE}/rentals/stats/summary`;
+    // Rentals are scoped server-side from the signed token — the identity is no
+    // longer asserted by the client, so no userId/userRole params are needed.
+    const rentalsUrl     = `${API_BASE}/rentals`;
+    const rentalStatsUrl = `${API_BASE}/rentals/stats/summary`;
 
     // Use named entries so we can identify which fetch failed
     const fetchEntries = [
@@ -758,7 +1125,18 @@ async function fetchAllData() {
       showToast(`Loaded ${succeeded.length}/${fetchEntries.length} data sources. Some data may be incomplete.`, 'warning');
     }
 
-    renderApp();
+    // Background poll with no new data: leave the DOM completely untouched.
+    // Re-rendering here is what made the app look like it was reloading itself
+    // every 30 seconds (scroll jumped, animations restarted, images re-fetched).
+    // The dashboard clock is kept current separately, in place.
+    const signature = dataSignature();
+    if (options && options.silent && signature === lastDataSignature) {
+      updateDashboardClock();
+      return;
+    }
+    lastDataSignature = signature;
+
+    renderApp(options);
   } catch (err) {
     console.error('Failed to fetch data from backend API:', err);
     const isAbort = err && err.name === 'AbortError';
@@ -773,7 +1151,22 @@ async function fetchAllData() {
 
 // --- View Renderers ---
 
-function renderApp() {
+/**
+ * Render the active tab into #mainContent.
+ *
+ * @param {object}  [options]
+ * @param {boolean} [options.silent] Background refresh (the 30s telemetry
+ *   poll). Skips the DOM write entirely when the new markup is identical to
+ *   what is already on screen, and restores the scroll offset when it is not.
+ *
+ *   This matters because replacing innerHTML is not a cheap repaint: it
+ *   discards the whole subtree, resets the scroll position, restarts CSS
+ *   animations and makes the browser re-request images. Running that every 30
+ *   seconds made the app look like it was reloading itself.
+ */
+function renderApp(options) {
+  const silent = !!(options && options.silent);
+
   renderSidebarBadges();
   renderNotifications();
   applyRoleUI();
@@ -795,48 +1188,54 @@ function renderApp() {
     state.currentTab = ROLE_META[role].defaultTab;
   }
 
+  let html;
   switch (state.currentTab) {
     case 'dashboard':
-      mainContent.innerHTML = renderDashboardView();
-      setTimeout(initSmartBoardSimulator, 50);
-      break;
-    case 'showcase':
-      mainContent.innerHTML = renderShowcaseView();
-      setTimeout(initSmartBoardSimulator, 50);
+      html = renderDashboardView();
       break;
     case 'devices':
-      mainContent.innerHTML = renderDevicesView();
+      html = renderDevicesView();
       break;
     case 'tickets':
-      mainContent.innerHTML = renderTicketsView();
+      html = renderTicketsView();
       break;
     case 'customer-portal':
-      mainContent.innerHTML = renderCustomerPortalView();
+      html = renderCustomerPortalView();
       break;
     case 'warranty':
-      mainContent.innerHTML = renderWarrantyView();
+      html = renderWarrantyView();
       break;
     case 'inventory':
-      mainContent.innerHTML = renderInventoryView();
+      html = renderInventoryView();
       break;
     case 'data-manager':
-      mainContent.innerHTML = renderDataManagerView();
+      html = renderDataManagerView();
       break;
     case 'cms':
-      mainContent.innerHTML = renderCmsView();
+      html = renderCmsView();
       break;
     case 'predictive':
-      mainContent.innerHTML = renderPredictiveView();
+      html = renderPredictiveView();
       break;
     case 'analytics':
-      mainContent.innerHTML = renderAnalyticsView();
+      html = renderAnalyticsView();
       break;
     case 'rentals':
-      mainContent.innerHTML = renderRentalsView();
+      html = renderRentalsView();
       break;
     default:
-      mainContent.innerHTML = renderDashboardView();
-      setTimeout(initSmartBoardSimulator, 50);
+      html = renderDashboardView();
+  }
+
+  // A background poll that found nothing new should not touch the DOM at all.
+  if (silent && mainContent.innerHTML === html) return;
+
+  if (silent) {
+    const scrollY = window.scrollY;
+    mainContent.innerHTML = html;
+    window.scrollTo(0, scrollY);
+  } else {
+    mainContent.innerHTML = html;
   }
 }
 
@@ -1001,1832 +1400,30 @@ function handleNotifClick(index, tabPath) {
   }
 }
 
-
-// ==========================================================================
-// MILLENNIUM INTERACTIVE SMARTBOARD SIMULATOR & SHOWCASE LOGIC
-// ==========================================================================
-
-// ==========================================================================
-// MILLENNIUM INTERACTIVE SMARTBOARD SIMULATOR & SHOWCASE LOGIC
-// Full Demonstration Engine for all 6 Brochure Features & 4 Display Modes
-// ==========================================================================
-
-let visualizerAnimId = null;
-let whiteboardHistory = [];
-let whiteboardHistoryIdx = -1;
-let demoTourTimer = null;
-
-function setSimulatorMode(mode) {
-  state.simulatorMode = mode;
-  state.activeFeatureDemo = null; // Exit specific demo overlay to show full OS view
-  const names = {
-    theater: '🎬 4K Ultra-HD Home Theater & Cinema Mode',
-    whiteboard: '✏️ Interactive Digital Stylus Whiteboard (<5ms Touch)',
-    windows: '🪟 Windows 11 Enterprise Mode (Modular OPS Intel Core i7)',
-    android: '🤖 Android 13 Millennium OS (Universal Wireless & Multi-Touch)'
-  };
-  showToast(names[mode] || 'Switched Display Mode', 'info');
-  renderApp();
-}
-
-function setStylusColor(color) {
-  state.stylusColor = color;
-  document.querySelectorAll('.color-dot').forEach(el => {
-    el.classList.toggle('active', el.dataset.color === color);
-  });
-}
-
-function setStylusSize(size) {
-  state.stylusSize = size;
-  showToast(`Stylus Tip: ${size}px`, 'info');
-}
-
-function setStylusTool(tool) {
-  state.stylusTool = tool;
-  document.querySelectorAll('.stylus-tool-btn[data-tool]').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.tool === tool);
-  });
-  const names = {
-    pen: '✏️ Fine Stylus Pen',
-    marker: '🖊️ Marker Pen',
-    highlighter: '🖌️ Neon Glow Highlighter',
-    laser: '🔦 Laser Pointer (Interactive)',
-    eraser: '🧹 Gesture Palm Eraser'
-  };
-  showToast(names[tool] || 'Tool Selected', 'info');
-}
-
-function setStylusShape(shape) {
-  state.stylusShape = shape;
-  document.querySelectorAll('.stylus-tool-btn[data-shape]').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.shape === shape);
-  });
-  showToast(`Shape Tool: ${shape}`, 'info');
-}
-
-function toggleWirelessDongle() {
-  state.dongleConnected = !state.dongleConnected;
-  showToast(
-    state.dongleConnected
-      ? '🟢 Millennium Wireless Dongle Connected (Screen Mirroring Active · 4K @ 60 FPS · <6ms Latency)'
-      : '⚪ Millennium Wireless Dongle Disconnected',
-    state.dongleConnected ? 'info' : 'warning'
-  );
-  renderApp();
-}
-
-// --------------------------------------------------------------------------
-// 1. Feature Demonstrations Trigger & Tour Engine
-// --------------------------------------------------------------------------
-
-function startFeatureDemo(demoId) {
-  state.activeFeatureDemo = demoId;
-  const demoTitles = {
-    uhd: '📺 Feature 1: 4K Ultra-HD Home Theater & Streaming Display',
-    audio: '🎙️ Feature 2: Sensitive Audio Input & 8m Voice Pickup Radar',
-    stylus: '✍️ Feature 3: Stylus Pen & Natural Hand Gesture Palm Erase',
-    cast: '📲 Feature 4: Project Laptop & Cellphone on Screen',
-    wireless: '📡 Feature 5: Bluetooth, Hotspot, Cast and Wi-Fi Ready',
-    ops: '⚡ Feature 6: Future-Proof Modular OPS Intel Core i7 PC Slot',
-    dualos: '🪟🤖 Feature 7: Dual OS (Windows 11 + Android 13)',
-    camera: '📹 Feature 8: Ultrawide Angle 120° Camera & AI Auto-Framing',
-    dongle: '🔘 Feature 9: Screen Transfer without Network via Dongle'
-  };
-
-  showToast(`▶ ${demoTitles[demoId] || demoId}`, 'info');
-
-  if (demoId === 'stylus') {
-    state.simulatorMode = 'whiteboard';
-    renderApp();
-    setTimeout(runLessonDemo, 200);
-  } else if (demoId === 'uhd') {
-    state.simulatorMode = 'theater';
-    renderApp();
-  } else if (demoId === 'audio') {
-    state.simulatorMode = 'theater';
-    renderApp();
-  } else if (demoId === 'cast') {
-    state.simulatorMode = 'android';
-    state.androidState.activeApp = 'screen-share';
-    renderApp();
-  } else if (demoId === 'wireless') {
-    state.simulatorMode = 'android';
-    renderApp();
-  } else if (demoId === 'ops') {
-    state.simulatorMode = 'windows';
-    state.windowsState.activeApp = 'ops';
-    renderApp();
-  } else if (demoId === 'dualos') {
-    renderApp();
-  } else if (demoId === 'camera') {
-    state.simulatorMode = 'windows';
-    state.windowsState.activeApp = 'teams';
-    renderApp();
-    setTimeout(runCameraScanGesture, 300);
-  } else if (demoId === 'dongle') {
-    renderApp();
-    setTimeout(runDongleCastBeam, 300);
-  } else {
-    renderApp();
-  }
-}
-
-function closeFeatureDemo() {
-  state.activeFeatureDemo = null;
-  if (demoTourTimer) {
-    clearInterval(demoTourTimer);
-    demoTourTimer = null;
-    state.demoTourActive = false;
-  }
-  showToast('Live Demonstration Closed · Virtual Board Restored', 'info');
-  renderApp();
-}
-
-function toggleDemoTour() {
-  if (state.demoTourActive) {
-    if (demoTourTimer) clearInterval(demoTourTimer);
-    demoTourTimer = null;
-    state.demoTourActive = false;
-    state.activeFeatureDemo = null;
-    showToast('⏹️ Demonstration Tour Stopped', 'info');
-    renderApp();
-    return;
-  }
-
-  state.demoTourActive = true;
-  const demos = ['uhd', 'audio', 'stylus', 'cast', 'wireless', 'ops', 'dualos', 'camera', 'dongle'];
-  let currentIdx = 0;
-  startFeatureDemo(demos[currentIdx]);
-
-  demoTourTimer = setInterval(() => {
-    currentIdx = (currentIdx + 1) % demos.length;
-    startFeatureDemo(demos[currentIdx]);
-  }, 6000);
-
-  showToast('🚀 System Demonstration Tour Started — Cycling all 9 brochure features!', 'info');
-}
-
-// COOL MOTION GESTURE 1: Hand Gesture Palm Erase with Shockwave Wipe
-function runHandPalmEraseGesture() {
-  const viewport = document.querySelector('.board-viewport');
-  const canvas = document.getElementById('virtualBoardCanvas');
-  if (!viewport || !canvas) {
-    showToast('Switch to Stylus Board to test Palm Erase gesture', 'warning');
-    return;
-  }
-
-  // Create Holographic Hand Element
-  const palmEl = document.createElement('div');
-  palmEl.className = 'holographic-hand-sweep';
-  palmEl.innerHTML = `
-    <div class="palm-visual-box">
-      <svg width="68" height="68" viewBox="0 0 24 24" fill="none" stroke="#00f2fe" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"/>
-        <path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v2"/>
-        <path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"/>
-        <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/>
-      </svg>
-      <div class="palm-shockwave-ring"></div>
-      <div class="palm-label">✋ PALM GESTURE ERASE</div>
-    </div>
-  `;
-  viewport.appendChild(palmEl);
-
-  // Progressive Shockwave Wipe on Canvas
-  const ctx = canvas.getContext('2d');
-  let progress = 0;
-  const wipeInterval = setInterval(() => {
-    progress += 0.08;
-    ctx.clearRect(0, 0, canvas.width * progress, canvas.height);
-    if (progress >= 1.05) {
-      clearInterval(wipeInterval);
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      whiteboardHistory = [canvas.toDataURL()];
-      whiteboardHistoryIdx = 0;
-      setTimeout(() => palmEl.remove(), 350);
-      showToast('🧹 Hand Gesture Palm Erase: Screen wiped clean with natural palm gesture!', 'success');
-    }
-  }, 22);
-}
-
-// COOL MOTION GESTURE 2: Floating Stylus Pen Drawing Gesture
-function runStylusDrawingGesture() {
-  const canvas = document.getElementById('virtualBoardCanvas');
-  const viewport = document.querySelector('.board-viewport');
-  if (!canvas || !viewport) {
-    state.simulatorMode = 'whiteboard';
-    state.activeFeatureDemo = 'stylus';
-    renderApp();
-    setTimeout(runStylusDrawingGesture, 250);
-    return;
-  }
-
-  // Spawn Stylus Actor with Neon Trail
-  const stylusActor = document.createElement('div');
-  stylusActor.className = 'animated-stylus-actor';
-  stylusActor.innerHTML = `
-    <div class="stylus-pen-graphic">
-      <div class="stylus-laser-glow"></div>
-      <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#00f2fe" stroke-width="2">
-        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" fill="#0b1329"/>
-      </svg>
-      <span class="stylus-label">Stylus Active (&lt;5ms)</span>
-    </div>
-  `;
-  viewport.appendChild(stylusActor);
-
-  runLessonDemo();
-
-  setTimeout(() => {
-    stylusActor.remove();
-    showToast('✍️ Stylus Pen Gesture: Smooth 4K digital ink drawn with precision tip!', 'success');
-  }, 1400);
-}
-
-// COOL MOTION GESTURE 3: Hardware Dongle Magnetic Pulse Beam
-function runDongleCastBeam() {
-  state.dongleConnected = true;
-  const viewport = document.querySelector('.board-viewport');
-  if (viewport) {
-    const beam = document.createElement('div');
-    beam.className = 'dongle-cast-beam-fx';
-    beam.innerHTML = `
-      <div class="dongle-beam-core"></div>
-      <div class="dongle-beam-badge">
-        <span>🔘 DONGLE WIRELESS TRANSFER · 4K @ 60 FPS · &lt;6ms LATENCY</span>
-      </div>
-    `;
-    viewport.appendChild(beam);
-    setTimeout(() => beam.remove(), 1600);
-  }
-  showToast('⚡ Screen Transfer: Laptop 4K stream transmitted wirelessly using Dongle!', 'success');
-  renderApp();
-}
-
-// COOL MOTION GESTURE 4: Ultrawide Angle 120° Camera AI Scan
-function runCameraScanGesture() {
-  const viewport = document.querySelector('.board-viewport');
-  if (!viewport) return;
-  const cone = document.createElement('div');
-  cone.className = 'camera-fov-sweep-fx';
-  cone.innerHTML = `
-    <div class="camera-cone-light"></div>
-    <div class="camera-target-reticle pos-left">
-      <div class="reticle-box"></div>
-      <div class="reticle-tag">Speaker 1 (Teacher/Presenter) · 98% Voice</div>
-    </div>
-    <div class="camera-target-reticle pos-right">
-      <div class="reticle-box"></div>
-      <div class="reticle-tag">Student Question · 96% Voice</div>
-    </div>
-  `;
-  viewport.appendChild(cone);
-  showToast('📹 Ultrawide 120° Camera: AI speaker auto-framing active for online meetings!', 'info');
-  setTimeout(() => cone.remove(), 3600);
-}
-
-// COOL MOTION GESTURE 5: 3D Dual-OS Card Flip (Windows ⇄ Android)
-function toggleDualOSFlip() {
-  const targetMode = state.simulatorMode === 'windows' ? 'android' : 'windows';
-  const frame = document.querySelector('.millennium-board-frame');
-  if (frame) {
-    frame.classList.add('dualos-flip-anim');
-    setTimeout(() => {
-      state.simulatorMode = targetMode;
-      state.activeFeatureDemo = 'dualos';
-      renderApp();
-      const newFrame = document.querySelector('.millennium-board-frame');
-      if (newFrame) newFrame.classList.remove('dualos-flip-anim');
-      showToast(`🪟 Windows ⇄ 🤖 Android: Switched to ${targetMode === 'windows' ? 'Windows 11 Enterprise (Intel Core i7)' : 'Android 13 Millennium OS'} in <1.2s!`, 'success');
-    }, 320);
-  } else {
-    state.simulatorMode = targetMode;
-    state.activeFeatureDemo = 'dualos';
-    renderApp();
-  }
-}
-
-function toggleNoiseSuppression() {
-  state.noiseSuppressionActive = !state.noiseSuppressionActive;
-  showToast(
-    state.noiseSuppressionActive
-      ? '🎙️ Sensitive Audio Input: AI Voice Clarity Active — Background HVAC & classroom chatter suppressed (98% Clarity)'
-      : '🎙️ Raw Mic Mode: Ambient classroom room sound unsuppressed',
-    'info'
-  );
-  renderApp();
-}
-
-function toggleOpsCartridge() {
-  state.opsEjected = !state.opsEjected;
-  showToast(
-    state.opsEjected
-      ? '⚠️ Intel Core i7 OPS Cartridge Ejected from JAE 80-pin Slot (Running on Android SoC)'
-      : '🟢 Intel Core i7 OPS Module Inserted & Locked (Dual-OS Active)',
-    state.opsEjected ? 'warning' : 'info'
-  );
-  renderApp();
-}
-
-// --------------------------------------------------------------------------
-// 2. Mode 1: 4K Cinema / Home Theater Simulator
-// --------------------------------------------------------------------------
-
-function toggleTheaterPlay() {
-  state.theaterState.playing = !state.theaterState.playing;
-  showToast(
-    state.theaterState.playing ? '▶ 4K Media Playback Resumed' : '⏸ 4K Media Paused',
-    'info'
-  );
-  renderApp();
-}
-
-function setTheaterChannel(ch) {
-  state.theaterState.channel = ch;
-  showToast(`4K Media Stream: ${ch.toUpperCase()} (HDR10+)`, 'info');
-  renderApp();
-}
-
-function setTheaterResolution(res) {
-  state.theaterState.resolution = res;
-  showToast(`Display Resolution Switched: ${res}`, 'info');
-  renderApp();
-}
-
-function setTheaterScrub(val) {
-  state.theaterState.timeSeconds = Math.floor((val / 100) * state.theaterState.totalSeconds);
-  const timeEl = document.getElementById('theaterTimecode');
-  if (timeEl) {
-    const mins = Math.floor(state.theaterState.timeSeconds / 60);
-    const secs = state.theaterState.timeSeconds % 60;
-    timeEl.textContent = `0${mins}:${secs < 10 ? '0' : ''}${secs} / 06:00`;
-  }
-}
-
-function setAntiGlareSplit(val) {
-  state.theaterState.antiGlareSplit = val;
-  const overlay = document.getElementById('antiGlareReflectionLayer');
-  if (overlay) {
-    overlay.style.clipPath = `polygon(${val}% 0, 100% 0, 100% 100%, ${val}% 100%)`;
-  }
-}
-
-function initTheaterVisualizer() {
-  const canvas = document.getElementById('theaterVisualizerCanvas');
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  if (visualizerAnimId) cancelAnimationFrame(visualizerAnimId);
-
-  let phase = 0;
-  function draw() {
-    if (!canvas || !ctx) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const bars = 18;
-    const barWidth = canvas.width / bars - 2;
-
-    for (let i = 0; i < bars; i++) {
-      const isPlaying = state.theaterState.playing;
-      const heightMultiplier = isPlaying ? Math.sin(phase + i * 0.45) * 0.5 + 0.5 : 0.08;
-      const barHeight = Math.max(3, heightMultiplier * (canvas.height - 4));
-      const x = i * (barWidth + 2);
-      const y = canvas.height - barHeight;
-
-      const grad = ctx.createLinearGradient(0, y, 0, canvas.height);
-      grad.addColorStop(0, '#00f2fe');
-      grad.addColorStop(1, '#a855f7');
-      ctx.fillStyle = grad;
-      ctx.fillRect(x, y, barWidth, barHeight);
-    }
-    phase += 0.08;
-    visualizerAnimId = requestAnimationFrame(draw);
-  }
-  draw();
-}
-
-// --------------------------------------------------------------------------
-// 3. Mode 2: Stylus Board (Draw, Sketch, Layout & Delete)
-// --------------------------------------------------------------------------
-
-function clearWhiteboardCanvas() {
-  const canvas = document.getElementById('virtualBoardCanvas');
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  whiteboardHistory = [];
-  whiteboardHistoryIdx = -1;
-  showToast('Whiteboard Cleared', 'info');
-}
-
-function undoWhiteboard() {
-  if (whiteboardHistoryIdx <= 0) {
-    showToast('Nothing to undo', 'info');
-    return;
-  }
-  whiteboardHistoryIdx--;
-  const canvas = document.getElementById('virtualBoardCanvas');
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  const img = new Image();
-  img.onload = () => {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(img, 0, 0);
-  };
-  img.src = whiteboardHistory[whiteboardHistoryIdx];
-  showToast('↩️ Undo', 'info');
-}
-
-function redoWhiteboard() {
-  if (whiteboardHistoryIdx >= whiteboardHistory.length - 1) {
-    showToast('Nothing to redo', 'info');
-    return;
-  }
-  whiteboardHistoryIdx++;
-  const canvas = document.getElementById('virtualBoardCanvas');
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  const img = new Image();
-  img.onload = () => {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(img, 0, 0);
-  };
-  img.src = whiteboardHistory[whiteboardHistoryIdx];
-  showToast('↪️ Redo', 'info');
-}
-
-function exportWhiteboardImage() {
-  const canvas = document.getElementById('virtualBoardCanvas');
-  if (!canvas) return;
-  const dataUrl = canvas.toDataURL('image/png');
-  const link = document.createElement('a');
-  link.download = `Millennium_SmartBoard_Notes_${Date.now()}.png`;
-  link.href = dataUrl;
-  link.click();
-  showToast('💾 Whiteboard Notes Exported as PNG', 'info');
-}
-
-function runLessonDemo() {
-  const canvas = document.getElementById('virtualBoardCanvas');
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  ctx.font = '700 16px "Outfit", sans-serif';
-  ctx.fillStyle = '#00f2fe';
-  ctx.fillText('⚡ MILLENNIUM 86" INTERACTIVE SMARTBOARD ARCHITECTURE', 24, 38);
-
-  ctx.lineWidth = 2.5;
-  ctx.strokeStyle = '#38bdf8';
-
-  // Draw SmartBoard Bezel Box
-  ctx.strokeRect(24, 55, 230, 110);
-  ctx.font = '600 12px "Outfit", sans-serif';
-  ctx.fillStyle = '#f8fafc';
-  ctx.fillText('🖥️ 4K Ultra-HD Display', 36, 85);
-  ctx.fillText('• 40-Point Multi-Touch', 36, 105);
-  ctx.fillText('• Zero-Bonding Anti-Glare', 36, 125);
-  ctx.fillText('• <5ms Touch Response', 36, 145);
-
-  // Connecting Arrow to OPS
-  ctx.beginPath();
-  ctx.strokeStyle = '#a855f7';
-  ctx.moveTo(254, 110);
-  ctx.lineTo(340, 110);
-  ctx.stroke();
-
-  // OPS Intel Box
-  ctx.strokeRect(340, 60, 200, 100);
-  ctx.fillStyle = '#c084fc';
-  ctx.fillText('💻 Intel Core i7 OPS Module', 352, 90);
-  ctx.fillStyle = '#cbd5e1';
-  ctx.fillText('• 16GB RAM · 512GB SSD', 352, 110);
-  ctx.fillText('• Windows 11 Enterprise', 352, 130);
-
-  // Connecting Arrow to Wireless Dongle
-  ctx.beginPath();
-  ctx.strokeStyle = '#ec4899';
-  ctx.moveTo(139, 165);
-  ctx.lineTo(139, 215);
-  ctx.stroke();
-
-  // Wireless Dongle Box
-  ctx.strokeRect(40, 215, 200, 80);
-  ctx.fillStyle = '#f472b6';
-  ctx.fillText('📲 Wireless Screen Dongle', 52, 245);
-  ctx.fillStyle = '#cbd5e1';
-  ctx.fillText('• Zero Wi-Fi Required', 52, 265);
-  ctx.fillText('• 4K @ 60 FPS · <6ms latency', 52, 285);
-
-  // Teacher / Student Collaboration Box
-  ctx.strokeRect(340, 200, 200, 95);
-  ctx.strokeStyle = '#34d399';
-  ctx.stroke();
-  ctx.fillStyle = '#34d399';
-  ctx.fillText('🎓 Classroom & Boardroom SLA', 352, 230);
-  ctx.fillStyle = '#cbd5e1';
-  ctx.fillText('• Dual Stylus Recognition', 352, 250);
-  ctx.fillText('• Palm Rejection Active', 352, 270);
-
-  // Save to history stack
-  whiteboardHistory = [canvas.toDataURL()];
-  whiteboardHistoryIdx = 0;
-  showToast('✨ Interactive Lesson Demo Diagram Generated', 'info');
-}
-
-function initWhiteboardCanvas() {
-  const canvas = document.getElementById('virtualBoardCanvas');
-  if (!canvas) return;
-
-  const rect = canvas.getBoundingClientRect();
-  const dpr = window.devicePixelRatio || 1;
-  const width = rect.width > 0 ? rect.width : 760;
-  const height = rect.height > 0 ? rect.height : 420;
-
-  canvas.width = width * dpr;
-  canvas.height = height * dpr;
-  canvas.style.width = `${width}px`;
-  canvas.style.height = `${height}px`;
-
-  const ctx = canvas.getContext('2d');
-  ctx.scale(dpr, dpr);
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-
-  if (whiteboardHistory.length === 0) {
-    ctx.font = '600 14px "Outfit", sans-serif';
-    ctx.fillStyle = 'rgba(0, 242, 254, 0.45)';
-    ctx.fillText('✍️ Millennium Stylus Digital Ink — Draw, sketch, and test gestures with <5ms touch response!', 20, 36);
-    whiteboardHistory = [canvas.toDataURL()];
-    whiteboardHistoryIdx = 0;
-  }
-
-  let isDown = false;
-  let startX = 0;
-  let startY = 0;
-  let snapshot = null;
-
-  function getCoords(e) {
-    const cRect = canvas.getBoundingClientRect();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    return {
-      x: clientX - cRect.left,
-      y: clientY - cRect.top
-    };
-  }
-
-  function startDraw(e) {
-    isDown = true;
-    const coords = getCoords(e);
-    startX = coords.x;
-    startY = coords.y;
-
-    if (state.stylusShape !== 'freehand') {
-      snapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    } else {
-      ctx.beginPath();
-      ctx.moveTo(startX, startY);
-    }
-  }
-
-  function doDraw(e) {
-    if (!isDown) return;
-    const coords = getCoords(e);
-
-    const tool = state.stylusTool || 'pen';
-    if (tool === 'eraser') {
-      ctx.strokeStyle = '#090e1a';
-      ctx.lineWidth = 24;
-    } else if (tool === 'highlighter') {
-      ctx.strokeStyle = 'rgba(0, 242, 254, 0.28)';
-      ctx.lineWidth = 18;
-    } else if (tool === 'marker') {
-      ctx.strokeStyle = state.stylusColor || '#00f2fe';
-      ctx.lineWidth = 7;
-    } else {
-      ctx.strokeStyle = state.stylusColor || '#00f2fe';
-      ctx.lineWidth = state.stylusSize || 3;
-    }
-
-    if (state.stylusShape === 'freehand') {
-      ctx.lineTo(coords.x, coords.y);
-      ctx.stroke();
-    } else {
-      if (snapshot) ctx.putImageData(snapshot, 0, 0);
-      ctx.beginPath();
-      if (state.stylusShape === 'line') {
-        ctx.moveTo(startX, startY);
-        ctx.lineTo(coords.x, coords.y);
-      } else if (state.stylusShape === 'arrow') {
-        ctx.moveTo(startX, startY);
-        ctx.lineTo(coords.x, coords.y);
-        const angle = Math.atan2(coords.y - startY, coords.x - startX);
-        ctx.lineTo(coords.x - 12 * Math.cos(angle - Math.PI / 6), coords.y - 12 * Math.sin(angle - Math.PI / 6));
-        ctx.moveTo(coords.x, coords.y);
-        ctx.lineTo(coords.x - 12 * Math.cos(angle + Math.PI / 6), coords.y - 12 * Math.sin(angle + Math.PI / 6));
-      } else if (state.stylusShape === 'rect') {
-        ctx.strokeRect(startX, startY, coords.x - startX, coords.y - startY);
-      } else if (state.stylusShape === 'circle') {
-        const radius = Math.sqrt(Math.pow(coords.x - startX, 2) + Math.pow(coords.y - startY, 2));
-        ctx.arc(startX, startY, radius, 0, 2 * Math.PI);
-      }
-      ctx.stroke();
-    }
-  }
-
-  function stopDraw() {
-    if (!isDown) return;
-    isDown = false;
-    // Push state to history
-    if (whiteboardHistoryIdx < whiteboardHistory.length - 1) {
-      whiteboardHistory = whiteboardHistory.slice(0, whiteboardHistoryIdx + 1);
-    }
-    whiteboardHistory.push(canvas.toDataURL());
-    whiteboardHistoryIdx = whiteboardHistory.length - 1;
-  }
-
-  canvas.onmousedown = startDraw;
-  canvas.onmousemove = doDraw;
-  canvas.onmouseup = stopDraw;
-  canvas.onmouseleave = stopDraw;
-
-  canvas.ontouchstart = (e) => { e.preventDefault(); startDraw(e); };
-  canvas.ontouchmove = (e) => { e.preventDefault(); doDraw(e); };
-  canvas.ontouchend = stopDraw;
-}
-
-// --------------------------------------------------------------------------
-// 4. Mode 3: Windows 11 Enterprise Mode (Intel Core i7 OPS)
-// --------------------------------------------------------------------------
-
-function openWinApp(app) {
-  state.windowsState.activeApp = app;
-  const names = {
-    powerpoint: 'Microsoft PowerPoint 4K Presentation',
-    teams: 'Microsoft Teams & Zoom 4K Ultrawide Conference',
-    edge: 'Microsoft Edge — Millennium Fleet Portal',
-    ops: 'OPS Intel Core i7 Diagnostic Monitor'
-  };
-  showToast(`Launched: ${names[app] || app}`, 'info');
-  renderApp();
-}
-
-function closeWinApp() {
-  state.windowsState.activeApp = null;
-  renderApp();
-}
-
-function toggleWinStartMenu() {
-  state.windowsState.startMenuOpen = !state.windowsState.startMenuOpen;
-  renderApp();
-}
-
-function nextWinSlide() {
-  state.windowsState.slideIdx = (state.windowsState.slideIdx + 1) % 5;
-  renderApp();
-}
-
-function prevWinSlide() {
-  state.windowsState.slideIdx = (state.windowsState.slideIdx - 1 + 5) % 5;
-  renderApp();
-}
-
-function toggleTeamsMute() {
-  state.windowsState.teamsMuted = !state.windowsState.teamsMuted;
-  showToast(
-    state.windowsState.teamsMuted ? '🔇 Microphone Muted' : '🎙️ Microphone Unmuted (98% Clarity)',
-    'info'
-  );
-  renderApp();
-}
-
-function toggleTeamsCamera() {
-  state.windowsState.teamsCamera = !state.windowsState.teamsCamera;
-  showToast(
-    state.windowsState.teamsCamera ? '📹 4K Camera Active (120° FOV AI Framing)' : '📷 Camera Disabled',
-    'info'
-  );
-  renderApp();
-}
-
-// --------------------------------------------------------------------------
-// 5. Mode 4: Android 13 Interactive OS Mode
-// --------------------------------------------------------------------------
-
-function toggleAndroidQuickSettings() {
-  state.androidState.quickSettingsOpen = !state.androidState.quickSettingsOpen;
-  renderApp();
-}
-
-function toggleAndroidEyeCare() {
-  state.androidState.eyeCare = !state.androidState.eyeCare;
-  showToast(
-    state.androidState.eyeCare
-      ? '👓 Eye-Care Blue Light Warmth Filter Active (Comfort Mode)'
-      : '👓 Natural Color Temperature Restored',
-    'info'
-  );
-  renderApp();
-}
-
-function setAndroidBrightness(val) {
-  state.androidState.brightness = val;
-  const board = document.querySelector('.board-viewport');
-  if (board) board.style.filter = `brightness(${val}%)`;
-}
-
-function setAndroidVolume(val) {
-  state.androidState.volume = val;
-  showToast(`Volume: ${val}%`, 'info');
-}
-
-function openAndroidApp(app) {
-  state.androidState.activeApp = app;
-  renderApp();
-}
-
-function closeAndroidApp() {
-  state.androidState.activeApp = null;
-  renderApp();
-}
-
-function toggleCastClient(id) {
-  showToast(`Toggled Cast Client Stream ${id}`, 'info');
-}
-
-// --------------------------------------------------------------------------
-// 6. Master Simulator Initializer (Touch Ripples, Audio Radar & Canvas)
-// --------------------------------------------------------------------------
-
-function initSmartBoardSimulator() {
-  const viewport = document.querySelector('.board-viewport');
-  if (viewport && !viewport._hasTouchRipple) {
-    viewport._hasTouchRipple = true;
-    viewport.addEventListener('click', (e) => {
-      const rect = viewport.getBoundingClientRect();
-      const ripple = document.createElement('div');
-      ripple.className = 'touch-ripple';
-      ripple.style.left = `${e.clientX - rect.left}px`;
-      ripple.style.top = `${e.clientY - rect.top}px`;
-      viewport.appendChild(ripple);
-      setTimeout(() => ripple.remove(), 600);
-    });
-  }
-
-  if (state.simulatorMode === 'whiteboard') {
-    initWhiteboardCanvas();
-  } else if (state.simulatorMode === 'theater') {
-    initTheaterVisualizer();
-  }
-}
-
-// --------------------------------------------------------------------------
-// 7. Render Showcase & Interactive SmartBoard View
-// --------------------------------------------------------------------------
-
-function renderMillenniumShowcase() {
-  const curMode = state.simulatorMode || 'theater';
-  const isConnected = state.dongleConnected !== false;
-  const activeDemo = state.activeFeatureDemo;
-  const winState = state.windowsState;
-  const andState = state.androidState;
-  const thState = state.theaterState;
-
-  // Powerpoint slide deck metadata
-  const pptSlides = [
-    {
-      title: 'MILLENNIUM INTERACTIVE SMARTBOARD',
-      subtitle: '86" Flagship Display · Brains Infinite Innovations Inc.',
-      body: 'Transform classrooms, conference rooms, and home theaters into state-of-the-art collaborative centers.',
-      badge: 'SLIDE 1/5 · SYSTEM OVERVIEW'
-    },
-    {
-      title: 'MODULAR INTEL CORE i7 OPS MODULE',
-      subtitle: 'Scalable Computing Architecture via JAE 80-pin Slot',
-      body: 'Zero cable clutter. Runs Windows 11 Enterprise alongside Android 13 with instant 1.2-second OS switching.',
-      badge: 'SLIDE 2/5 · OPS COMPUTING'
-    },
-    {
-      title: '40-POINT TOUCH & ZERO-BONDING GLASS',
-      subtitle: '<5ms Touch Response · Dual Stylus Recognition',
-      body: 'Natural hand gestures, palm rejection, and optical anti-glare coating engineered for all-day comfortable viewing.',
-      badge: 'SLIDE 3/5 · TOUCH INTERACTION'
-    },
-    {
-      title: 'WIRELESS SCREEN DONGLE STREAMING',
-      subtitle: 'Plug-and-Play Screen Mirroring (Zero Wi-Fi Required)',
-      body: 'Instant wireless transmission from laptops and mobile phones at 4K @ 60 FPS with bidirectional touch control.',
-      badge: 'SLIDE 4/5 · WIRELESS CASTING'
-    },
-    {
-      title: 'ENTERPRISE SLA & 3-YEAR WARRANTY',
-      subtitle: 'Official Warranty & On-Site Technical Support Coverage',
-      body: 'Suite 1004 Atlanta Center, Greenhills San Juan Philippines. Complete parts inventory, hot-swappable modules, and SLA support.',
-      badge: 'SLIDE 5/5 · AFTER-SALES SERVICE'
-    }
-  ];
-
-  return `
-    <div class="millennium-showcase-container">
-
-      <!-- Top Showcase Header -->
-      <div class="showcase-header">
-        <div class="showcase-title-box">
-          <div class="showcase-eyebrow">
-            <span>⚡ Interactive SmartBoard Simulator & Showcase</span>
-            <span>·</span>
-            <span>Brains Infinite Innovations Inc.</span>
-          </div>
-          <div class="showcase-heading">
-            <span class="millennium-word" style="font-size:1.6rem;">MILLENNIUM</span>
-            <span style="color:var(--text-secondary);font-weight:400;font-size:1.15rem;">Interactive SmartBoard (86" Flagship)</span>
-          </div>
-          <div class="showcase-subtext">
-            Millennium is a <strong>smart interactive board</strong> that can do presentations in the classroom, conference room, home theater, or anywhere requiring engaging collaboration.
-          </div>
-        </div>
-
-        <!-- 4 Primary Display Mode Switcher Tabs -->
-        <div class="board-mode-tabs" role="tablist">
-          <button class="board-mode-btn ${curMode === 'theater' && !activeDemo ? 'active' : ''}" onclick="setSimulatorMode('theater')" title="4K Ultra-HD Cinema & Home Theater">
-            🎬 4K Cinema
-          </button>
-          <button class="board-mode-btn ${curMode === 'whiteboard' && !activeDemo ? 'active' : ''}" onclick="setSimulatorMode('whiteboard')" title="Interactive Digital Ink Stylus Whiteboard">
-            ✏️ Stylus Board
-          </button>
-          <button class="board-mode-btn ${curMode === 'windows' && !activeDemo ? 'active' : ''}" onclick="setSimulatorMode('windows')" title="Windows 11 Pro Enterprise Mode (OPS Module)">
-            🪟 Windows 11
-          </button>
-          <button class="board-mode-btn ${curMode === 'android' && !activeDemo ? 'active' : ''}" onclick="setSimulatorMode('android')" title="Android 13 Millennium OS Mode">
-            🤖 Android 13
-          </button>
-        </div>
-      </div>
-
-      
-
-      <!-- Active Demonstration Spotlight Banner (Displayed when a feature demo is running) -->
-      ${activeDemo ? `
-        <div class="demo-active-banner">
-          <div class="demo-active-info">
-            <div class="demo-live-dot"></div>
-            <div>
-              <div class="demo-active-title">
-                ${{ uhd:'LIVE DEMO: 4K Ultra High-Definition Display — Home Theater & Streaming', audio:'LIVE DEMO: Sensitive Audio Input — Maximum Voice Clarity for Meetings & Classes', stylus:'LIVE DEMO: Draw, Sketch, Layout & Delete with Stylus Pen & Hand Gestures', cast:'LIVE DEMO: Project Your Laptop & Cellphone on Screen (Local & Online Sharing)', wireless:'LIVE DEMO: Bluetooth, Hotspot, Cast & Wi-Fi Ready — All Wireless Connectivity', ops:'LIVE DEMO: Future-Proof Modular OPS Intel Core i7 Scalable Computing', dualos:'LIVE DEMO: Dual OS — Windows 11 Enterprise & Android 13 (1.2s Hot-Switch)', camera:'LIVE DEMO: Ultrawide Angle Camera — 120° FOV & AI Speaker Auto-Framing', dongle:'LIVE DEMO: Screen Transfer Without Network — Control via Dongle' }[activeDemo] || 'LIVE DEMO: ' + activeDemo.toUpperCase()}
-              </div>
-              <div class="demo-active-desc">
-                Interactive virtual demonstration on simulated Millennium 86&quot; hardware — interact with the controls below!
-              </div>
-            </div>
-          </div>
-          <div class="demo-banner-actions">
-            <button class="btn btn-secondary btn-sm" onclick="closeFeatureDemo()" style="font-size:0.75rem;padding:4px 12px;">
-              ✕ Exit Demo
-            </button>
-          </div>
-        </div>
-      ` : ''}
-
-      <!-- Main Showcase Grid: Physical SmartBoard + Controls -->
-      <div class="showcase-main-grid">
-
-        <!-- Physical Bezel Frame with Dynamic Ambilight Backglow -->
-        <div class="millennium-board-frame">
-          
-          <!-- Top Ultrawide Camera Module Notch -->
-          <div class="board-camera-notch" onclick="showToast('📹 Millennium 4K Ultrawide 120° FOV Camera with AI Speaker Framing', 'info')" title="Ultrawide Angle Camera for online meetings and presentations">
-            <div class="cam-lens"></div>
-            <div class="cam-led"></div>
-            <span class="cam-text">4K Ultrawide 120° FOV</span>
-          </div>
-
-          <!-- Active Screen Viewport -->
-          <div class="board-viewport ${andState.eyeCare ? 'eye-care-warm' : ''}">
-
-            <!-- ========================================================== -->
-            <!-- IN-BOARD FEATURE DEMONSTRATION OVERLAYS                    -->
-            <!-- ========================================================== -->
-
-            ${activeDemo === 'uhd' ? `
-              <!-- Demo 1: 4K UHD Display Inspector -->
-              <div class="inboard-demo-stage">
-                <div class="demo-stage-header">
-                  <div>
-                    <div class="demo-stage-tag"><span>✨ FEATURE 1 OF 9 — FROM BROCHURE</span></div>
-                    <div class="demo-stage-title">4K Ultra High-Definition Display</div>
-                  </div>
-                  <button class="demo-stage-close-btn" onclick="closeFeatureDemo()">✕ Close</button>
-                </div>
-
-                <div class="demo-uhd-grid">
-                  <div class="demo-uhd-preview-box">
-                    <div class="subpixel-grid-pattern"></div>
-                    <div style="z-index:2;text-align:center;padding:16px;">
-                      <div style="font-family:'Cinzel',serif;font-size:1.6rem;font-weight:900;color:#00f2fe;text-shadow:0 0 16px rgba(0,242,254,0.8);">3840 × 2160 UHD</div>
-                      <div style="font-size:0.8rem;color:#e2e8f0;margin-top:4px;">8.29 Million Pixels · Zero-Bonding Glass · 400 nits</div>
-                      <div style="margin-top:12px;display:flex;gap:6px;justify-content:center;">
-                        <span class="theater-badge">60 FPS Motion Clarity ✅</span>
-                        <span class="theater-badge" style="color:#34d399;">99% DCI-P3 Gamut ✅</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="demo-specs-list">
-                    <div class="demo-spec-item"><span>Native Resolution:</span><strong style="color:var(--neon-cyan);">3840 × 2160 (16:9 Ultra HD)</strong></div>
-                    <div class="demo-spec-item"><span>Color Depth:</span><strong>1.07 Billion Colors (10-bit HDR)</strong></div>
-                    <div class="demo-spec-item"><span>Anti-Glare Glass:</span><strong style="color:#34d399;">Zero-Gap Optical Bonding (4mm Toughened)</strong></div>
-                    <div class="demo-explanation-box">
-                      <div class="deb-quote">"4K Ultra High-Definition display for Home theater. Perfect for Netflix and streaming."</div>
-                      <div class="deb-howto"><strong>What it does:</strong> The 86" display outputs crystal-clear 4K video — 4× sharper than Full HD. <strong>Try it:</strong> Click the cinema player button below to see the 4K media demo in action.</div>
-                      <button class="deb-gesture-btn" onclick="setSimulatorMode('theater')">🎬 Open 4K Cinema Player</button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ` : ''}
-
-            ${activeDemo === 'audio' ? `
-              <!-- Demo 2: Audio Radar & Soundstage Demo -->
-              <div class="inboard-demo-stage">
-                <div class="demo-stage-header">
-                  <div>
-                    <div class="demo-stage-tag"><span>✨ FEATURE 2 DEMONSTRATION</span></div>
-                    <div class="demo-stage-title">Sensitive Audio Input & 8-Meter Voice Radar Array</div>
-                  </div>
-                  <button class="demo-stage-close-btn" onclick="closeFeatureDemo()">✕ Close</button>
-                </div>
-
-                <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:16px;flex:1;align-items:center;">
-                  <div class="demo-radar-wrap">
-                    <div class="acoustic-radar-circle">
-                      <div class="radar-sweep-beam"></div>
-                      <div style="z-index:2;text-align:center;font-size:0.75rem;font-weight:700;">
-                        <div style="font-size:1.4rem;">🎙️</div>
-                        <div style="color:var(--neon-cyan);">8m Radius</div>
-                        <div style="color:#34d399;font-size:0.68rem;">360° Omnidirectional</div>
-                      </div>
-                    </div>
-                    <div style="margin-top:10px;font-size:0.75rem;color:#cbd5e1;text-align:center;">
-                      Active Beamforming: Tracking Speaker 1 at 3.4m (Angle: 42°)
-                    </div>
-                  </div>
-
-                  <div style="display:flex;flex-direction:column;gap:10px;">
-                    <div class="demo-spec-item">
-                      <span>Pickup Sensitivity:</span>
-                      <strong style="color:var(--neon-cyan);">-38dB ± 1dB High Sensitivity</strong>
-                    </div>
-                    <div class="demo-spec-item">
-                      <span>Echo Cancellation:</span>
-                      <strong style="color:#34d399;">Hardware DSP AEC Active</strong>
-                    </div>
-                    <div class="demo-spec-item">
-                      <span>AI Noise Suppression:</span>
-                      <button class="btn btn-sm ${state.noiseSuppressionActive ? 'btn-primary' : 'btn-secondary'}" onclick="toggleNoiseSuppression()" style="font-size:0.72rem;padding:3px 8px;">
-                        ${state.noiseSuppressionActive ? '🟢 Active (98% Clarity)' : '⚪ Raw Ambient'}
-                      </button>
-                    </div>
-                    <div class="demo-explanation-box" style="margin-top:6px;">
-                      <div class="deb-quote">"Sensitive audio input for maximum voice clarity."</div>
-                      <div class="deb-howto"><strong>What it does:</strong> The board's built-in microphone picks up voices from up to 8 meters away in any direction. <strong>Try it:</strong> Toggle the AI Noise Suppression button to hear the difference between raw ambient sound and crystal-clear voice pickup.</div>
-                      <button class="deb-gesture-btn" onclick="toggleNoiseSuppression()">⚡ Toggle Voice Clarity (AI Noise Suppression)</button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ` : ''}
-
-
-            ${activeDemo === 'stylus' ? `
-              <!-- Demo 3: Stylus Pen & Gesture Board -->
-              <div class="inboard-demo-stage">
-                <div class="demo-stage-header">
-                  <div>
-                    <div class="demo-stage-tag"><span>✨ FEATURE 3 OF 9 — FROM BROCHURE</span></div>
-                    <div class="demo-stage-title">Draw, Sketch, Layout & Delete — Stylus Pen & Hand Gestures</div>
-                  </div>
-                  <button class="demo-stage-close-btn" onclick="closeFeatureDemo()">✕ Close</button>
-                </div>
-                <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:16px;flex:1;align-items:start;">
-                  <div style="display:flex;flex-direction:column;gap:8px;">
-                    <div class="demo-spec-item"><span>Touch Points:</span><strong style="color:var(--neon-cyan);">40-Point Multi-Touch Simultaneous</strong></div>
-                    <div class="demo-spec-item"><span>Touch Latency:</span><strong style="color:#34d399;">&lt; 5ms Response</strong></div>
-                    <div class="demo-spec-item"><span>Palm Rejection:</span><strong>Hardware-Level (Rest hand freely)</strong></div>
-                    <div class="demo-spec-item"><span>Stylus Support:</span><strong>Dual Active Stylus Pen Recognition</strong></div>
-                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">
-                      <button class="btn btn-secondary btn-sm" onclick="setSimulatorMode('whiteboard');closeFeatureDemo()" style="font-size:0.74rem;">✍️ Open Stylus Board</button>
-                    </div>
-                  </div>
-                  <div class="demo-explanation-box">
-                    <div class="deb-quote">"Draw, sketch, layout and delete using a stylus pen and hand gestures."</div>
-                    <div class="deb-howto"><strong>What it does:</strong> Use the bundled stylus pen to write, draw diagrams, and annotate slides on the 86" screen. Your palm rests naturally without causing accidental marks. <strong>Try it:</strong> Click the gesture button to watch the stylus auto-draw a diagram, then use Palm Erase to wipe it clean.</div>
-                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                      <button class="deb-gesture-btn" onclick="runStylusDrawingGesture()">✍️ Run Stylus Drawing Gesture</button>
-                      <button class="deb-gesture-btn" style="background:rgba(168,85,247,0.18);border-color:rgba(168,85,247,0.5);" onclick="runHandPalmEraseGesture()">🖐️ Run Palm Erase Gesture</button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ` : ''}
-
-            ${activeDemo === 'cast' ? `
-              <!-- Demo 4: Screen Cast / Screen Projection -->
-              <div class="inboard-demo-stage">
-                <div class="demo-stage-header">
-                  <div>
-                    <div class="demo-stage-tag"><span>✨ FEATURE 4 OF 9 — FROM BROCHURE</span></div>
-                    <div class="demo-stage-title">Project Your Laptop & Cellphone on Screen</div>
-                  </div>
-                  <button class="demo-stage-close-btn" onclick="closeFeatureDemo()">✕ Close</button>
-                </div>
-                <div class="demo-cast-split-grid">
-                  <div class="cast-quad-tile">
-                    <div class="cast-quad-header"><span>💻 Windows Laptop (Dongle)</span><span style="color:#34d399;">4K @ 60 FPS</span></div>
-                    <div style="text-align:center;padding:12px;font-size:0.8rem;color:#cbd5e1;">📊 Millennium Pitch Deck (PowerPoint)</div>
-                    <div style="font-size:0.68rem;color:#94a3b8;display:flex;justify-content:space-between;">
-                      <span>Latency: <strong>5ms</strong></span>
-                      <button class="btn btn-secondary btn-sm" onclick="showToast('💻 Laptop stream toggled!','info')" style="font-size:0.65rem;padding:2px 6px;">Toggle</button>
-                    </div>
-                  </div>
-                  <div class="cast-quad-tile">
-                    <div class="cast-quad-header"><span>📱 Android Phone (Cast)</span><span style="color:#c084fc;">1080p Stream</span></div>
-                    <div style="text-align:center;padding:12px;font-size:0.8rem;color:#cbd5e1;">📹 Live Mobile Camera Feed</div>
-                    <div style="font-size:0.68rem;color:#94a3b8;display:flex;justify-content:space-between;">
-                      <span>Latency: <strong>8ms</strong></span>
-                      <button class="btn btn-secondary btn-sm" onclick="showToast('📱 Phone cast toggled!','info')" style="font-size:0.65rem;padding:2px 6px;">Toggle</button>
-                    </div>
-                  </div>
-                  <div class="cast-quad-tile" style="grid-column:span 2;">
-                    <div class="demo-explanation-box" style="margin:0;">
-                      <div class="deb-quote">"Project your laptop and your cellphone on the screen and share it across all your audience locally and online."</div>
-                      <div class="deb-howto"><strong>What it does:</strong> Mirror or extend any laptop or phone screen onto the 86" board — wirelessly. Audience in the room and online (via Teams/Zoom) all see the same content. <strong>Try it:</strong> Click the Dongle Beam gesture to simulate a wireless laptop connection in real-time.</div>
-                      <button class="deb-gesture-btn" onclick="runDongleCastBeam()">📡 Simulate Screen Cast Beam</button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ` : ''}
-
-            ${activeDemo === 'wireless' ? `
-              <!-- Demo 5: Full Wireless Connectivity Diagnostics -->
-              <div class="inboard-demo-stage">
-                <div class="demo-stage-header">
-                  <div>
-                    <div class="demo-stage-tag"><span>✨ FEATURE 5 DEMONSTRATION</span></div>
-                    <div class="demo-stage-title">Full Universal Wireless Connectivity Diagnostic Hub</div>
-                  </div>
-                  <button class="demo-stage-close-btn" onclick="closeFeatureDemo()">✕ Close</button>
-                </div>
-
-                <div class="wireless-diag-row">
-                  <div class="diag-pod">
-                    <div style="font-size:1.6rem;">📶</div>
-                    <div style="font-weight:700;font-size:0.8rem;">Wi-Fi 6 Dual-Band</div>
-                    <div class="diag-speed-gauge">1.2 Gbps</div>
-                    <div style="font-size:0.7rem;color:#94a3b8;">5.8 GHz Low-Jitter Ping: 3ms</div>
-                  </div>
-                  <div class="diag-pod">
-                    <div style="font-size:1.6rem;">📡</div>
-                    <div style="font-weight:700;font-size:0.8rem;">5GHz Screen Hotspot</div>
-                    <div class="diag-speed-gauge" style="color:var(--neon-cyan);">16 Clients</div>
-                    <div style="font-size:0.7rem;color:#94a3b8;">Zero Conference Router Needed</div>
-                  </div>
-                  <div class="diag-pod">
-                    <div style="font-size:1.6rem;">⚡</div>
-                    <div style="font-weight:700;font-size:0.8rem;">Bluetooth 5.2 Hub</div>
-                    <div class="diag-speed-gauge" style="color:#c084fc;">3 Paired</div>
-                    <div style="font-size:0.7rem;color:#94a3b8;">Active Pen · Mic · Speaker</div>
-                  </div>
-                </div>
-                <div class="demo-explanation-box" style="margin-top:14px;">
-                  <div class="deb-quote">"Bluetooth, hotspot, cast and WiFi ready for wireless connectivity."</div>
-                  <div class="deb-howto"><strong>What it does:</strong> The board is wireless from every angle — connect to your office Wi-Fi, create its own hotspot for participants, pair Bluetooth accessories, and cast screens. No cable clutter. <strong>Try it:</strong> The diagnostics above show live wireless stats. Toggle the dongle on the right panel to see Screen Cast in action.</div>
-                  <button class="deb-gesture-btn" onclick="startFeatureDemo('dongle')">🔘 Test Wireless Dongle (No Network)</button>
-                </div>
-              </div>
-            ` : ''}
-
-            ${activeDemo === 'ops' ? `
-              <!-- Demo 6: Modular OPS Architecture -->
-              <div class="inboard-demo-stage">
-                <div class="demo-stage-header">
-                  <div>
-                    <div class="demo-stage-tag"><span>✨ FEATURE 6 DEMONSTRATION</span></div>
-                    <div class="demo-stage-title">Future-Proof System Design (Open Pluggable Specification)</div>
-                  </div>
-                  <button class="demo-stage-close-btn" onclick="closeFeatureDemo()">✕ Close</button>
-                </div>
-
-                <div class="ops-slot-demo-bay">
-                  <div class="ops-cartridge-graphic ${state.opsEjected ? 'ejected' : ''}">
-                    <div style="font-size:1.8rem;">💻</div>
-                    <div>
-                      <div style="font-weight:800;font-size:0.88rem;color:#38bdf8;">Intel Core i7 OPS Cartridge</div>
-                      <div style="font-size:0.72rem;color:#cbd5e1;">JAE 80-Pin Interconnect Standard</div>
-                      <div style="font-size:0.7rem;color:#94a3b8;margin-top:2px;">
-                        ${state.opsEjected ? '⚠️ Ejected (Running on Android SoC)' : '🟢 Locked (Dual-OS Active)'}
-                      </div>
-                    </div>
-                  </div>
-                  <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end;">
-                    <div style="font-size:0.78rem;color:#e2e8f0;">Thermal: <strong style="color:#34d399;">48°C · Fan 2,100 RPM</strong></div>
-                    <div style="font-size:0.78rem;color:#e2e8f0;">Hot-Switch: <strong style="color:var(--neon-cyan);">< 1.2 Seconds</strong></div>
-                    <button class="btn btn-secondary btn-sm" onclick="toggleOpsCartridge()" style="font-size:0.74rem;">
-                      ${state.opsEjected ? '▶ Insert & Lock OPS Module' : '⏏️ Eject OPS Module'}
-                    </button>
-                  </div>
-                </div>
-                <div class="demo-explanation-box" style="margin-top:14px;">
-                  <div class="deb-quote">"Future-proof system design with scalable computing capacity through its embedded OPS module."</div>
-                  <div class="deb-howto"><strong>What it does:</strong> The OPS slot holds a full Intel Core i7 PC cartridge inside the board — no external computer needed. When tech improves, just swap the cartridge for a newer one without changing the display. <strong>Try it:</strong> Click "Eject OPS Module" to simulate hot-swapping the compute cartridge, then re-insert it.</div>
-                  <button class="deb-gesture-btn" onclick="toggleOpsCartridge()">⚡ ${state.opsEjected ? 'Re-Insert OPS Cartridge' : 'Hot-Swap OPS Cartridge'}</button>
-                </div>
-              </div>
-            ` : ''}
-
-            ${activeDemo === 'dualos' ? `
-              <!-- Demo 7: Dual OS -- Windows 11 + Android 13 -->
-              <div class="inboard-demo-stage">
-                <div class="demo-stage-header">
-                  <div>
-                    <div class="demo-stage-tag"><span>✨ FEATURE 7 OF 9 — CALLOUT CARD</span></div>
-                    <div class="demo-stage-title">Dual OS — Windows 11 Enterprise & Android 13</div>
-                  </div>
-                  <button class="demo-stage-close-btn" onclick="closeFeatureDemo()">✕ Close</button>
-                </div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;flex:1;align-items:center;">
-                  <div style="display:flex;flex-direction:column;gap:10px;">
-                    <div style="display:flex;gap:10px;">
-                      <div style="flex:1;background:rgba(0,120,215,0.18);border:1px solid rgba(0,120,215,0.5);border-radius:8px;padding:12px;text-align:center;">
-                        <div style="font-size:1.8rem;">🪟</div>
-                        <div style="font-weight:800;font-size:0.85rem;color:#60a5fa;">Windows 11 Enterprise</div>
-                        <div style="font-size:0.72rem;color:#94a3b8;margin-top:4px;">Intel Core i7 OPS · Office & Teams</div>
-                      </div>
-                      <div style="display:flex;align-items:center;font-size:1.2rem;color:#fbbf24;">⇄</div>
-                      <div style="flex:1;background:rgba(52,211,153,0.14);border:1px solid rgba(52,211,153,0.4);border-radius:8px;padding:12px;text-align:center;">
-                        <div style="font-size:1.8rem;">🤖</div>
-                        <div style="font-weight:800;font-size:0.85rem;color:#34d399;">Android 13 Millennium OS</div>
-                        <div style="font-size:0.72rem;color:#94a3b8;margin-top:4px;">Built-in SoC · Whiteboard & Cast</div>
-                      </div>
-                    </div>
-                    <div class="demo-spec-item"><span>OS Switch Speed:</span><strong style="color:var(--neon-cyan);">&lt; 1.2 Seconds</strong></div>
-                    <div class="demo-spec-item"><span>Currently Running:</span><strong>${state.simulatorMode === 'windows' ? '🪟 Windows 11 Enterprise' : '🤖 Android 13'}</strong></div>
-                  </div>
-                  <div class="demo-explanation-box">
-                    <div class="deb-quote">"Embedded with Windows and Android Operating Systems."</div>
-                    <div class="deb-howto"><strong>What it does:</strong> The board runs both Windows 11 (for Office apps and full PC work) and Android 13 (for whiteboard, casting, and quick apps) — switching between them takes under 1.2 seconds. <strong>Try it:</strong> Click the 3D OS Flip button to instantly switch operating systems with a cool animation.</div>
-                    <button class="deb-gesture-btn" onclick="toggleDualOSFlip()">🪟⇄🤖 Run 3D Dual-OS Card Flip</button>
-                  </div>
-                </div>
-              </div>
-            ` : ''}
-
-            ${activeDemo === 'camera' ? `
-              <!-- Demo 8: Ultrawide Angle Camera -->
-              <div class="inboard-demo-stage">
-                <div class="demo-stage-header">
-                  <div>
-                    <div class="demo-stage-tag"><span>✨ FEATURE 8 OF 9 — CALLOUT CARD</span></div>
-                    <div class="demo-stage-title">Ultrawide Angle Camera — 120° FOV & AI Speaker Framing</div>
-                  </div>
-                  <button class="demo-stage-close-btn" onclick="closeFeatureDemo()">✕ Close</button>
-                </div>
-                <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:14px;flex:1;align-items:center;">
-                  <div style="display:flex;flex-direction:column;gap:8px;">
-                    <div style="background:rgba(0,242,254,0.08);border:1px solid rgba(0,242,254,0.25);border-radius:10px;padding:14px;display:flex;align-items:center;gap:12px;">
-                      <div style="font-size:2.4rem;">📹</div>
-                      <div>
-                        <div style="font-weight:800;font-size:0.88rem;color:var(--neon-cyan);">Ultrawide Camera Module</div>
-                        <div style="font-size:0.73rem;color:#94a3b8;margin-top:2px;">Mounted top-center of display bezel</div>
-                      </div>
-                    </div>
-                    <div class="demo-spec-item"><span>Field of View:</span><strong style="color:var(--neon-cyan);">120° Ultrawide Angle</strong></div>
-                    <div class="demo-spec-item"><span>Resolution:</span><strong>4K Video (3840×2160 @ 30fps)</strong></div>
-                    <div class="demo-spec-item"><span>AI Feature:</span><strong style="color:#34d399;">Auto-Framing & Speaker Tracking</strong></div>
-                    <div class="demo-spec-item"><span>Use Case:</span><strong>Online Meetings, Presentations, Classes</strong></div>
-                    <div style="display:flex;gap:8px;margin-top:4px;">
-                      <button class="btn btn-secondary btn-sm" onclick="setSimulatorMode('windows');state.windowsState.activeApp='teams';renderApp()" style="font-size:0.74rem;">💬 Open Teams/Zoom View</button>
-                    </div>
-                  </div>
-                  <div class="demo-explanation-box">
-                    <div class="deb-quote">"Ultrawide Angle camera for online meetings and presentations."</div>
-                    <div class="deb-howto"><strong>What it does:</strong> The built-in 4K camera covers the entire room in one shot — teachers, students, and presenters are always in frame. AI automatically tracks the speaker so remote participants always see who's talking. <strong>Try it:</strong> Click below to activate the 120° FOV scan with AI auto-framing boxes.</div>
-                    <button class="deb-gesture-btn" onclick="runCameraScanGesture()">📹 Activate 120° AI Camera Scan</button>
-                  </div>
-                </div>
-              </div>
-            ` : ''}
-
-            ${activeDemo === 'dongle' ? `
-              <!-- Demo 9: Wireless Dongle -->
-              <div class="inboard-demo-stage">
-                <div class="demo-stage-header">
-                  <div>
-                    <div class="demo-stage-tag"><span>✨ FEATURE 9 OF 9 — CALLOUT CARD</span></div>
-                    <div class="demo-stage-title">Wireless Screen Dongle — No Network Required</div>
-                  </div>
-                  <button class="demo-stage-close-btn" onclick="closeFeatureDemo()">✕ Close</button>
-                </div>
-                <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:14px;flex:1;align-items:center;">
-                  <div style="display:flex;flex-direction:column;gap:8px;">
-                    <div style="background:rgba(196,132,252,0.1);border:1px solid rgba(196,132,252,0.35);border-radius:10px;padding:14px;display:flex;align-items:center;gap:12px;">
-                      <div style="font-size:2.4rem;">🔘</div>
-                      <div>
-                        <div style="font-weight:800;font-size:0.88rem;color:#c084fc;">Millennium Wireless Dongle</div>
-                        <div style="font-size:0.73rem;color:#94a3b8;margin-top:2px;">Plug into laptop USB-C — instant screen on board</div>
-                      </div>
-                    </div>
-                    <div class="demo-spec-item"><span>Network Needed?</span><strong style="color:#34d399;">No — Works without Wi-Fi or internet</strong></div>
-                    <div class="demo-spec-item"><span>Stream Quality:</span><strong>4K @ 60 FPS</strong></div>
-                    <div class="demo-spec-item"><span>Latency:</span><strong style="color:var(--neon-cyan);">&lt; 6ms (near-zero delay)</strong></div>
-                    <div class="demo-spec-item"><span>Control:</span><strong>Touch the board to control the connected laptop</strong></div>
-                    <div style="display:flex;gap:8px;margin-top:4px;">
-                      <button class="btn btn-secondary btn-sm" onclick="toggleWirelessDongle()" style="font-size:0.74rem;">${state.dongleConnected ? '⏏️ Unplug Dongle' : '🔘 Plug In Dongle'}</button>
-                    </div>
-                  </div>
-                  <div class="demo-explanation-box">
-                    <div class="deb-quote">"Screen transfer without network can control the computer on the conference tablet using Dongle."</div>
-                    <div class="deb-howto"><strong>What it does:</strong> Plug the small dongle into your laptop's USB-C port and your screen instantly appears on the Millennium board — no Wi-Fi, no passwords, no setup. You can even touch the board to control your laptop remotely. <strong>Try it:</strong> Click below to simulate the dongle wireless beam transmission.</div>
-                    <button class="deb-gesture-btn" onclick="runDongleCastBeam()">🔘 Simulate Dongle Beam Transmission</button>
-                  </div>
-                </div>
-              </div>
-            ` : ''}
-
-            <!-- ========================================================== -->
-            <!-- STANDARD DISPLAY MODES                                     -->
-            <!-- ========================================================== -->
-
-            <!-- Mode 1: 4K Ultra High-Definition Home Theater / YouTube Demo -->
-            ${curMode === 'theater' && !activeDemo ? `
-              <div class="view-theater ch-${thState.channel}" style="position:relative;width:100%;height:100%;overflow:hidden;">
-                
-                <!-- Embedded YouTube Demo Video - Full Screen -->
-                <iframe 
-                  width="100%" 
-                  height="100%" 
-                  src="https://www.youtube.com/embed/FwzdLd3bSx8?autoplay=1&mute=0&controls=1&rel=0&modestbranding=1" 
-                  title="Millennium Interactive SmartBoard Demo" 
-                  frameborder="0" 
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
-                  allowfullscreen
-                  style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;display:block;object-fit:cover;">
-                </iframe>
-                
-                <!-- Video Info Overlay (Optional - can be hidden) -->
-                <div style="position:absolute;bottom:30px;left:30px;z-index:1000;background:rgba(0,0,0,0.85);backdrop-filter:blur(12px);padding:16px 24px;border-radius:10px;border:1px solid rgba(0,242,254,0.3);box-shadow:0 4px 20px rgba(0,0,0,0.5);">
-                  <h3 style="font-family:'Cinzel',serif;font-size:1.3rem;letter-spacing:0.05em;color:#00f2fe;margin:0 0 6px 0;text-shadow:0 2px 8px rgba(0,242,254,0.5);">
-                    MILLENNIUM 4K ULTRA-HD
-                  </h3>
-                  <p style="font-size:0.85rem;color:#e2e8f0;margin:0;max-width:450px;line-height:1.4;">
-                    Official Demo: 4K display, wireless casting, interactive touch, and dual OS capabilities.
-                  </p>
-                </div>
-
-              </div>
-            ` : ''}
-
-            <!-- Mode 2: Interactive Digital Stylus Canvas -->
-            ${curMode === 'whiteboard' && !activeDemo ? `
-              <div class="view-whiteboard">
-                <canvas id="virtualBoardCanvas" class="whiteboard-canvas-layer"></canvas>
-
-                <!-- Floating Stylus Toolkit -->
-                <div class="stylus-toolbar">
-                  <!-- Color Dots -->
-                  <div class="color-dot color-cyan ${state.stylusColor === '#00f2fe' ? 'active' : ''}" data-color="#00f2fe" onclick="setStylusColor('#00f2fe')" title="Cyan Pen"></div>
-                  <div class="color-dot color-magenta ${state.stylusColor === '#ec4899' ? 'active' : ''}" data-color="#ec4899" onclick="setStylusColor('#ec4899')" title="Magenta Pen"></div>
-                  <div class="color-dot color-gold ${state.stylusColor === '#fbbf24' ? 'active' : ''}" data-color="#fbbf24" onclick="setStylusColor('#fbbf24')" title="Gold Pen"></div>
-                  <div class="color-dot color-emerald ${state.stylusColor === '#10b981' ? 'active' : ''}" data-color="#10b981" onclick="setStylusColor('#10b981')" title="Emerald Pen"></div>
-                  <div class="color-dot color-white ${state.stylusColor === '#ffffff' ? 'active' : ''}" data-color="#ffffff" onclick="setStylusColor('#ffffff')" title="White Pen"></div>
-
-                  <div style="width:1px;height:18px;background:rgba(255,255,255,0.2);margin:0 2px;"></div>
-
-                  <!-- Tools -->
-                  <button class="stylus-tool-btn ${state.stylusTool === 'pen' ? 'active' : ''}" data-tool="pen" onclick="setStylusTool('pen')" title="Fine Stylus Pen">✏️ Fine</button>
-                  <button class="stylus-tool-btn ${state.stylusTool === 'marker' ? 'active' : ''}" data-tool="marker" onclick="setStylusTool('marker')" title="Marker Pen">🖊️ Marker</button>
-                  <button class="stylus-tool-btn ${state.stylusTool === 'highlighter' ? 'active' : ''}" data-tool="highlighter" onclick="setStylusTool('highlighter')" title="Neon Highlighter">🖌️ Glow</button>
-                  <button class="stylus-tool-btn ${state.stylusTool === 'eraser' ? 'active' : ''}" data-tool="eraser" onclick="setStylusTool('eraser')" title="Gesture Palm Eraser">🖐️ Erase</button>
-
-                  <div style="width:1px;height:18px;background:rgba(255,255,255,0.2);margin:0 2px;"></div>
-
-                  <!-- Shapes -->
-                  <button class="stylus-tool-btn ${state.stylusShape === 'arrow' ? 'active' : ''}" data-shape="arrow" onclick="setStylusShape('arrow')" title="Arrow Vector">➔</button>
-                  <button class="stylus-tool-btn ${state.stylusShape === 'rect' ? 'active' : ''}" data-shape="rect" onclick="setStylusShape('rect')" title="Rectangle">▭</button>
-                  <button class="stylus-tool-btn ${state.stylusShape === 'circle' ? 'active' : ''}" data-shape="circle" onclick="setStylusShape('circle')" title="Circle">○</button>
-
-                  <div style="width:1px;height:18px;background:rgba(255,255,255,0.2);margin:0 2px;"></div>
-
-                  <!-- Actions -->
-                  <button class="stylus-tool-btn" onclick="runLessonDemo()" style="color:#00f2fe;font-weight:800;" title="Auto-Draw Blueprint">🎓 Demo</button>
-                  <button class="stylus-tool-btn" onclick="undoWhiteboard()" title="Undo">↩️</button>
-                  <button class="stylus-tool-btn" onclick="redoWhiteboard()" title="Redo">↪️</button>
-                  <button class="stylus-tool-btn" onclick="clearWhiteboardCanvas()" title="Clear Canvas">🧹</button>
-                  <button class="stylus-tool-btn" onclick="exportWhiteboardImage()" title="Export PNG">💾</button>
-
-                  <span style="font-size:0.68rem;color:#34d399;font-weight:700;margin-left:4px;">Touch: <5ms</span>
-                </div>
-              </div>
-            ` : ''}
-
-            <!-- Mode 3: Windows 11 Enterprise Mode (Intel Core i7 OPS Module) -->
-            ${curMode === 'windows' && !activeDemo ? `
-              <div class="view-windows">
-                <!-- Desktop Icons -->
-                <div class="win-desktop-icons">
-                  <div class="win-icon" onclick="openWinApp('powerpoint')">
-                    <div class="win-icon-img">📊</div>
-                    <div class="win-icon-name">PowerPoint 4K</div>
-                  </div>
-                  <div class="win-icon" onclick="openWinApp('teams')">
-                    <div class="win-icon-img">💬</div>
-                    <div class="win-icon-name">Teams / Zoom</div>
-                  </div>
-                  <div class="win-icon" onclick="openWinApp('edge')">
-                    <div class="win-icon-img">🌐</div>
-                    <div class="win-icon-name">Edge Browser</div>
-                  </div>
-                  <div class="win-icon" onclick="openWinApp('ops')">
-                    <div class="win-icon-img">⚙️</div>
-                    <div class="win-icon-name">OPS Diagnostics</div>
-                  </div>
-                </div>
-
-                <!-- Interactive Floating Window -->
-                ${winState.activeApp ? `
-                  <div class="win-active-window">
-                    <div class="win-window-bar">
-                      <span>
-                        ${winState.activeApp === 'powerpoint' ? '📊 Microsoft PowerPoint — Millennium Flagship Slide Deck' : ''}
-                        ${winState.activeApp === 'teams' ? '📹 Microsoft Teams & Zoom 4K Video Conference' : ''}
-                        ${winState.activeApp === 'edge' ? '🌐 Microsoft Edge — https://brains.asia/millennium' : ''}
-                        ${winState.activeApp === 'ops' ? '⚙️ Intel Core i7 OPS Hardware Telemetry & Benchmarks' : ''}
-                      </span>
-                      <span style="display:flex;gap:6px;font-size:0.8rem;cursor:pointer;">
-                        <span onclick="closeWinApp()">➖</span>
-                        <span>🗖</span>
-                        <span onclick="closeWinApp()" style="color:#f87171;">✕</span>
-                      </span>
-                    </div>
-
-                    <div class="win-window-body">
-                      <!-- PowerPoint App -->
-                      ${winState.activeApp === 'powerpoint' ? `
-                        <div style="display:flex;flex-direction:column;justify-content:space-between;height:100%;">
-                          <div style="background:rgba(255,255,255,0.06);border-radius:8px;padding:16px;text-align:center;">
-                            <span class="theater-badge">${pptSlides[winState.slideIdx].badge}</span>
-                            <h3 style="font-family:'Outfit',sans-serif;font-size:1.35rem;font-weight:800;color:#ffffff;margin-top:8px;">
-                              ${pptSlides[winState.slideIdx].title}
-                            </h3>
-                            <h4 style="font-size:0.85rem;color:var(--neon-cyan);font-weight:600;margin-top:2px;">
-                              ${pptSlides[winState.slideIdx].subtitle}
-                            </h4>
-                            <p style="font-size:0.82rem;color:#cbd5e1;max-width:440px;margin:8px auto 0;">
-                              ${pptSlides[winState.slideIdx].body}
-                            </p>
-                          </div>
-
-                          <div style="display:flex;justify-content:space-between;align-items:center;padding-top:10px;border-top:1px solid rgba(255,255,255,0.1);">
-                            <button class="btn btn-secondary btn-sm" onclick="prevWinSlide()">◀ Previous Slide</button>
-                            <span style="font-size:0.75rem;color:#94a3b8;">Slide ${winState.slideIdx + 1} of 5</span>
-                            <button class="btn btn-primary btn-sm" onclick="nextWinSlide()">Next Slide ▶</button>
-                          </div>
-                        </div>
-                      ` : ''}
-
-                      <!-- Teams / Zoom Conference App -->
-                      ${winState.activeApp === 'teams' ? `
-                        <div style="display:flex;flex-direction:column;justify-content:space-between;height:100%;">
-                          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;flex:1;">
-                            <div style="background:#0f172a;border:2px solid var(--neon-cyan);border-radius:6px;padding:8px;position:relative;display:flex;flex-direction:column;justify-content:space-between;">
-                              <div style="font-size:0.7rem;font-weight:700;color:var(--neon-cyan);display:flex;align-items:center;gap:4px;">
-                                <span class="status-pulse-dot"></span> Dr. Santos (Manila Campus) · Speaking
-                              </div>
-                              <div style="text-align:center;font-size:2rem;">👨‍🏫</div>
-                              <div style="font-size:0.65rem;color:#34d399;text-align:right;">AI Auto-Framing: 120° FOV</div>
-                            </div>
-                            <div style="background:#0f172a;border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;display:flex;flex-direction:column;justify-content:space-between;">
-                              <div style="font-size:0.7rem;color:#cbd5e1;">Engr. Reyes (QC Lab)</div>
-                              <div style="text-align:center;font-size:2rem;">👩‍💻</div>
-                              <div style="font-size:0.65rem;color:#94a3b8;text-align:right;">Muted</div>
-                            </div>
-                          </div>
-
-                          <div style="display:flex;justify-content:center;gap:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.1);">
-                            <button class="btn btn-secondary btn-sm" onclick="toggleTeamsMute()">
-                              ${winState.teamsMuted ? '🔇 Unmute' : '🎙️ Mute'}
-                            </button>
-                            <button class="btn btn-secondary btn-sm" onclick="toggleTeamsCamera()">
-                              ${winState.teamsCamera ? '📷 Stop Video' : '📹 Start Video'}
-                            </button>
-                            <button class="btn btn-danger btn-sm" onclick="closeWinApp()">Leave Meeting</button>
-                          </div>
-                        </div>
-                      ` : ''}
-
-                      <!-- Edge Browser App -->
-                      ${winState.activeApp === 'edge' ? `
-                        <div style="display:flex;flex-direction:column;height:100%;gap:8px;">
-                          <div style="background:rgba(255,255,255,0.08);border-radius:4px;padding:4px 10px;font-size:0.72rem;color:var(--neon-cyan);font-family:'JetBrains Mono',monospace;">
-                            🔒 https://brains.asia/millennium/smartboard-fleet
-                          </div>
-                          <div style="flex:1;background:#060d1a;border-radius:6px;padding:12px;overflow-y:auto;">
-                            <div style="font-weight:700;font-size:0.88rem;color:#ffffff;">Millennium SmartBoard Fleet Telemetry Portal</div>
-                            <p style="font-size:0.75rem;color:#cbd5e1;margin-top:4px;">
-                              Connected to centralized device management server. All 86" boards reporting operational online status with 4K UHD streaming ready.
-                            </p>
-                            <div style="margin-top:8px;font-size:0.72rem;color:#34d399;">
-                              ✅ SSL Certified · 10GbE Backbone · Zero Latency
-                            </div>
-                          </div>
-                        </div>
-                      ` : ''}
-
-                      <!-- OPS Hardware Diagnostics App -->
-                      ${winState.activeApp === 'ops' ? `
-                        <div style="display:flex;flex-direction:column;gap:10px;height:100%;">
-                          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                            <div class="demo-spec-item">
-                              <span>Processor:</span>
-                              <strong>Intel Core i7-12700H (14 Cores)</strong>
-                            </div>
-                            <div class="demo-spec-item">
-                              <span>Memory:</span>
-                              <strong>16GB Dual-Channel DDR4</strong>
-                            </div>
-                            <div class="demo-spec-item">
-                              <span>Storage:</span>
-                              <strong>512GB NVMe PCIe 4.0 (3,520 MB/s)</strong>
-                            </div>
-                            <div class="demo-spec-item">
-                              <span>Thermal State:</span>
-                              <strong style="color:#34d399;">48°C · Fan 2,100 RPM</strong>
-                            </div>
-                          </div>
-                          <div style="background:rgba(59,130,246,0.18);border:1px solid rgba(59,130,246,0.4);border-radius:6px;padding:10px;font-size:0.74rem;color:#93c5fd;">
-                            ⚡ Modular Open Pluggable Specification (OPS) JAE 80-Pin standard allows instant hot-swap upgrades without removing display from wall mount.
-                          </div>
-                        </div>
-                      ` : ''}
-                    </div>
-                  </div>
-                ` : ''}
-
-                <!-- Windows 11 Start Menu -->
-                ${winState.startMenuOpen ? `
-                  <div class="win-start-menu">
-                    <div style="font-size:0.75rem;font-weight:700;color:#94a3b8;margin-bottom:8px;">PINNED APPS</div>
-                    <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:10px;">
-                      <div class="win-icon" onclick="openWinApp('powerpoint');toggleWinStartMenu();">
-                        <div class="win-icon-img">📊</div>
-                        <div class="win-icon-name">PowerPoint</div>
-                      </div>
-                      <div class="win-icon" onclick="openWinApp('teams');toggleWinStartMenu();">
-                        <div class="win-icon-img">💬</div>
-                        <div class="win-icon-name">Teams</div>
-                      </div>
-                      <div class="win-icon" onclick="openWinApp('edge');toggleWinStartMenu();">
-                        <div class="win-icon-img">🌐</div>
-                        <div class="win-icon-name">Edge</div>
-                      </div>
-                    </div>
-                    <div style="border-top:1px solid rgba(255,255,255,0.1);padding-top:10px;margin-top:10px;display:flex;justify-content:space-between;align-items:center;">
-                      <span style="font-size:0.72rem;color:#e2e8f0;">👤 System Administrator</span>
-                      <button class="btn btn-secondary btn-sm" onclick="toggleWinStartMenu()" style="font-size:0.68rem;padding:2px 6px;">Close</button>
-                    </div>
-                  </div>
-                ` : ''}
-
-                <!-- Windows 11 Taskbar -->
-                <div class="win-taskbar">
-                  <div class="win-start-cluster">
-                    <button class="win-start-btn" onclick="toggleWinStartMenu()" title="Start">🪟</button>
-                    <span style="font-size:0.85rem;cursor:pointer;" onclick="openWinApp('edge')">🔍</span>
-                    <span style="font-size:0.85rem;cursor:pointer;" onclick="openWinApp('teams')">💬</span>
-                    <span style="font-size:0.85rem;cursor:pointer;" onclick="openWinApp('powerpoint')">📊</span>
-                  </div>
-                  <div style="font-size:0.72rem;color:#cbd5e1;display:flex;gap:10px;align-items:center;">
-                    <span>📶 Wi-Fi 6</span>
-                    <span>🔊 100%</span>
-                    <span>${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                  </div>
-                </div>
-              </div>
-            ` : ''}
-
-            <!-- Mode 4: Android 13 Interactive OS Mode -->
-            ${curMode === 'android' && !activeDemo ? `
-              <div class="view-android">
-                <!-- Android Top Bar -->
-                <div class="android-top-bar" onclick="toggleAndroidQuickSettings()" title="Tap to pull down Quick Settings Control Center">
-                  <span>🤖 Android 13 Millennium OS · Tap for Quick Settings ▾</span>
-                  <div style="display:flex;gap:10px;align-items:center;">
-                    <span>📶 5GHz</span>
-                    <span>📡 Cast Ready</span>
-                    <span>${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                  </div>
-                </div>
-
-                <!-- Android 13 Quick Settings Drawer -->
-                ${andState.quickSettingsOpen ? `
-                  <div class="android-quick-settings">
-                    <div class="android-setting-tile ${andState.wifiConnected ? 'active' : ''}" onclick="showToast('Wi-Fi 6: 1.2 Gbps Connected', 'info')">
-                      <span>📶</span>
-                      <span>Wi-Fi 6</span>
-                    </div>
-                    <div class="android-setting-tile ${andState.screenCastActive ? 'active' : ''}" onclick="startFeatureDemo('projection')">
-                      <span>📡</span>
-                      <span>Screen Cast</span>
-                    </div>
-                    <div class="android-setting-tile ${andState.eyeCare ? 'active' : ''}" onclick="toggleAndroidEyeCare()">
-                      <span>👓</span>
-                      <span>Eye-Care</span>
-                    </div>
-                    <div class="android-setting-tile" onclick="toggleWirelessDongle()">
-                      <span>📲</span>
-                      <span>Dongle</span>
-                    </div>
-                  </div>
-                ` : ''}
-
-                <!-- App Tiles Grid -->
-                <div class="android-tiles-grid">
-                  <div class="android-tile" onclick="setSimulatorMode('whiteboard')">
-                    <div class="android-tile-icon">✍️</div>
-                    <div class="android-tile-title">Whiteboard</div>
-                  </div>
-                  <div class="android-tile" onclick="startFeatureDemo('projection')">
-                    <div class="android-tile-icon">📲</div>
-                    <div class="android-tile-title">Screen Share</div>
-                  </div>
-                  <div class="android-tile" onclick="startFeatureDemo('uhd')">
-                    <div class="android-tile-icon">📺</div>
-                    <div class="android-tile-title">4K Display</div>
-                  </div>
-                  <div class="android-tile" onclick="startFeatureDemo('wireless')">
-                    <div class="android-tile-icon">📡</div>
-                    <div class="android-tile-title">Diagnostics</div>
-                  </div>
-                  <div class="android-tile" onclick="setSimulatorMode('theater')">
-                    <div class="android-tile-icon">🎬</div>
-                    <div class="android-tile-title">Cinema Media</div>
-                  </div>
-                </div>
-
-                <!-- Bottom Android System Bar -->
-                <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,0.06);padding:8px 16px;border-radius:var(--radius-md);">
-                  <div style="font-size:0.75rem;color:#cbd5e1;">⚡ 40-Point Multi-Touch Gestures Active · <5ms Latency</div>
-                  <button class="btn btn-secondary btn-sm" onclick="setSimulatorMode('windows')">Switch to Windows 11 OPS ➔</button>
-                </div>
-              </div>
-            ` : ''}
-
-          </div>
-
-          <!-- Bottom Chin with Illuminated Millennium Chrome Badge -->
-          <div class="board-chin">
-            <span class="board-chin-logo">MILLENNIUM</span>
-          </div>
-
-        </div>
-
-        <!-- Right Side Panel: Wireless Dongle Card & Live Telemetry -->
-        <div class="showcase-side-cards">
-
-          <!-- Wireless Dongle Card (From Brochure) -->
-          <div class="dongle-card">
-            <div class="dongle-visual-row">
-              <div class="dongle-device-graphic" onclick="toggleWirelessDongle()" title="Click to test Wireless Dongle connect/disconnect">
-                <div class="dongle-ring-pulse ${isConnected ? '' : 'disconnected'}"></div>
-                <div class="dongle-center-button"></div>
-              </div>
-              <div class="dongle-info">
-                <div class="dongle-tag">Hardware Feature</div>
-                <div class="dongle-title">Wireless Screen Dongle</div>
-                <div class="dongle-desc">
-                  Screen transfer without network can control the computer on the conference tablet using Dongle.
-                </div>
-              </div>
-            </div>
-
-            <div style="display:flex;align-items:center;justify-content:space-between;padding-top:10px;border-top:1px solid rgba(255,255,255,0.08);">
-              <span class="status-pill ${isConnected ? 'status-online' : 'status-offline'}" style="font-size:0.72rem;padding:3px 8px;">
-                ${isConnected ? '🟢 Dongle Cast Active' : '⚪ Disconnected'}
-              </span>
-              <button class="btn btn-secondary btn-sm" onclick="toggleWirelessDongle()" style="font-size:0.72rem;padding:3px 9px;">
-                ${isConnected ? 'Unplug Dongle' : 'Plug In Dongle'}
-              </button>
-            </div>
-            ${isConnected ? `
-              <div style="font-size:0.72rem;color:var(--text-muted);display:flex;justify-content:space-between;">
-                <span>Latency: <strong style="color:var(--neon-cyan);">6ms</strong></span>
-                <span>Stream: <strong style="color:#ffffff;">4K @ 60 FPS</strong></span>
-                <span>Zero Wi-Fi Needed</span>
-              </div>
-            ` : ''}
-          </div>
-
-          <!-- Live Hardware Telemetry Card -->
-          <div class="telemetry-card">
-            <div style="font-size:0.8rem;font-weight:800;color:var(--text-primary);letter-spacing:0.04em;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;">
-              <span>Board Hardware Telemetry</span>
-              <span style="font-size:0.7rem;color:#34d399;font-weight:700;">All Systems Normal ✅</span>
-            </div>
-
-            <div class="telemetry-metric-row">
-              <span class="telemetry-label">
-                <span>🎙️ Voice Clarity Mic Array:</span>
-              </span>
-              <div style="display:flex;align-items:center;gap:6px;">
-                <div class="audio-meter-bars" title="Sensitive audio input level">
-                  <div class="audio-bar"></div>
-                  <div class="audio-bar"></div>
-                  <div class="audio-bar"></div>
-                  <div class="audio-bar"></div>
-                  <div class="audio-bar"></div>
-                </div>
-                <span class="telemetry-val" style="color:var(--neon-cyan);">98% Sensitive</span>
-              </div>
-            </div>
-
-            <div class="telemetry-metric-row">
-              <span class="telemetry-label">
-                <span>✍️ Touch Response Latency:</span>
-              </span>
-              <span class="telemetry-val" style="color:#34d399;">< 5ms (40-Point Touch)</span>
-            </div>
-
-            <div class="telemetry-metric-row">
-              <span class="telemetry-label">
-                <span>💻 Modular OPS Architecture:</span>
-              </span>
-              <span class="telemetry-val">Intel Core i7 · 48°C</span>
-            </div>
-
-            <div class="telemetry-metric-row">
-              <span class="telemetry-label">
-                <span>📡 Universal Wireless:</span>
-              </span>
-              <span class="telemetry-val" style="color:#c084fc;">Wi-Fi 6 · BT 5.2 · Cast</span>
-            </div>
-          </div>
-
-        </div>
-
-      </div>
-
-      <!-- MAIN FEATURES (Direct from Brochure with Working Demonstrations) -->
-      <div class="millennium-features-section">
-        <div class="features-section-header">
-          <div class="features-heading">
-            <span>✨</span>
-            <span>MAIN FEATURES — MILLENNIUM INTERACTIVE TECHNOLOGY</span>
-          </div>
-          <span style="font-size:0.76rem;color:var(--text-muted);">From Official Brains Infinite Innovations Brochure · Click any feature to test live</span>
-        </div>
-
-        <div class="features-grid">
-          <!-- Feature 1 -->
-          <div class="feature-pill-card">
-            <div class="feature-card-top">
-              <div class="feat-icon-pod">📺</div>
-              <div class="feat-body">
-                <div class="feat-title">4K Ultra High-Definition</div>
-                <div class="feat-desc">4K Ultra High-Definition display for Home theater. Perfect for watching Netflix and streaming interactive lessons.</div>
-              </div>
-            </div>
-            <button class="feat-demo-trigger-btn" onclick="startFeatureDemo('uhd')">
-              ▶ Try 4K UHD Demonstration
-            </button>
-          </div>
-
-          <!-- Feature 2 -->
-          <div class="feature-pill-card">
-            <div class="feature-card-top">
-              <div class="feat-icon-pod">🎙️</div>
-              <div class="feat-body">
-                <div class="feat-title">Sensitive Audio Input</div>
-                <div class="feat-desc">Sensitive audio input for maximum voice clarity during online meetings, seminars, coaching, and classroom discussions.</div>
-              </div>
-            </div>
-            <button class="feat-demo-trigger-btn" onclick="startFeatureDemo('audio')">
-              ▶ Try Audio Radar Demonstration
-            </button>
-          </div>
-
-          <!-- Feature 3 -->
-          <div class="feature-pill-card">
-            <div class="feature-card-top">
-              <div class="feat-icon-pod">✍️</div>
-              <div class="feat-body">
-                <div class="feat-title">Draw, Sketch, Layout & Delete</div>
-                <div class="feat-desc">Draw, sketch, layout and delete using a stylus pen and natural hand gestures with high responsiveness.</div>
-              </div>
-            </div>
-            <button class="feat-demo-trigger-btn" onclick="startFeatureDemo('stylus')">
-              ▶ Try Stylus & Gesture Demonstration
-            </button>
-          </div>
-
-          <!-- Feature 4 -->
-          <div class="feature-pill-card">
-            <div class="feature-card-top">
-              <div class="feat-icon-pod">📲</div>
-              <div class="feat-body">
-                <div class="feat-title">Wireless Screen Projection</div>
-                <div class="feat-desc">Project your laptop and your cellphone on the screen and share it across all your audience locally and online for seamless discussions.</div>
-              </div>
-            </div>
-            <button class="feat-demo-trigger-btn" onclick="startFeatureDemo('projection')">
-              ▶ Try 4-Split Cast Demonstration
-            </button>
-          </div>
-
-          <!-- Feature 5 -->
-          <div class="feature-pill-card">
-            <div class="feature-card-top">
-              <div class="feat-icon-pod">📡</div>
-              <div class="feat-body">
-                <div class="feat-title">Full Wireless Connectivity</div>
-                <div class="feat-desc">Bluetooth, hotspot, cast and WiFi ready for wireless connectivity without tangled conference cords.</div>
-              </div>
-            </div>
-            <button class="feat-demo-trigger-btn" onclick="startFeatureDemo('wireless')">
-              ▶ Try Wireless Diagnostics Demonstration
-            </button>
-          </div>
-
-          <!-- Feature 6 -->
-          <div class="feature-pill-card">
-            <div class="feature-card-top">
-              <div class="feat-icon-pod">⚡</div>
-              <div class="feat-body">
-                <div class="feat-title">Future-Proof System Design</div>
-                <div class="feat-desc">Adapt latest technological advancements with scalable computing capacity through its embedded Open Pluggable Specification module.</div>
-              </div>
-            </div>
-            <button class="feat-demo-trigger-btn" onclick="startFeatureDemo('ops')">
-              ▶ Try Modular OPS Demonstration
-            </button>
-          </div>
-
-          <!-- Feature 7: Dual OS -->
-          <div class="feature-pill-card">
-            <div class="feature-card-top">
-              <div class="feat-icon-pod">🪟</div>
-              <div class="feat-body">
-                <div class="feat-title">Dual OS — Windows & Android</div>
-                <div class="feat-desc">Embedded with Windows 11 Enterprise and Android 13 Operating Systems. Switch between them in under 1.2 seconds.</div>
-              </div>
-            </div>
-            <button class="feat-demo-trigger-btn" onclick="startFeatureDemo('dualos')">▶ Try Dual OS 3D Flip Demo</button>
-          </div>
-
-          <!-- Feature 8: Camera -->
-          <div class="feature-pill-card">
-            <div class="feature-card-top">
-              <div class="feat-icon-pod">📹</div>
-              <div class="feat-body">
-                <div class="feat-title">Ultrawide Angle Camera</div>
-                <div class="feat-desc">Built-in 4K ultrawide camera with 120° field of view for online meetings, presentations, and AI speaker auto-framing.</div>
-              </div>
-            </div>
-            <button class="feat-demo-trigger-btn" onclick="startFeatureDemo('camera')">▶ Try 120° Camera AI Scan Demo</button>
-          </div>
-
-          <!-- Feature 9: Dongle -->
-          <div class="feature-pill-card">
-            <div class="feature-card-top">
-              <div class="feat-icon-pod">🔘</div>
-              <div class="feat-body">
-                <div class="feat-title">Wireless Screen Dongle</div>
-                <div class="feat-desc">Screen transfer without network. Plug the dongle into any laptop and control it directly from the conference board.</div>
-              </div>
-            </div>
-            <button class="feat-demo-trigger-btn" onclick="startFeatureDemo('dongle')">▶ Try Dongle Beam Transmission Demo</button>
-          </div>
-        </div>
-      </div>
-
-    </div>
-  `;
-}
-
-// Dedicated Showcase View (Sidebar Nav Target)
-function renderShowcaseView() {
-  return `
-    <div class="page-header-row">
-      <div>
-        <h1 class="page-title">⚡ Millennium SmartBoard Hardware Showcase</h1>
-        <p class="page-description">Interactive virtual testbed, hardware simulation, and feature capabilities from Brains Infinite Innovations Inc.</p>
-      </div>
-      <div class="page-actions">
-        <button class="btn btn-secondary btn-sm" onclick="fetchAllData()">🔄 Refresh Telemetry</button>
-      </div>
-    </div>
-    ${renderMillenniumShowcase()}
-  `;
-}
-
 // 1. Executive Dashboard View
+/**
+ * Refresh just the dashboard's date/time chip, in place.
+ *
+ * The chip is part of the dashboard markup, so before this existed the only way
+ * to keep the clock current was to re-render the whole view — which is exactly
+ * the teardown we now skip when the data has not changed. Updating two text
+ * nodes keeps the clock honest without disturbing anything else.
+ */
+function updateDashboardClock() {
+  const dateEl = document.getElementById('heroClockDate');
+  const timeEl = document.getElementById('heroClockTime');
+  if (!dateEl && !timeEl) return;
+
+  const now = new Date();
+  if (dateEl) {
+    dateEl.textContent = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+  if (timeEl) {
+    timeEl.textContent = now.toLocaleDateString('en-US', { weekday: 'long' }) + ', ' +
+      now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+}
+
 function renderDashboardView() {
   const total    = state.devices.length;
   const online   = state.devices.filter(d => d.status === 'online').length;
@@ -2872,14 +1469,14 @@ function renderDashboardView() {
             <div class="hero-date-chip">
               <span class="calendar-icon">📅</span>
               <div>
-                <strong>${currentDate}</strong>
-                <small>${currentDayTime}</small>
+                <strong id="heroClockDate">${currentDate}</strong>
+                <small id="heroClockTime">${currentDayTime}</small>
               </div>
             </div>
           </div>
 
           <!-- Center Display Graphic -->
-          <div class="hero-display-wrapper" onclick="navigateTo('showcase')" style="cursor: pointer;" title="View SmartBoard Product Demo & Info">
+          <div class="hero-display-wrapper">
             <div class="hero-display-frame">
               <img src="https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=800&q=80" alt="Millennium SmartBoard Display" class="hero-display-img" />
               <div class="hero-display-ui-overlay">
@@ -2889,7 +1486,7 @@ function renderDashboardView() {
           </div>
 
           <!-- Right Hero Accent Text & Dots -->
-          <div class="hero-right-accent" onclick="navigateTo('showcase')" style="cursor: pointer;" title="View SmartBoard Product Demo & Info">
+          <div class="hero-right-accent">
             <div class="hero-accent-title">Smart Technology<br>for a Brighter<br>Future</div>
             <div class="hero-dots">
               <span class="dot active"></span>
@@ -4148,8 +2745,8 @@ function renderAnalyticsView() {
       </div>
     </div>
 
-    <!-- Analytics Cards Grid -->
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+    <!-- Analytics Cards Grid (collapses to one column on mobile) -->
+    <div class="analytics-grid">
       <!-- Popular Models -->
       <div class="glass-panel">
         <div class="panel-header">
@@ -4478,7 +3075,7 @@ function renderDMAllocationTab() {
           <span style="font-size:0.8rem;color:var(--text-muted);">Admin-only: link a purchased SmartBoard to a customer account</span>
         </div>
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 14px; align-items: end; flex-wrap: wrap;" id="allocationFormRow">
+        <div class="alloc-form-row" id="allocationFormRow">
           <div>
             <label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:6px;">📦 Select Device</label>
             <select id="allocDeviceSelect" class="form-input" style="width:100%;">
@@ -7710,8 +6307,8 @@ function renderRentalList(rentals, isAdmin) {
     <div class="glass-panel" style="padding:12px 18px;display:flex;align-items:center;gap:12px;margin-bottom:16px;">
       <span style="font-size:0.85rem;font-weight:600;color:var(--text-muted);">Filter:</span>
       <select id="rentalStatusFilter" onchange="setRentalFilter(this.value)" style="
-        padding:6px 14px;border-radius:8px;border:1px solid var(--border-subtle,rgba(255,255,255,0.1));
-        background:var(--surface-elevated,#1e1e2e);color:var(--text-primary,#fff);font-size:0.82rem;
+        padding:6px 14px;border-radius:8px;border:1px solid var(--border-color);
+        background:var(--bg-surface-elevated);color:var(--text-primary);font-size:0.82rem;
       ">
         <option value="">All Rentals</option>
         ${statusOptions.map(s => `<option value="${s}" ${state.rentalFilterStatus === s ? 'selected' : ''}>${s}</option>`).join('')}
@@ -7930,153 +6527,197 @@ function openRentalModal(rentalId, prefillDeviceId) {
   const existing = document.getElementById('rentalModalOverlay');
   if (existing) existing.remove();
 
+  // Escape values before they are interpolated into HTML attributes.
+  const esc = (v) => String(v == null ? '' : v)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
   const overlay = document.createElement('div');
   overlay.id = 'rentalModalOverlay';
-  overlay.style.cssText = `
-    position:fixed;inset:0;z-index:9999;
-    background:rgba(0,0,0,0.65);
-    display:flex;align-items:center;justify-content:center;
-    backdrop-filter:blur(4px);animation:fadeIn 0.2s ease;
-    overflow-y:auto;padding:20px;
-  `;
+  overlay.className = 'modal-backdrop';
 
   overlay.innerHTML = `
-    <div style="
-      background:var(--surface-elevated,#1e1e2e);
-      border:1px solid var(--border-subtle,rgba(255,255,255,0.1));
-      border-radius:16px;padding:32px;max-width:680px;width:95%;
-      box-shadow:0 20px 60px rgba(0,0,0,0.6);
-    ">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;">
-        <h3 style="font-size:1.3rem;font-weight:800;">${editing ? '✏️ Edit Rental' : '📅 New Device Rental Booking'}</h3>
-        <button onclick="document.getElementById('rentalModalOverlay').remove()" style="
-          background:none;border:none;color:var(--text-muted);font-size:1.5rem;cursor:pointer;
-        ">×</button>
+    <div class="modal-content modal-form modal-wide" role="dialog" aria-modal="true" aria-labelledby="rentalModalTitle">
+      <div class="modal-header">
+        <h3 class="modal-title" id="rentalModalTitle">
+          ${editing ? '✏️ Edit Rental Booking' : '📅 New Device Rental Booking'}
+        </h3>
+        <button type="button" class="modal-close" aria-label="Close"
+          onclick="document.getElementById('rentalModalOverlay').remove()">×</button>
       </div>
 
-      <form id="rentalForm" onsubmit="submitRentalForm(event, '${rentalId || ''}')" style="display:flex;flex-direction:column;gap:16px;">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-          <div>
-            <label style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:6px;">Customer / Company *</label>
-            ${isCustomer ? `
-              <input type="text" value="${matchedCustomer.organizationName}" disabled style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border-subtle,rgba(255,255,255,0.1));background:var(--surface,#15151f);color:var(--text-muted,#94a3b8);font-size:0.86rem;" />
-              <input type="hidden" name="customerId" value="${matchedCustomer.id}">
-              <div style="font-size:0.72rem;color:var(--text-muted);margin-top:4px;">Your booking is filed under your own organization.</div>
-            ` : `
-              <select name="customerId" required ${editing ? 'disabled' : ''} style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border-subtle,rgba(255,255,255,0.1));background:var(--surface,#15151f);color:var(--text-primary,#fff);font-size:0.86rem;">
-                <option value="">Select company...</option>
-                ${customers.map(c => `<option value="${c.id}" ${(editing && editing.customerId === c.id) ? 'selected' : ''}>${c.organizationName}</option>`).join('')}
-              </select>
-            `}
-          </div>
-          <div>
-            <label style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:6px;">Device *</label>
-            <select name="deviceId" required ${editing ? 'disabled' : ''} style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border-subtle,rgba(255,255,255,0.1));background:var(--surface,#15151f);color:var(--text-primary,#fff);font-size:0.86rem;">
-              <option value="">Select device...</option>
-              ${devices.map(d => `<option value="${d.id}" ${(editing && editing.deviceId === d.id) || (prefillDeviceId === d.id) ? 'selected' : ''}>${d.model} (${d.serialNumber})</option>`).join('')}
-            </select>
-          </div>
+      <form id="rentalForm" onsubmit="submitRentalForm(event, '${rentalId || ''}')">
+        <div class="form-body">
+
+          <section class="form-section">
+            <div class="form-section-title">🏢 Booking Details</div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="rentalCustomer">Customer / Company *</label>
+                ${isCustomer ? `
+                  <input class="form-input" id="rentalCustomer" type="text"
+                    value="${esc(matchedCustomer.organizationName)}" disabled />
+                  <input type="hidden" name="customerId" value="${esc(matchedCustomer.id)}">
+                  <div class="form-hint">Your booking is filed under your own organization.</div>
+                ` : `
+                  <select class="form-select" id="rentalCustomer" name="customerId" required ${editing ? 'disabled' : ''}>
+                    <option value="">Select company…</option>
+                    ${customers.map(c => `<option value="${esc(c.id)}" ${(editing && editing.customerId === c.id) ? 'selected' : ''}>${esc(c.organizationName)}</option>`).join('')}
+                  </select>
+                  ${editing ? '<div class="form-hint">The customer cannot be changed after booking.</div>' : ''}
+                `}
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="rentalDevice">Device *</label>
+                <select class="form-select" id="rentalDevice" name="deviceId" required ${editing ? 'disabled' : ''}>
+                  <option value="">Select device…</option>
+                  ${devices.map(d => `<option value="${esc(d.id)}" ${(editing && editing.deviceId === d.id) || (prefillDeviceId === d.id) ? 'selected' : ''}>${esc(d.model)} (${esc(d.serialNumber)})</option>`).join('')}
+                </select>
+                ${editing ? '<div class="form-hint">The device cannot be changed after booking.</div>' : ''}
+              </div>
+            </div>
+          </section>
+
+          <section class="form-section">
+            <div class="form-section-title">🗓️ Schedule</div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="rentalStart">Start Date *</label>
+                <input class="form-input" id="rentalStart" type="date" name="startDate" required
+                  value="${esc(editing ? editing.startDate : today)}" min="${today}" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="rentalEnd">End Date *</label>
+                <input class="form-input" id="rentalEnd" type="date" name="endDate" required
+                  value="${esc(editing ? editing.endDate : today)}" min="${today}" />
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="rentalDelivery">Delivery Date</label>
+                <input class="form-input" id="rentalDelivery" type="date" name="deliveryDate"
+                  value="${esc(editing && editing.deliveryDate ? editing.deliveryDate.split('T')[0] : '')}" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="rentalPickup">Pickup Date</label>
+                <input class="form-input" id="rentalPickup" type="date" name="pickupDate"
+                  value="${esc(editing && editing.pickupDate ? editing.pickupDate.split('T')[0] : '')}" />
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="rentalPriority">Priority</label>
+                <select class="form-select" id="rentalPriority" name="priority">
+                  <option value="Low" ${editing && editing.priority === 'Low' ? 'selected' : ''}>Low</option>
+                  <option value="Medium" ${(!editing || editing.priority === 'Medium') ? 'selected' : ''}>Medium</option>
+                  <option value="High" ${editing && editing.priority === 'High' ? 'selected' : ''}>High</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="rentalPurpose">Purpose / Event Type</label>
+                <input class="form-input" id="rentalPurpose" type="text" name="purpose"
+                  value="${esc(editing ? editing.purpose : '')}" placeholder="e.g. Conference, Training, Exhibit" />
+              </div>
+            </div>
+          </section>
+
+          ${isAdmin ? `
+          <section class="form-section">
+            <div class="form-section-title">💰 Pricing</div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="rentalRate">Daily Rate (₱)</label>
+                <input class="form-input" id="rentalRate" type="number" name="dailyRate"
+                  value="${esc(editing ? editing.dailyRate : 500)}" min="0" step="50" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="rentalDeposit">Deposit (₱)</label>
+                <input class="form-input" id="rentalDeposit" type="number" name="depositAmount"
+                  value="${esc(editing ? editing.depositAmount : 5000)}" min="0" step="100" />
+              </div>
+            </div>
+          </section>
+          ` : `
+          <section class="form-section">
+            <div class="form-section-title">💰 Pricing</div>
+            <div class="form-hint" style="margin-top:0;">
+              💡 The daily rate and deposit are set by our admin team after your booking is reviewed.
+              You will be notified once it is approved.
+            </div>
+          </section>
+          `}
+
+          <section class="form-section">
+            <div class="form-section-title">📍 Delivery &amp; Contact</div>
+            <div class="form-group">
+              <label class="form-label" for="rentalAddress">Delivery Address</label>
+              <input class="form-input" id="rentalAddress" type="text" name="deliveryAddress"
+                value="${esc(editing ? editing.deliveryAddress : '')}"
+                placeholder="Where should the device be delivered?" />
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="rentalContactPerson">Contact Person</label>
+                <input class="form-input" id="rentalContactPerson" type="text" name="contactPerson"
+                  value="${esc(editing ? editing.contactPerson : isCustomer ? (state.currentUser.fullName || state.currentUser.username) : '')}"
+                  placeholder="Full name" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="rentalContactPhone">Contact Phone</label>
+                <input class="form-input" id="rentalContactPhone" type="text" name="contactPhone"
+                  value="${esc(editing ? editing.contactPhone : '')}" placeholder="+63…" />
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="rentalContactEmail">Contact Email</label>
+              <input class="form-input" id="rentalContactEmail" type="email" name="contactEmail"
+                value="${esc(editing ? editing.contactEmail : isCustomer ? (state.currentUser.email || '') : '')}"
+                placeholder="email@company.com" />
+            </div>
+          </section>
+
+          <section class="form-section">
+            <div class="form-section-title">📝 Notes</div>
+            <div class="form-group">
+              <textarea class="form-textarea" name="notes" rows="3"
+                placeholder="Any special instructions or remarks…">${esc(editing ? editing.notes : '')}</textarea>
+            </div>
+          </section>
+
         </div>
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-          <div>
-            <label style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:6px;">Start Date *</label>
-            <input type="date" name="startDate" required value="${editing ? editing.startDate : today}" min="${today}" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border-subtle,rgba(255,255,255,0.1));background:var(--surface,#15151f);color:var(--text-primary,#fff);font-size:0.86rem;" />
-          </div>
-          <div>
-            <label style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:6px;">End Date *</label>
-            <input type="date" name="endDate" required value="${editing ? editing.endDate : today}" min="${today}" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border-subtle,rgba(255,255,255,0.1));background:var(--surface,#15151f);color:var(--text-primary,#fff);font-size:0.86rem;" />
-          </div>
-        </div>
-
-        ${isAdmin ? `
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-          <div>
-            <label style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:6px;">Daily Rate (₱)</label>
-            <input type="number" name="dailyRate" value="${editing ? editing.dailyRate : 500}" min="0" step="50" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border-subtle,rgba(255,255,255,0.1));background:var(--surface,#15151f);color:var(--text-primary,#fff);font-size:0.86rem;" />
-          </div>
-          <div>
-            <label style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:6px;">Deposit (₱)</label>
-            <input type="number" name="depositAmount" value="${editing ? editing.depositAmount : 5000}" min="0" step="100" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border-subtle,rgba(255,255,255,0.1));background:var(--surface,#15151f);color:var(--text-primary,#fff);font-size:0.86rem;" />
-          </div>
-        </div>
-        ` : `
-        <div style="background:rgba(0,242,254,0.06);border:1px solid rgba(0,242,254,0.15);border-radius:8px;padding:12px 16px;font-size:0.82rem;color:var(--text-muted);">
-          💡 Pricing (daily rate & deposit) will be set by our admin team after your booking is reviewed. You will be notified once your booking is approved.
-        </div>
-        `}
-
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-          <div>
-            <label style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:6px;">Priority</label>
-            <select name="priority" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border-subtle,rgba(255,255,255,0.1));background:var(--surface,#15151f);color:var(--text-primary,#fff);font-size:0.86rem;">
-              <option value="Low" ${editing && editing.priority === 'Low' ? 'selected' : ''}>Low</option>
-              <option value="Medium" ${(!editing || editing.priority === 'Medium') ? 'selected' : ''}>Medium</option>
-              <option value="High" ${editing && editing.priority === 'High' ? 'selected' : ''}>High</option>
-            </select>
-          </div>
-          <div>
-            <label style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:6px;">Purpose / Event Type</label>
-            <input type="text" name="purpose" value="${editing ? editing.purpose : ''}" placeholder="e.g. Conference, Training, Exhibit" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border-subtle,rgba(255,255,255,0.1));background:var(--surface,#15151f);color:var(--text-primary,#fff);font-size:0.86rem;" />
-          </div>
-        </div>
-
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-          <div>
-            <label style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:6px;">Delivery Date</label>
-            <input type="date" name="deliveryDate" value="${editing && editing.deliveryDate ? editing.deliveryDate.split('T')[0] : ''}" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border-subtle,rgba(255,255,255,0.1));background:var(--surface,#15151f);color:var(--text-primary,#fff);font-size:0.86rem;" />
-          </div>
-          <div>
-            <label style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:6px;">Pickup Date</label>
-            <input type="date" name="pickupDate" value="${editing && editing.pickupDate ? editing.pickupDate.split('T')[0] : ''}" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border-subtle,rgba(255,255,255,0.1));background:var(--surface,#15151f);color:var(--text-primary,#fff);font-size:0.86rem;" />
-          </div>
-        </div>
-
-        <div>
-          <label style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:6px;">Delivery Address</label>
-          <input type="text" name="deliveryAddress" value="${editing ? editing.deliveryAddress : ''}" placeholder="Where should the device be delivered?" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border-subtle,rgba(255,255,255,0.1));background:var(--surface,#15151f);color:var(--text-primary,#fff);font-size:0.86rem;" />
-        </div>
-
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-          <div>
-            <label style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:6px;">Contact Person</label>
-            <input type="text" name="contactPerson" value="${editing ? editing.contactPerson : isCustomer ? (state.currentUser.fullName || state.currentUser.username) : ''}" placeholder="Full name" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border-subtle,rgba(255,255,255,0.1));background:var(--surface,#15151f);color:var(--text-primary,#fff);font-size:0.86rem;" />
-          </div>
-          <div>
-            <label style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:6px;">Contact Phone</label>
-            <input type="text" name="contactPhone" value="${editing ? editing.contactPhone : ''}" placeholder="+63..." style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border-subtle,rgba(255,255,255,0.1));background:var(--surface,#15151f);color:var(--text-primary,#fff);font-size:0.86rem;" />
-          </div>
-        </div>
-
-        <div>
-          <label style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:6px;">Contact Email</label>
-          <input type="email" name="contactEmail" value="${editing ? editing.contactEmail : isCustomer ? (state.currentUser.email || '') : ''}" placeholder="email@company.com" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border-subtle,rgba(255,255,255,0.1));background:var(--surface,#15151f);color:var(--text-primary,#fff);font-size:0.86rem;" />
-        </div>
-
-        <div>
-          <label style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:6px;">Notes</label>
-          <textarea name="notes" rows="3" placeholder="Any special instructions or remarks..." style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border-subtle,rgba(255,255,255,0.1));background:var(--surface,#15151f);color:var(--text-primary,#fff);font-size:0.86rem;resize:vertical;">${editing ? editing.notes : ''}</textarea>
-        </div>
-
-        <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:8px;">
-          <button type="button" onclick="document.getElementById('rentalModalOverlay').remove()" style="
-            padding:12px 24px;border-radius:8px;border:1px solid var(--border-subtle,#333);
-            background:transparent;color:var(--text-primary,#fff);font-size:0.88rem;
-            font-weight:600;cursor:pointer;
-          ">Cancel</button>
-          <button type="submit" style="
-            padding:12px 24px;border-radius:8px;border:none;
-            background:linear-gradient(135deg,#0ea5e9,#0284c7);
-            color:#fff;font-size:0.88rem;font-weight:700;cursor:pointer;
-            box-shadow:0 4px 15px rgba(14,165,233,0.4);
-          ">${editing ? '💾 Update Booking' : '📅 Create Booking'}</button>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary"
+            onclick="document.getElementById('rentalModalOverlay').remove()">Cancel</button>
+          <button type="submit" class="btn btn-primary">
+            ${editing ? '💾 Update Booking' : '📅 Create Booking'}
+          </button>
         </div>
       </form>
     </div>
   `;
 
   document.body.appendChild(overlay);
-  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+
+  // Trigger the fade/scale transition on the next frame.
+  requestAnimationFrame(() => overlay.classList.add('active'));
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
+
+  // Esc closes the dialog.
+  const onKey = (e) => {
+    if (e.key === 'Escape') {
+      overlay.remove();
+      document.removeEventListener('keydown', onKey);
+    }
+  };
+  document.addEventListener('keydown', onKey);
+
+  const firstField = overlay.querySelector('select, input');
+  if (firstField) setTimeout(() => firstField.focus(), 60);
 }
 
 async function submitRentalForm(event, rentalId) {
@@ -8140,102 +6781,125 @@ function viewRentalDetail(id) {
 
   const overlay = document.createElement('div');
   overlay.id = 'rentalDetailOverlay';
-  overlay.style.cssText = `
-    position:fixed;inset:0;z-index:9999;
-    background:rgba(0,0,0,0.65);
-    display:flex;align-items:center;justify-content:center;
-    backdrop-filter:blur(4px);animation:fadeIn 0.2s ease;
-    overflow-y:auto;padding:20px;
-  `;
+  overlay.className = 'modal-backdrop';
+
+  const esc = (v) => String(v == null ? '' : v)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
   overlay.innerHTML = `
-    <div style="
-      background:var(--surface-elevated,#1e1e2e);
-      border:1px solid var(--border-subtle,rgba(255,255,255,0.1));
-      border-radius:16px;padding:32px;max-width:600px;width:95%;
-      box-shadow:0 20px 60px rgba(0,0,0,0.6);
-    ">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+    <div class="modal-content modal-form modal-wide" role="dialog" aria-modal="true">
+      <div class="modal-header">
         <div>
-          <span class="ticket-id" style="font-size:1rem;">${rental.rentalNumber}</span>
-          <h3 style="font-size:1.2rem;font-weight:800;margin-top:4px;">${rental.customerName}</h3>
+          <span class="ticket-id">${esc(rental.rentalNumber)}</span>
+          <h3 class="modal-title" style="margin-top:6px;">${esc(rental.customerName)}</h3>
         </div>
-        <div style="display:flex;gap:8px;align-items:center;">
-          <span class="status-pill ${statusClass}">${rental.status}</span>
-          <button onclick="document.getElementById('rentalDetailOverlay').remove()" style="background:none;border:none;color:var(--text-muted);font-size:1.5rem;cursor:pointer;">×</button>
-        </div>
-      </div>
-
-      <!-- Rental Details -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
-        <div style="background:var(--surface,#15151f);padding:14px;border-radius:10px;">
-          <div style="font-size:0.74rem;color:var(--text-muted);margin-bottom:4px;">Device</div>
-          <div style="font-weight:700;">${rental.deviceModel}</div>
-          <div style="font-size:0.8rem;color:var(--text-muted);">S/N: ${rental.serialNumber}</div>
-        </div>
-        <div style="background:var(--surface,#15151f);padding:14px;border-radius:10px;">
-          <div style="font-size:0.74rem;color:var(--text-muted);margin-bottom:4px;">Rental Period</div>
-          <div style="font-weight:700;">${formatDate(rental.startDate)}</div>
-          <div style="font-size:0.8rem;color:var(--text-muted);">to ${formatDate(rental.endDate)} (${days} days)</div>
-        </div>
-        <div style="background:var(--surface,#15151f);padding:14px;border-radius:10px;">
-          <div style="font-size:0.74rem;color:var(--text-muted);margin-bottom:4px;">Total Cost</div>
-          <div style="font-weight:700;font-size:1.15rem;">₱${rental.totalCost.toLocaleString()}</div>
-          <div style="font-size:0.8rem;color:var(--text-muted);">₱${rental.dailyRate}/day + ₱${rental.depositAmount} deposit</div>
-        </div>
-        <div style="background:var(--surface,#15151f);padding:14px;border-radius:10px;">
-          <div style="font-size:0.74rem;color:var(--text-muted);margin-bottom:4px;">Priority</div>
-          <div style="font-weight:700;">${rental.priority}</div>
-          <div style="font-size:0.8rem;color:var(--text-muted);">${rental.purpose || 'No purpose specified'}</div>
+        <div style="display:flex;gap:10px;align-items:center;">
+          <span class="status-pill ${statusClass}">${esc(rental.status)}</span>
+          <button type="button" class="modal-close" aria-label="Close"
+            onclick="document.getElementById('rentalDetailOverlay').remove()">×</button>
         </div>
       </div>
 
-      ${rental.deliveryAddress ? `
-        <div style="background:var(--surface,#15151f);padding:14px;border-radius:10px;margin-bottom:16px;">
-          <div style="font-size:0.74rem;color:var(--text-muted);margin-bottom:4px;">Delivery Address</div>
-          <div style="font-weight:600;">${rental.deliveryAddress}</div>
+      <div class="form-body">
+        <div class="detail-grid">
+          <div class="detail-tile">
+            <div class="detail-tile-label">Device</div>
+            <div class="detail-tile-value">${esc(rental.deviceModel)}</div>
+            <div class="detail-tile-sub">S/N: ${esc(rental.serialNumber)}</div>
+          </div>
+          <div class="detail-tile">
+            <div class="detail-tile-label">Rental Period</div>
+            <div class="detail-tile-value">${formatDate(rental.startDate)}</div>
+            <div class="detail-tile-sub">to ${formatDate(rental.endDate)} (${days} day${days === 1 ? '' : 's'})</div>
+          </div>
+          <div class="detail-tile">
+            <div class="detail-tile-label">Total Cost</div>
+            <div class="detail-tile-value" style="font-size:1.15rem;">₱${Number(rental.totalCost || 0).toLocaleString()}</div>
+            <div class="detail-tile-sub">₱${Number(rental.dailyRate || 0).toLocaleString()}/day + ₱${Number(rental.depositAmount || 0).toLocaleString()} deposit</div>
+          </div>
+          <div class="detail-tile">
+            <div class="detail-tile-label">Priority</div>
+            <div class="detail-tile-value">${esc(rental.priority)}</div>
+            <div class="detail-tile-sub">${esc(rental.purpose || 'No purpose specified')}</div>
+          </div>
         </div>
-      ` : ''}
 
-      ${(rental.contactPerson || rental.contactPhone || rental.contactEmail) ? `
-        <div style="background:var(--surface,#15151f);padding:14px;border-radius:10px;margin-bottom:16px;">
-          <div style="font-size:0.74rem;color:var(--text-muted);margin-bottom:4px;">Contact</div>
-          <div style="font-weight:600;">${rental.contactPerson || '—'}</div>
-          <div style="font-size:0.8rem;color:var(--text-muted);">${rental.contactPhone || ''} ${rental.contactEmail ? '· ' + rental.contactEmail : ''}</div>
-        </div>
-      ` : ''}
+        ${rental.deliveryAddress ? `
+          <div class="detail-tile">
+            <div class="detail-tile-label">Delivery Address</div>
+            <div class="detail-tile-value">${esc(rental.deliveryAddress)}</div>
+          </div>
+        ` : ''}
 
-      ${rental.notes ? `
-        <div style="background:var(--surface,#15151f);padding:14px;border-radius:10px;margin-bottom:16px;">
-          <div style="font-size:0.74rem;color:var(--text-muted);margin-bottom:4px;">Notes</div>
-          <div style="font-size:0.86rem;">${rental.notes}</div>
-        </div>
-      ` : ''}
+        ${(rental.deliveryDate || rental.pickupDate) ? `
+          <div class="detail-grid">
+            <div class="detail-tile">
+              <div class="detail-tile-label">Delivery Date</div>
+              <div class="detail-tile-value">${rental.deliveryDate ? formatDate(rental.deliveryDate) : '—'}</div>
+            </div>
+            <div class="detail-tile">
+              <div class="detail-tile-label">Pickup Date</div>
+              <div class="detail-tile-value">${rental.pickupDate ? formatDate(rental.pickupDate) : '—'}</div>
+            </div>
+          </div>
+        ` : ''}
 
-      ${rental.actualReturnDate ? `
-        <div style="background:rgba(34,197,94,0.08);padding:14px;border-radius:10px;margin-bottom:16px;border:1px solid rgba(34,197,94,0.2);">
-          <div style="font-size:0.74rem;color:#22c55e;margin-bottom:4px;">✓ Device Returned</div>
-          <div style="font-weight:600;">Return Date: ${formatDate(rental.actualReturnDate)}</div>
-        </div>
-      ` : ''}
+        ${(rental.contactPerson || rental.contactPhone || rental.contactEmail) ? `
+          <div class="detail-tile">
+            <div class="detail-tile-label">Contact</div>
+            <div class="detail-tile-value">${esc(rental.contactPerson || '—')}</div>
+            <div class="detail-tile-sub">
+              ${esc(rental.contactPhone || '')}${rental.contactPhone && rental.contactEmail ? ' · ' : ''}${esc(rental.contactEmail || '')}
+            </div>
+          </div>
+        ` : ''}
 
-      <!-- Action Buttons -->
+        ${rental.notes ? `
+          <div class="detail-tile">
+            <div class="detail-tile-label">Notes</div>
+            <div class="detail-tile-value" style="font-weight:500;white-space:pre-wrap;">${esc(rental.notes)}</div>
+          </div>
+        ` : ''}
+
+        ${rental.actualReturnDate ? `
+          <div class="detail-tile detail-tile-success">
+            <div class="detail-tile-label" style="color:#22c55e;">✓ Device Returned</div>
+            <div class="detail-tile-value">Return Date: ${formatDate(rental.actualReturnDate)}</div>
+          </div>
+        ` : ''}
+      </div>
+
       ${isAdmin ? `
-        <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid var(--border-subtle,rgba(255,255,255,0.08));">
-          ${rental.status === 'Pending' ? `<button class="btn btn-success btn-sm" onclick="approveRental('${rental.id}')" style="padding:8px 16px;">✓ Approve</button>` : ''}
-          ${rental.status === 'Approved' ? `<button class="btn btn-primary btn-sm" onclick="activateRental('${rental.id}')" style="padding:8px 16px;">▶ Activate</button>` : ''}
-          ${rental.status === 'Active' ? `<button class="btn btn-secondary btn-sm" onclick="returnRental('${rental.id}')" style="padding:8px 16px;">↩ Mark Returned</button>` : ''}
-          ${rental.status === 'Active' ? `<button class="btn btn-warning btn-sm" onclick="markOverdue('${rental.id}')" style="padding:8px 16px;">⚠ Mark Overdue</button>` : ''}
-          ${(rental.status === 'Pending' || rental.status === 'Approved') ? `<button class="btn btn-secondary btn-sm" onclick="cancelRental('${rental.id}')" style="padding:8px 16px;">✕ Cancel</button>` : ''}
-          <button class="btn btn-secondary btn-sm" onclick="editRental('${rental.id}')" style="padding:8px 16px;">✏️ Edit</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteRental('${rental.id}')" style="padding:8px 16px;background:rgba(244,63,94,0.15);color:#f43f5e;border:1px solid #f43f5e55;">🗑️ Delete</button>
+        <div class="modal-footer" style="flex-wrap:wrap;justify-content:flex-end;">
+          ${rental.status === 'Pending' ? `<button class="btn btn-success btn-sm" onclick="approveRental('${esc(rental.id)}')">✓ Approve</button>` : ''}
+          ${rental.status === 'Approved' ? `<button class="btn btn-primary btn-sm" onclick="activateRental('${esc(rental.id)}')">▶ Activate</button>` : ''}
+          ${rental.status === 'Active' ? `<button class="btn btn-secondary btn-sm" onclick="returnRental('${esc(rental.id)}')">↩ Mark Returned</button>` : ''}
+          ${rental.status === 'Active' ? `<button class="btn btn-warning btn-sm" onclick="markOverdue('${esc(rental.id)}')">⚠ Mark Overdue</button>` : ''}
+          ${(rental.status === 'Pending' || rental.status === 'Approved') ? `<button class="btn btn-secondary btn-sm" onclick="cancelRental('${esc(rental.id)}')">✕ Cancel</button>` : ''}
+          <button class="btn btn-secondary btn-sm" onclick="editRental('${esc(rental.id)}')">✏️ Edit</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteRental('${esc(rental.id)}')">🗑️ Delete</button>
         </div>
-      ` : ''}
+      ` : `
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary"
+            onclick="document.getElementById('rentalDetailOverlay').remove()">Close</button>
+        </div>
+      `}
     </div>
   `;
 
   document.body.appendChild(overlay);
-  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+  requestAnimationFrame(() => overlay.classList.add('active'));
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+  const onKey = (e) => {
+    if (e.key === 'Escape') {
+      overlay.remove();
+      document.removeEventListener('keydown', onKey);
+    }
+  };
+  document.addEventListener('keydown', onKey);
 }
 
 // --- Rental Status Actions ---
@@ -8387,48 +7051,27 @@ function showDeleteConfirm(message, onConfirm) {
 
   const overlay = document.createElement('div');
   overlay.id = 'deleteConfirmOverlay';
-  overlay.style.cssText = `
-    position:fixed;inset:0;z-index:9999;
-    background:rgba(0,0,0,0.65);
-    display:flex;align-items:center;justify-content:center;
-    backdrop-filter:blur(4px);
-    animation:fadeIn 0.2s ease;
-  `;
+  overlay.className = 'modal-backdrop';
   overlay.innerHTML = `
-    <div style="
-      background:var(--surface-elevated,#1e1e2e);
-      border:1px solid #f43f5e55;
-      border-radius:16px;
-      padding:32px 36px;
-      max-width:420px;
-      width:90%;
-      box-shadow:0 20px 60px rgba(0,0,0,0.6);
-      text-align:center;
-    ">
+    <div class="modal-content" style="max-width:420px;text-align:center;border-color:rgba(244,63,94,0.35);" role="alertdialog" aria-modal="true">
       <div style="font-size:2.5rem;margin-bottom:12px;">🗑️</div>
       <h3 style="font-size:1.15rem;font-weight:800;color:#f43f5e;margin-bottom:10px;">Confirm Deletion</h3>
-      <p style="font-size:0.88rem;color:var(--text-secondary,#a0a0b0);margin-bottom:24px;line-height:1.5;">${message}</p>
-      <div style="display:flex;gap:12px;justify-content:center;">
-        <button id="deleteCancelBtn" style="
-          padding:10px 24px;border-radius:8px;border:1px solid var(--border-subtle,#333);
-          background:transparent;color:var(--text-primary,#fff);font-size:0.88rem;
-          font-weight:600;cursor:pointer;transition:all 0.2s;
-        ">Cancel</button>
-        <button id="deleteConfirmBtn" style="
-          padding:10px 24px;border-radius:8px;border:none;
-          background:linear-gradient(135deg,#f43f5e,#dc2626);
-          color:#fff;font-size:0.88rem;font-weight:700;cursor:pointer;
-          box-shadow:0 4px 15px rgba(244,63,94,0.4);
-          transition:all 0.2s;
-        ">🗑️ Delete Permanently</button>
+      <p style="font-size:0.88rem;color:var(--text-secondary);margin-bottom:24px;line-height:1.5;">${message}</p>
+      <div class="modal-footer" style="border-top:none;background:transparent;padding:0;justify-content:center;">
+        <button type="button" id="deleteCancelBtn" class="btn btn-secondary">Cancel</button>
+        <button type="button" id="deleteConfirmBtn" class="btn btn-primary"
+          style="background:linear-gradient(135deg,#f43f5e,#dc2626);box-shadow:0 4px 15px rgba(244,63,94,0.4);">
+          🗑️ Delete Permanently
+        </button>
       </div>
     </div>
   `;
 
   document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add('active'));
 
   document.getElementById('deleteCancelBtn').onclick = () => overlay.remove();
-  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
   document.getElementById('deleteConfirmBtn').onclick = () => {
     overlay.remove();
     onConfirm();
@@ -8543,7 +7186,8 @@ function toggleMobileSidebar(open) {
 
 // Initialize Application on Page Load
 window.addEventListener('DOMContentLoaded', async () => {
-  // Initialize theme first to avoid flash
+  // The inline boot script in index.html already applied the saved theme
+  // before the first paint; this just syncs the toggle icon.
   initTheme();
 
   // --- AUTH GATE: check for existing session ---
@@ -8552,6 +7196,13 @@ window.addEventListener('DOMContentLoaded', async () => {
     // Reconcile the cached session with the database before trusting it.
     savedUser = await refreshAuthSession();
   }
+
+  // The boot script kept the sign-in portal off screen during the /auth/me
+  // round-trip above. The real answer is in now, so drop the boot class and
+  // let the normal show/hide logic take over. Both branches below run in this
+  // same task, so no frame is painted in between — no flash either way.
+  document.documentElement.classList.remove('boot-has-session');
+
   if (savedUser) {
     // Restore session without showing login
     state.currentUser = savedUser;
@@ -8580,10 +7231,13 @@ window.addEventListener('DOMContentLoaded', async () => {
     });
   });
 
-  // Auto-refresh telemetry every 30 seconds (only if logged in)
+  // Auto-refresh telemetry every 30 seconds (only if logged in).
+  // Runs "silent": if the fetched data renders identical markup the DOM is
+  // left completely untouched, so the poll is invisible instead of looking
+  // like the page reloaded itself.
   setInterval(() => {
     if (state.currentUser) {
-      fetchAllData();
+      fetchAllData({ silent: true });
     }
   }, 30000);
 });
@@ -8595,54 +7249,41 @@ window.addEventListener('DOMContentLoaded', async () => {
 // ==========================================================================
 
 // Mobile menu toggle
+/**
+ * Hamburger toggle.
+ *
+ * Delegates to toggleMobileSidebar() so the hamburger and the dimming layer
+ * share a single state. It deliberately does NOT create a body-level
+ * `.mobile-backdrop`: `.app-container` is `position: relative; z-index: 1`, so
+ * it forms a stacking context, and a body-level overlay (z-index 998) painted
+ * above that whole subtree — including the sidebar — which made every nav item
+ * untappable. The overlay now lives inside `.app-container` (see index.html).
+ */
 function toggleMobileMenu() {
-  const sidebar = document.querySelector('.app-sidebar');
-  const backdrop = document.querySelector('.mobile-backdrop');
-  
-  if (sidebar) {
-    sidebar.classList.toggle('mobile-open');
-  }
-  
-  // Create backdrop if doesn't exist
-  if (!backdrop) {
-    const newBackdrop = document.createElement('div');
-    newBackdrop.className = 'mobile-backdrop';
-    newBackdrop.onclick = closeMobileMenu;
-    document.body.appendChild(newBackdrop);
-    setTimeout(() => newBackdrop.classList.add('active'), 10);
-  } else {
-    backdrop.classList.toggle('active');
-  }
+  const sidebar = document.getElementById('appSidebar');
+  const isOpen = sidebar ? sidebar.classList.contains('mobile-open') : false;
+  toggleMobileSidebar(!isOpen);
 }
 
 function closeMobileMenu() {
-  const sidebar = document.querySelector('.app-sidebar');
-  const backdrop = document.querySelector('.mobile-backdrop');
-  
-  if (sidebar) {
-    sidebar.classList.remove('mobile-open');
-  }
-  
-  if (backdrop) {
-    backdrop.classList.remove('active');
-    setTimeout(() => backdrop.remove(), 300);
-  }
+  toggleMobileSidebar(false);
 }
 
-// Close mobile menu when clicking a tab
+// Close the mobile drawer after tapping a nav item.
+// (This used to listen for `.tab-btn`, a class that does not exist — the
+// sidebar uses `.nav-item` — so the drawer stayed open over the new view.)
 document.addEventListener('DOMContentLoaded', () => {
-  const tabButtons = document.querySelectorAll('.tab-btn');
-  tabButtons.forEach(btn => {
-    btn.addEventListener('click', () => {
-      if (window.innerWidth <= 767) {
+  document.querySelectorAll('.app-sidebar .nav-item').forEach((item) => {
+    item.addEventListener('click', () => {
+      if (window.innerWidth <= 900) {
         closeMobileMenu();
       }
     });
   });
-  
+
   // Close menu on window resize if screen becomes large
   window.addEventListener('resize', () => {
-    if (window.innerWidth > 767) {
+    if (window.innerWidth > 900) {
       closeMobileMenu();
     }
   });

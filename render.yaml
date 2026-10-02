@@ -18,6 +18,14 @@ services:
         sync: false
       - key: DATABASE_AUTH_TOKEN
         sync: false
+      # Signs the API auth tokens issued at login.
+      # REQUIRED in production: set a long random value (32+ chars) in the Render
+      # dashboard. Without it the server generates a random secret at startup and
+      # every deploy signs all users out.
+      - key: AUTH_SECRET
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
 
 # Database Notes:
 # By setting DATABASE_URL and DATABASE_AUTH_TOKEN in Render's Environment Variables,

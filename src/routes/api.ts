@@ -1,6 +1,7 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import passport from '../config/passport.js';
 import { db } from '../db/database-supabase.js';
+import { signToken, verifyToken, extractBearerToken, TOKEN_TTL_SECONDS } from '../auth/token.js';
 
 export const apiRouter = Router();
 
@@ -10,15 +11,20 @@ const getParam = (param: string | string[] | undefined): string => {
 };
 
 // ============================================================
-// CUSTOMER SCOPING HELPERS
-// A customer account must only ever receive records that belong to its own
-// organization. The users table has no customer_id column, so the customer
-// record is resolved from the users.organization value.
+// AUTHENTICATION
+// A signed token is issued at login and sent by the client as
+// `Authorization: Bearer <token>`. The token carries only the user id; the role
+// and customer scope are re-resolved from the database on every request, so
+// access can never be widened by tampering with client-side values.
 // ============================================================
 
 type CustomerScope = { customerId: string; organization: string };
 
 type RequesterScope = { role: string; scope: CustomerScope | null };
+
+interface AuthedRequest extends Request {
+  auth?: { userId: string; role: string; scope: CustomerScope | null };
+}
 
 /**
  * Resolve who is asking. The role is read from the database rather than trusted
@@ -50,6 +56,60 @@ async function resolveRequesterScope(userId: string): Promise<RequesterScope | n
     scope: customerId || organization ? { customerId, organization } : null,
   };
 }
+
+/**
+ * Require a valid bearer token. On success attaches `req.auth`
+ * = { userId, role, scope }. Fails closed with 401 on anything else —
+ * missing header, bad signature, expired token, or a deleted account.
+ */
+async function requireAuth(req: AuthedRequest, res: Response, next: NextFunction) {
+  try {
+    const token = extractBearerToken(req.headers.authorization);
+    const payload = verifyToken(token);
+
+    if (!payload) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required. Please sign in again.',
+        code: 'UNAUTHENTICATED',
+      });
+    }
+
+    // Re-resolve from the database so deleted/disabled accounts lose access
+    // immediately and role changes apply on the next request.
+    const requester = await resolveRequesterScope(payload.userId);
+    if (!requester) {
+      return res.status(401).json({
+        success: false,
+        error: 'Your account is no longer available. Please sign in again.',
+        code: 'ACCOUNT_UNAVAILABLE',
+      });
+    }
+
+    req.auth = { userId: payload.userId, role: requester.role, scope: requester.scope };
+    next();
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+}
+
+/** Require one of the given roles. Must run after requireAuth. */
+function requireRole(...roles: string[]) {
+  return (req: AuthedRequest, res: Response, next: NextFunction) => {
+    if (!req.auth || !roles.includes(req.auth.role)) {
+      return res.status(403).json({
+        success: false,
+        error: 'You do not have permission to perform this action.',
+        code: 'FORBIDDEN',
+      });
+    }
+    next();
+  };
+}
+
+// ============================================================
+// CUSTOMER SCOPING HELPERS
+// ============================================================
 
 /**
  * Case/whitespace-insensitive ownership test.
@@ -102,7 +162,28 @@ apiRouter.post('/auth/login', async (req: Request, res: Response) => {
     if (!result.success) {
       return res.status(401).json({ success: false, error: result.error });
     }
-    res.json({ success: true, user: result.user });
+
+    // Issue a signed token. The client sends it back as `Authorization: Bearer`.
+    // This is what makes server-side scoping trustworthy — the identity is
+    // proven by the signature instead of being asserted in a query parameter.
+    const token = signToken(result.user.id);
+
+    res.json({ success: true, user: result.user, token, expiresIn: TOKEN_TTL_SECONDS });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /api/auth/me — verify the current token and return the authenticated user
+apiRouter.get('/auth/me', requireAuth, async (req: AuthedRequest, res: Response) => {
+  try {
+    const users = await db.getUsers();
+    const user: any = users.find((u: any) => u.id === req.auth!.userId);
+    if (!user) {
+      return res.status(401).json({ success: false, error: 'Account not found.', code: 'ACCOUNT_UNAVAILABLE' });
+    }
+    const { passwordHash, ...safeUser } = user;
+    res.json({ success: true, user: safeUser, role: req.auth!.role, scope: req.auth!.scope });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -175,7 +256,9 @@ apiRouter.post('/auth/register', async (req: Request, res: Response) => {
     });
 
     console.log(`  ✅ Registered new ${role}: ${username} (${email}) -> Automatically stored to database.`);
-    res.status(201).json({ success: true, user: result.user });
+    // Sign the new user straight in so the client has a token immediately.
+    const token = signToken(result.user.id);
+    res.status(201).json({ success: true, user: result.user, token, expiresIn: TOKEN_TTL_SECONDS });
   } catch (error: any) {
     console.error('Registration Error:', error);
     res.status(500).json({ success: false, error: error.message });
@@ -183,17 +266,99 @@ apiRouter.post('/auth/register', async (req: Request, res: Response) => {
 });
 
 // GET /api/auth/users (admin only — returns safe list without passwordHash)
-apiRouter.get('/auth/users', async (req: Request, res: Response) => {
+apiRouter.get(
+  '/auth/users',
+  requireAuth,
+  requireRole('admin'),
+  async (req: Request, res: Response) => {
+    try {
+      const users = (await db.getUsers()).map(({ passwordHash, ...u }: any) => u);
+      res.json({ success: true, data: users });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+);
+
+// PATCH /api/auth/me — self-service profile update (any signed-in user)
+//
+// Only these fields may be self-edited: fullName, email, location and password.
+// `role`, `organization` and `customerId` are deliberately NOT accepted — a user
+// must never be able to widen their own access or re-home their account.
+apiRouter.patch('/auth/me', requireAuth, async (req: AuthedRequest, res: Response) => {
   try {
-    const users = (await db.getUsers()).map(({ passwordHash, ...u }: any) => u);
-    res.json({ success: true, data: users });
+    const userId = req.auth!.userId;
+    const { fullName, email, location, currentPassword, newPassword } = req.body;
+
+    const users = await db.getUsers();
+    const me: any = users.find((u: any) => u.id === userId);
+    if (!me) {
+      return res.status(404).json({ success: false, error: 'Account not found.' });
+    }
+
+    const updates: { fullName?: string; email?: string; location?: string; password?: string } = {};
+
+    if (fullName !== undefined) {
+      const value = String(fullName).trim();
+      if (value.length < 2) {
+        return res.status(400).json({ success: false, error: 'Full name must be at least 2 characters.' });
+      }
+      updates.fullName = value;
+    }
+
+    if (email !== undefined) {
+      const value = String(email).trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+        return res.status(400).json({ success: false, error: 'Please enter a valid email address.' });
+      }
+      const taken = users.some(
+        (u: any) => u.id !== userId && String(u.email || '').trim().toLowerCase() === value
+      );
+      if (taken) {
+        return res.status(409).json({ success: false, error: 'That email is already used by another account.' });
+      }
+      updates.email = value;
+    }
+
+    if (location !== undefined) {
+      updates.location = String(location).trim() || 'All Locations';
+    }
+
+    // Password change requires the current password, so a stolen token alone
+    // cannot lock the real owner out of their account.
+    if (newPassword !== undefined && String(newPassword) !== '') {
+      const plain = String(newPassword);
+      if (plain.length < 6) {
+        return res.status(400).json({ success: false, error: 'New password must be at least 6 characters.' });
+      }
+      if (!currentPassword) {
+        return res.status(400).json({ success: false, error: 'Enter your current password to set a new one.' });
+      }
+      const verify = await db.loginUser(me.username, String(currentPassword));
+      if (!verify.success) {
+        return res.status(403).json({ success: false, error: 'Your current password is incorrect.' });
+      }
+      updates.password = plain;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ success: false, error: 'Nothing to update.' });
+    }
+
+    const result = await db.updateUser(userId, updates);
+    if (!result.success) {
+      return res.status(400).json({ success: false, error: result.error });
+    }
+
+    const { passwordHash, ...safe } = result.user as any;
+    res.json({ success: true, data: safe });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
 // POST /api/auth/users (admin create user)
-apiRouter.post('/auth/users', async (req: Request, res: Response) => {
+apiRouter.post('/auth/users', requireAuth, requireRole('admin'), async (req: Request, res: Response) => {
   try {
     const { username, email, password, fullName, role, location, organization } = req.body;
     if (!username || !email || !password || !fullName || !role) {
@@ -211,31 +376,45 @@ apiRouter.post('/auth/users', async (req: Request, res: Response) => {
     if (!result.success) {
       return res.status(400).json({ success: false, error: result.error });
     }
-    res.status(201).json({ success: true, data: result.user });
+    const { passwordHash, ...safe } = result.user as any;
+    res.status(201).json({ success: true, data: safe });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
 // PATCH /api/auth/users/:id (admin update user)
-apiRouter.patch('/auth/users/:id', async (req: Request, res: Response) => {
+apiRouter.patch('/auth/users/:id', requireAuth, requireRole('admin'), async (req: AuthedRequest, res: Response) => {
   try {
     const id = getParam(req.params.id);
     const { fullName, email, role, location, organization, password } = req.body;
+
+    // An admin removing their own admin role would lock everyone out of user
+    // management, with no way back in. Refuse it.
+    if (id === req.auth!.userId && role && role !== 'admin') {
+      return res.status(400).json({ success: false, error: 'You cannot change your own role.' });
+    }
+
     const result = await db.updateUser(id, { fullName, email, role, location, organization, password });
     if (!result.success) {
       return res.status(400).json({ success: false, error: result.error });
     }
-    res.json({ success: true, data: result.user });
+    const { passwordHash, ...safe } = result.user as any;
+    res.json({ success: true, data: safe });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
 // DELETE /api/auth/users/:id (admin delete user)
-apiRouter.delete('/auth/users/:id', async (req: Request, res: Response) => {
+apiRouter.delete('/auth/users/:id', requireAuth, requireRole('admin'), async (req: AuthedRequest, res: Response) => {
   try {
     const id = getParam(req.params.id);
+
+    if (id === req.auth!.userId) {
+      return res.status(400).json({ success: false, error: 'You cannot delete your own account.' });
+    }
+
     const success = await db.deleteUser(id);
     if (!success) {
       return res.status(404).json({ success: false, error: 'User not found' });
@@ -1211,76 +1390,168 @@ apiRouter.get('/audit-logs', async (req: Request, res: Response) => {
 
 // ============================================================
 // RENTAL SCHEDULING ROUTES — Device Rental & Booking Management
+//
+// ACCESS MODEL (matches ROLE_ACCESS in the frontend):
+//   admin     -> every rental, full control
+//   customer  -> only rentals belonging to their own organization
+//   technician-> no rental access at all
+//
+// Every route requires a valid bearer token. The identity comes from the signed
+// token, never from a client-supplied query parameter, so a caller cannot widen
+// their own access by editing the request.
 // ============================================================
 
-// GET /api/rentals — list all rentals
-apiRouter.get('/rentals', async (req: Request, res: Response) => {
-  try {
-    let rentals = await db.getAllRentals();
-    const { userId } = req.query;
+/** True when the caller is allowed to read rental data at all. */
+function canReadRentals(role: string): boolean {
+  return role === 'admin' || role === 'customer';
+}
 
-    // Customers may only ever see their own bookings. Enforced server-side so
-    // the data never reaches their browser in the first place.
-    if (userId) {
-      const requester = await resolveRequesterScope(String(userId));
-      // An unknown identity is treated the same as a customer: never grant it
-      // the full list. (No userId at all keeps the original admin behaviour.)
-      if (!requester || requester.role === 'customer') {
-        rentals = requester?.scope ? rentals.filter((r) => rentalInScope(r, requester.scope!)) : [];
+/**
+ * Narrow a rental list to what the caller may see.
+ * Admins get everything; a customer gets only their own rows (and an empty list
+ * if their account is not linked to a customer record — never the full list).
+ */
+function scopeRentalsForAuth(all: any[], auth: { role: string; scope: CustomerScope | null }): any[] {
+  if (auth.role === 'admin') return all;
+  if (auth.role !== 'customer') return [];
+  if (!auth.scope) return [];
+  return all.filter((r) => rentalInScope(r, auth.scope!));
+}
+
+/**
+ * Resolve the customers.id a customer account belongs to.
+ * Needed when creating a booking, because `createRental` requires a real
+ * customer id (the scope may only carry an organization name).
+ */
+async function resolveScopeCustomerId(scope: CustomerScope): Promise<string | null> {
+  if (scope.customerId) return scope.customerId;
+  if (!scope.organization) return null;
+
+  const customers = await db.getCustomers();
+  const match = customers.find(
+    (c) => c.organizationName.trim().toLowerCase() === scope.organization.toLowerCase()
+  );
+  return match ? match.id : null;
+}
+
+// GET /api/rentals — list rentals visible to the caller
+apiRouter.get(
+  '/rentals',
+  requireAuth,
+  requireRole('admin', 'customer'),
+  async (req: AuthedRequest, res: Response) => {
+    try {
+      const auth = req.auth!;
+      const all = await db.getAllRentals();
+      const rentals = scopeRentalsForAuth(all, auth);
+      res.json({
+        success: true,
+        data: rentals,
+        count: rentals.length,
+        scoped: auth.role === 'customer',
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+);
+
+// GET /api/rentals/:id — get a single rental (owner or admin only)
+apiRouter.get(
+  '/rentals/:id',
+  requireAuth,
+  requireRole('admin', 'customer'),
+  async (req: AuthedRequest, res: Response) => {
+    try {
+      const auth = req.auth!;
+      const id = getParam(req.params.id);
+      const rental = await db.getRentalById(id);
+      if (!rental) return res.status(404).json({ success: false, error: 'Rental not found' });
+
+      // A customer may only open their own booking. Return 404 (not 403) so the
+      // response does not confirm that someone else's rental id exists.
+      if (auth.role !== 'admin' && !(auth.scope && rentalInScope(rental, auth.scope))) {
+        return res.status(404).json({ success: false, error: 'Rental not found' });
       }
+
+      res.json({ success: true, data: rental });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
     }
-
-    res.json({ success: true, data: rentals, count: rentals.length });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
   }
-});
+);
 
-// GET /api/rentals/:id — get single rental
-apiRouter.get('/rentals/:id', async (req: Request, res: Response) => {
-  try {
-    const id = getParam(req.params.id);
-    const rental = await db.getRentalById(id);
-    if (!rental) return res.status(404).json({ success: false, error: 'Rental not found' });
-    res.json({ success: true, data: rental });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
+// POST /api/rentals — create a new booking
+apiRouter.post(
+  '/rentals',
+  requireAuth,
+  requireRole('admin', 'customer'),
+  async (req: AuthedRequest, res: Response) => {
+    try {
+      const auth = req.auth!;
+      const { deviceId, startDate, endDate } = req.body;
 
-// POST /api/rentals — create new rental booking
-apiRouter.post('/rentals', async (req: Request, res: Response) => {
-  try {
-    const { customerId, deviceId, startDate, endDate } = req.body;
-    if (!customerId || !deviceId || !startDate || !endDate) {
-      return res.status(400).json({ success: false, error: 'customerId, deviceId, startDate, and endDate are required.' });
+      // A customer always books for their OWN organization — any customerId in
+      // the body is ignored, so they cannot create bookings for someone else.
+      let customerId = req.body.customerId;
+      if (auth.role === 'customer') {
+        if (!auth.scope) {
+          return res.status(403).json({
+            success: false,
+            error: 'Your account is not linked to a customer organization, so you cannot book devices.',
+            code: 'NO_CUSTOMER_SCOPE',
+          });
+        }
+        const ownCustomerId = await resolveScopeCustomerId(auth.scope);
+        if (!ownCustomerId) {
+          return res.status(403).json({
+            success: false,
+            error: 'Your account is not linked to a customer organization, so you cannot book devices.',
+            code: 'NO_CUSTOMER_SCOPE',
+          });
+        }
+        customerId = ownCustomerId;
+      }
+
+      if (!customerId || !deviceId || !startDate || !endDate) {
+        return res.status(400).json({
+          success: false,
+          error: 'customerId, deviceId, startDate, and endDate are required.',
+        });
+      }
+
+      const rental = await db.createRental({ ...req.body, customerId });
+      res.json({ success: true, data: rental });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
     }
-    const rental = await db.createRental(req.body);
-    res.json({ success: true, data: rental });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
   }
-});
+);
 
-// PATCH /api/rentals/:id/status — update rental status
-apiRouter.patch('/rentals/:id/status', async (req: Request, res: Response) => {
-  try {
-    const id = getParam(req.params.id);
-    const { status } = req.body;
-    const validStatuses = ['Pending', 'Approved', 'Active', 'Returned', 'Overdue', 'Cancelled'];
-    if (!validStatuses.includes(status)) {
-      return res.status(400).json({ success: false, error: 'Invalid status.' });
+// PATCH /api/rentals/:id/status — update rental status (admin only)
+apiRouter.patch(
+  '/rentals/:id/status',
+  requireAuth,
+  requireRole('admin'),
+  async (req: Request, res: Response) => {
+    try {
+      const id = getParam(req.params.id);
+      const { status } = req.body;
+      const validStatuses = ['Pending', 'Approved', 'Active', 'Returned', 'Overdue', 'Cancelled'];
+      if (!validStatuses.includes(status)) {
+        return res.status(400).json({ success: false, error: 'Invalid status.' });
+      }
+      const rental = await db.updateRentalStatus(id, status);
+      if (!rental) return res.status(404).json({ success: false, error: 'Rental not found' });
+      res.json({ success: true, data: rental });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
     }
-    const rental = await db.updateRentalStatus(id, status);
-    if (!rental) return res.status(404).json({ success: false, error: 'Rental not found' });
-    res.json({ success: true, data: rental });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
   }
-});
+);
 
-// PATCH /api/rentals/:id — update rental details
-apiRouter.patch('/rentals/:id', async (req: Request, res: Response) => {
+// PATCH /api/rentals/:id — update rental details (admin only)
+apiRouter.patch('/rentals/:id', requireAuth, requireRole('admin'), async (req: Request, res: Response) => {
   try {
     const id = getParam(req.params.id);
     const rental = await db.updateRental(id, req.body);
@@ -1291,8 +1562,8 @@ apiRouter.patch('/rentals/:id', async (req: Request, res: Response) => {
   }
 });
 
-// DELETE /api/rentals/:id — delete rental
-apiRouter.delete('/rentals/:id', async (req: Request, res: Response) => {
+// DELETE /api/rentals/:id — delete rental (admin only)
+apiRouter.delete('/rentals/:id', requireAuth, requireRole('admin'), async (req: Request, res: Response) => {
   try {
     const id = getParam(req.params.id);
     const success = await db.deleteRental(id);
@@ -1303,39 +1574,46 @@ apiRouter.delete('/rentals/:id', async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/rentals/stats/summary — rental dashboard stats
-apiRouter.get('/rentals/stats/summary', async (req: Request, res: Response) => {
-  try {
-    const { userId } = req.query;
+// GET /api/rentals/stats/summary — rental dashboard stats (scoped to the caller)
+apiRouter.get(
+  '/rentals/stats/summary',
+  requireAuth,
+  requireRole('admin', 'customer'),
+  async (req: AuthedRequest, res: Response) => {
+    try {
+      const auth = req.auth!;
 
-    // Customers must not see company-wide revenue / booking totals.
-    if (userId) {
-      const requester = await resolveRequesterScope(String(userId));
-      if (!requester || requester.role === 'customer') {
+      // A customer must never receive company-wide revenue or booking totals.
+      if (auth.role === 'customer') {
         const all = await db.getAllRentals();
-        const mine = requester?.scope ? all.filter((r) => rentalInScope(r, requester.scope!)) : [];
-        return res.json({ success: true, data: computeRentalStats(mine) });
+        const mine = scopeRentalsForAuth(all, auth);
+        return res.json({ success: true, data: computeRentalStats(mine), scoped: true });
       }
-    }
 
-    const stats = await db.getRentalStats();
-    res.json({ success: true, data: stats });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+      const stats = await db.getRentalStats();
+      res.json({ success: true, data: stats, scoped: false });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
   }
-});
+);
 
 // GET /api/rentals/availability/check — check available devices for date range
-apiRouter.get('/rentals/availability/check', async (req: Request, res: Response) => {
-  try {
-    const startDate = req.query.startDate as string;
-    const endDate = req.query.endDate as string;
-    if (!startDate || !endDate) {
-      return res.status(400).json({ success: false, error: 'startDate and endDate are required.' });
+apiRouter.get(
+  '/rentals/availability/check',
+  requireAuth,
+  requireRole('admin', 'customer'),
+  async (req: Request, res: Response) => {
+    try {
+      const startDate = req.query.startDate as string;
+      const endDate = req.query.endDate as string;
+      if (!startDate || !endDate) {
+        return res.status(400).json({ success: false, error: 'startDate and endDate are required.' });
+      }
+      const devices = await db.getAvailableDevices(startDate, endDate);
+      res.json({ success: true, data: devices });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
     }
-    const devices = await db.getAvailableDevices(startDate, endDate);
-    res.json({ success: true, data: devices });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
   }
-});
+);

@@ -64,6 +64,14 @@ app.use('/api', (req: Request, res: Response) => {
   });
 });
 
+// Public landing page / new-user guide.
+// Must be declared BEFORE the SPA fallback, otherwise the catch-all below
+// would serve index.html for /landing and the page would never appear.
+// (/landing.html is already served directly by express.static.)
+app.get('/landing', (req: Request, res: Response) => {
+  res.sendFile(path.resolve(publicPath, 'landing.html'));
+});
+
 // Fallback to index.html for SPA frontend routing
 app.use((req: Request, res: Response) => {
   res.sendFile(path.resolve(publicPath, 'index.html'));

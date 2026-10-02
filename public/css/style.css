@@ -8542,6 +8542,22 @@ body {
   text-decoration: underline;
 }
 
+/* "New here?" link out to the public landing / new-user guide page.
+   Sits just under the register link on the sign-in card. */
+.auth-guide-link {
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.auth-guide-link a {
+  color: #7dd3fc;
+}
+
+.auth-guide-link a:hover {
+  color: #38bdf8;
+}
+
 /* Error/Success messages */
 .auth-error-msg {
   background: rgba(239, 68, 68, 0.12);
@@ -8632,27 +8648,68 @@ body {
   }
 }
 
+/* ============================================================
+   TABLET / MOBILE — AUTH PORTAL (sign-in & register)
+   Desktop is a 2-column split: a 530px marketing panel beside a
+   fixed-width 410px sign-in card. On a phone the two cannot fit,
+   and because none of the flex children declared `min-width: 0`
+   they refused to shrink below their min-content width — the
+   frame stayed ~551px wide inside a 390px viewport, which pushed
+   the submit button completely off-screen and made it impossible
+   to sign in at all. Everything here is single-column and
+   explicitly shrinkable.
+   ============================================================ */
 @media (max-width: 992px) {
+  .auth-portal-overlay {
+    align-items: flex-start;
+    padding: 0;
+  }
+
   .auth-portal-frame {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;               /* <- the line that actually fixes it */
     height: auto;
     max-height: none;
-    min-height: calc(100vh - 20px);
-    overflow: visible;
+    min-height: 100vh;
+    border: 0;
+    border-radius: 0;
+    clip-path: none;            /* a chamfered corner is pointless full-bleed */
+  }
+
+  .auth-portal-frame::after {
+    display: none;
   }
 
   .auth-split-layout {
-    height: auto;
-    overflow: visible;
+    display: flex;
     flex-direction: column;
-    padding: 20px 16px 32px;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 22px;
+    width: 100%;
+    min-width: 0;
+    height: auto;
+    padding: 18px 16px 32px;
+    overflow: visible;
   }
-  
+
+  .auth-showcase-panel,
+  .auth-portal-card {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    height: auto;
+    max-height: none;
+  }
+
+  .auth-portal-card {
+    overflow: visible;
+  }
+
   .auth-showcase-panel {
     align-items: center;
     text-align: center;
-    height: auto;
-    max-height: none;
-    min-height: auto;
     justify-content: flex-start;
   }
 
@@ -8664,13 +8721,6 @@ body {
     text-align: center;
   }
 
-  .auth-portal-card {
-    width: 100%;
-    max-width: 440px;
-    max-height: none;
-    overflow: visible;
-  }
-  
   /* Show close button on tablet/mobile */
   .auth-modal-close-btn {
     display: flex !important;
@@ -8681,37 +8731,52 @@ body {
   .auth-nav-container {
     padding: 12px 16px;
   }
-  
+
   .auth-nav-tagline-wrap {
     display: none;
   }
 
+  /* The marketing panel would push the sign-in form below the fold on a
+     phone, so it is dropped here. The brand still appears in the top nav,
+     and the card links out to the full new-user guide at /landing. */
+  .auth-showcase-panel {
+    display: none;
+  }
+
   .auth-split-layout {
-    padding: 16px 14px 32px;
+    padding: 14px 14px 28px;
   }
 
   .auth-portal-card {
-    padding: 24px 18px;
-    border-radius: 20px;
+    padding: 22px 18px 20px;
+    border-radius: 18px;
+  }
+
+  .auth-welcome-heading {
+    font-size: 1.55rem;
   }
 
   .auth-form-row-2 {
     grid-template-columns: 1fr;
   }
 
-  .auth-features-row {
+  /* Three role tabs across is too tight on a phone — let them wrap */
+  .auth-role-tabs {
     flex-wrap: wrap;
-    justify-content: center;
-    gap: 16px;
+    gap: 8px;
   }
 
-  .auth-feat-item {
-    flex: 0 0 30%;
+  .auth-role-tab {
+    flex: 1 1 28%;
+    font-size: 0.78rem;
+    padding: 9px 8px;
+    white-space: nowrap;
   }
 
-  .auth-showcase-footer-bar {
-    flex-direction: column;
-    gap: 12px;
+  .auth-demo-btn {
+    white-space: normal;
+    text-align: center;
+    line-height: 1.35;
   }
 }
 
@@ -8893,3 +8958,517 @@ body {
   }
 }
 
+
+/* ==========================================================================
+   RENTAL BOOKING FORM + PROFILE MODAL
+   A sectioned form built on the existing design tokens. Replaces the old
+   inline-styled modal, which referenced --surface / --surface-elevated (both
+   undefined) and therefore fell back to hard-coded dark colours that broke
+   badly in the light theme.
+   ========================================================================== */
+
+.modal-content.modal-wide {
+  max-width: 780px;
+}
+
+/* Header and footer stay put; only the field area scrolls. */
+.modal-content.modal-form {
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+  overflow: hidden;
+  padding: 0;
+}
+
+.modal-content.modal-form .modal-header {
+  flex: 0 0 auto;
+  margin-bottom: 0;
+  padding: 20px 24px;
+  background: var(--bg-surface-elevated);
+}
+
+.modal-content.modal-form .modal-title {
+  font-size: 1.05rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.modal-content.modal-form form {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.form-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  overscroll-behavior: contain;
+}
+
+.form-section {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-muted);
+  padding: 16px;
+}
+
+.form-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 14px;
+}
+
+.form-section .form-group:last-child {
+  margin-bottom: 0;
+}
+
+.form-hint {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  margin-top: 5px;
+  line-height: 1.45;
+}
+
+.form-input:disabled,
+.form-select:disabled,
+.form-textarea:disabled {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  cursor: not-allowed;
+  opacity: 0.85;
+}
+
+.modal-footer {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  padding: 16px 24px;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-surface-elevated);
+}
+
+/* Read-only key/value list used by the profile view. */
+.profile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.profile-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.profile-field-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.profile-field-value {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.profile-identity {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-muted);
+}
+
+.profile-avatar-lg {
+  width: 60px;
+  height: 60px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #fff;
+  background: var(--primary-gradient);
+}
+
+.profile-identity-name {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.profile-identity-sub {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.profile-role-pill {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  background: var(--primary-light);
+  color: var(--primary);
+  border: 1px solid var(--border-color);
+}
+
+/* Clickable user chip that opens the profile. */
+.auth-user-chip {
+  cursor: pointer;
+}
+
+.auth-user-chip:hover {
+  border-color: var(--border-hover);
+}
+
+@media (max-width: 700px) {
+  .modal-content.modal-wide {
+    max-width: 100%;
+  }
+
+  .modal-footer {
+    flex-direction: column-reverse;
+  }
+
+  .modal-footer .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .form-body,
+  .modal-content.modal-form .modal-header,
+  .modal-footer {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
+
+/* Info tiles used by the rental detail dialog. */
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+}
+
+.detail-tile {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-muted);
+  padding: 14px;
+}
+
+.detail-tile-success {
+  background: rgba(34, 197, 94, 0.08);
+  border-color: rgba(34, 197, 94, 0.28);
+}
+
+.detail-tile-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 5px;
+}
+
+.detail-tile-value {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.detail-tile-sub {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-top: 3px;
+  word-break: break-word;
+}
+
+@media (max-width: 700px) {
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   The V2 "Dark Canvas Theme Overrides" block sets a hard-coded light text
+   colour on <body> for BOTH themes, so anything that relies on inherited
+   colour is washed out whenever the light theme is active. Dialogs therefore
+   declare their own colour from the theme token instead of inheriting.
+   -------------------------------------------------------------------------- */
+.modal-content,
+.modal-content .modal-title,
+.modal-content h1,
+.modal-content h2,
+.modal-content h3 {
+  color: var(--text-primary);
+}
+
+.detail-tile-value,
+.profile-field-value,
+.profile-identity-name {
+  color: var(--text-primary);
+}
+
+/* ==========================================================================
+   MOBILE SUPPORT — APP SHELL (header, main content, wide tables)
+   The desktop header packs a hamburger, a full brand block, a search field,
+   a notification button and a user chip into a single non-wrapping flex row.
+   At phone widths that row cannot fit, so the document grew to ~565px wide;
+   a real phone then widens its layout viewport to match and the whole page
+   renders zoomed-out with the right-hand side cut off. These rules keep the
+   shell inside the viewport. They live at the end of the file so they win
+   against the later `.app-header` / `.auth-user-chip` base rules above.
+   ========================================================================== */
+
+/* ---- Tablet & small laptop ---- */
+@media (max-width: 900px) {
+  /* The base .app-header rule appears LATER in this file (the 6400+ block),
+     so it wins over the earlier @media rules for the header. Everything here
+     is deliberately after it. `height` must track --header-height because the
+     off-canvas sidebar is positioned with `top: var(--header-height)`. */
+  .app-header {
+    height: var(--header-height);
+    padding: 0 12px;
+    gap: 10px;
+  }
+
+  .brand-section {
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .brains-emblem-box {
+    flex-shrink: 0;
+  }
+
+  /* Let the search field shrink instead of forcing the row wider */
+  .header-search-container {
+    margin: 0 4px;
+    min-width: 0;
+    max-width: none;
+  }
+
+  /* Avatar only — the name + location text is the widest part of the chip */
+  .auth-user-info {
+    display: none;
+  }
+
+  .auth-user-chip {
+    padding: 4px;
+    gap: 6px;
+    min-width: 0;
+  }
+}
+
+/* ---- Phones ---- */
+@media (max-width: 640px) {
+  /* One variable drives the header height, the sidebar's top offset and the
+     sidebar overlay, so the drawer keeps meeting the header exactly. */
+  :root {
+    --header-height: 62px;
+  }
+
+  .app-header {
+    height: var(--header-height);
+    padding: 0 10px;
+    gap: 8px;
+  }
+
+  /* Drop the brand copy and keep the logo: the full wordmark is already on
+     the sign-in screen, and "Powered by …" still appears in the footer. */
+  .brand-text-container {
+    display: none;
+  }
+
+  .mobile-menu-btn {
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+  }
+
+  .header-search-container {
+    margin: 0;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .header-search-input {
+    font-size: 0.8rem;
+    padding: 8px 10px 8px 32px;
+  }
+
+  .header-search-container svg {
+    left: 11px;
+  }
+
+  .header-meta {
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .header-notif-btn {
+    width: 34px;
+    height: 34px;
+  }
+
+  .auth-user-avatar {
+    width: 28px;
+    height: 28px;
+    font-size: 0.8rem;
+  }
+
+  .auth-logout-btn {
+    width: 26px;
+    height: 26px;
+  }
+
+  .app-main {
+    padding: 14px 12px 24px;
+  }
+}
+
+/* ---- Wide data tables: scroll inside their own card, never the page ---- */
+@media (max-width: 900px) {
+  .table-container,
+  .data-table-wrapper,
+  .table-responsive {
+    overflow-x: auto;
+    /* min-width:0 lets the wrapper actually shrink as a flex/grid child,
+       so the scroll happens inside it instead of widening the document */
+    min-width: 0;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Keep the columns readable instead of crushing eight of them into 390px */
+  .data-table {
+    min-width: 620px;
+  }
+}
+
+/* ---- Inline two-column grids that must stack on a phone ----
+   These were `style="display:grid;grid-template-columns:1fr 1fr"` in app.js.
+   Inline styles beat any stylesheet rule, so they could never be made
+   responsive; they now carry a class instead. */
+.analytics-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.alloc-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 14px;
+  align-items: end;
+}
+
+@media (max-width: 900px) {
+  .analytics-grid,
+  .alloc-form-row {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+/* ---- Dashboard KPI cards: let the footer text wrap instead of colliding ----
+   `.kpi-v2-footer` is a nowrap space-between flex row; at two-cards-per-row on
+   a phone the label and the trend badge overlapped each other. */
+@media (max-width: 900px) {
+  .kpi-v2-footer {
+    flex-wrap: wrap;
+    gap: 3px 10px;
+    line-height: 1.35;
+  }
+
+  .kpi-v2-footer > * {
+    min-width: 0;
+  }
+}
+
+/* ==========================================================================
+   MOBILE DRAWER — stacking order fix
+   `.app-container` is `position: relative; z-index: 1`, which makes it a
+   stacking context. The dimming layer used to be a body-level element with
+   z-index 998, so it painted ABOVE that entire subtree — including the
+   sidebar — and every nav item in the open drawer became untappable.
+   The overlay now lives inside `.app-container` (see index.html) so these
+   z-indexes compare directly:
+       sidebar (999)  >  overlay (98)  >  main content (static)
+   ========================================================================== */
+
+/* Base: the overlay is now a flex child of .app-container, so it must be
+   display:none on desktop or it would take up row space. The `.active` rule
+   at <=900px has higher specificity and still wins. */
+.sidebar-overlay {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .sidebar-overlay {
+    position: fixed;
+    top: var(--header-height);
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(3, 6, 18, 0.6);
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+    z-index: 98;
+  }
+
+  .sidebar-overlay.active {
+    display: block;
+  }
+
+  /* Keep the drawer above the dimming layer it sits on */
+  .app-sidebar.mobile-open {
+    z-index: 999;
+  }
+}
+
+/* ==========================================================================
+   BOOT STATE — stop the sign-in portal flashing on load
+   ==========================================================================
+   The inline boot script in index.html tags <html> with .boot-has-session
+   before the first paint whenever a session token is already stored. Hiding
+   the portal here means a returning user never sees the full-screen login
+   screen appear and then vanish while /auth/me is in flight.
+
+   app.js removes the class the moment the real session state is known, so an
+   expired or rejected token still falls through to the portal.
+   Kept at the end of the file deliberately: the base .auth-portal-overlay
+   rule lives further up (line ~7568) and a later rule is what wins here.
+   ========================================================================== */
+html.boot-has-session .auth-portal-overlay {
+  display: none;
+}

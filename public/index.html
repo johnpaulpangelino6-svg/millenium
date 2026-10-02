@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
@@ -13,12 +13,50 @@
   <link rel="manifest" href="/manifest.json" />
   <title>Millennium SmartBoard Management System | Brains Infinite Innovations</title>
   <meta name="description" content="Device monitoring, maintenance ticketing, warranty tracking, and inventory management for Millennium Interactive SmartBoards." />
+
+  <!--
+    BOOT SCRIPT — must stay here, BEFORE any stylesheet.
+
+    It runs synchronously while the head is still parsing, so it is applied
+    before the first paint. Two jobs, both about not showing a visible
+    "refresh" when the page loads:
+
+    1. Apply the saved theme right away. <html> is hardcoded to dark, so a
+       light-theme user used to see a dark page flip to light once app.js had
+       finished parsing (initTheme() ran on DOMContentLoaded — far too late).
+
+    2. If a session token is already stored, tag <html> with .boot-has-session
+       so the full-screen sign-in portal is never painted. Previously the
+       portal rendered first and was only removed after the /auth/me round-trip
+       resolved, which showed the whole login screen on every reload.
+
+    app.js removes .boot-has-session as soon as it knows the real session
+    state, so an expired token still falls back to the sign-in portal.
+  -->
+  <script>
+    (function () {
+      var root = document.documentElement;
+      try {
+        var theme = localStorage.getItem('millennium-theme') || 'dark';
+        if (theme === 'dark') { root.setAttribute('data-theme', 'dark'); }
+        else { root.removeAttribute('data-theme'); }
+
+        if (localStorage.getItem('millennium_auth_token')) {
+          root.classList.add('boot-has-session');
+        }
+      } catch (e) {
+        // localStorage throws in some private-browsing modes. The markup
+        // defaults (dark theme, portal visible) are a safe fallback.
+      }
+    })();
+  </script>
+
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;800;900&family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800;900&family=Playfair+Display:ital,wght@1,500;1,600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/css/style.css?v=20261003h" />
 </head>
-<body data-theme="dark">
+<body>
 
   <!-- Backend Connection Status Banner -->
   <div id="backendStatusBanner" style="
@@ -278,6 +316,11 @@
           <!-- Register Link -->
           <p class="auth-register-link">Don't have an account? <a href="#" onclick="switchAuthTab('register'); return false;">Register here</a></p>
 
+          <!-- New-user guide link (opens the public landing page) -->
+          <p class="auth-register-link auth-guide-link">
+            New here? <a href="/landing">See what every feature and role does &rarr;</a>
+          </p>
+
         </div><!-- /auth-portal-card (login) -->
 
         <!-- Register Card (separate, shown when register tab clicked) -->
@@ -383,9 +426,6 @@
   </div><!-- /auth-portal-overlay -->
 
 
-  <!-- Mobile Sidebar Overlay -->
-  <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleMobileSidebar(false)"></div>
-
   <!-- App Header -->
   <header class="app-header">
     <div class="brand-section">
@@ -442,7 +482,9 @@
       </div>
 
       <!-- Authenticated User Chip + Status -->
-      <div class="auth-user-chip" id="authUserChip">
+      <div class="auth-user-chip" id="authUserChip" onclick="openProfileModal()"
+           title="View and edit your profile" role="button" tabindex="0"
+           onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openProfileModal();}">
         <div class="auth-user-avatar" id="authUserAvatar">S</div>
         <div class="auth-user-info">
           <div class="auth-user-name" id="authUserName">System Administrator</div>
@@ -453,7 +495,7 @@
           
           <span class="status-pill-text">Online</span>
         </div>
-        <button class="auth-logout-btn" onclick="handleLogout()" title="Sign out" aria-label="Sign out">
+        <button class="auth-logout-btn" onclick="event.stopPropagation();handleLogout()" title="Sign out" aria-label="Sign out">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
             <polyline points="16 17 21 12 16 7"/>
@@ -466,6 +508,15 @@
 
   <!-- App Layout -->
   <div class="app-container">
+
+    <!-- Mobile Sidebar Overlay.
+         It must live INSIDE .app-container, not at body level. .app-container
+         is `position: relative; z-index: 1`, which creates a stacking context;
+         a body-level overlay (z-index 998) therefore painted on top of the
+         whole subtree — including the sidebar — so the nav items could not be
+         tapped. Inside the container the z-indexes compare directly:
+         sidebar (999) > this overlay (98) > main content. -->
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleMobileSidebar(false)"></div>
 
     <!-- Sidebar -->
     <aside class="app-sidebar" id="appSidebar">
@@ -535,17 +586,6 @@
 
       <!-- Sidebar Promo Cards -->
       <div class="sidebar-promo-section">
-        <div class="sidebar-promo-card" onclick="navigateTo('showcase')" style="cursor: pointer;" title="View SmartBoard Product Demo & Info">
-          <div class="promo-thumb-box">
-            <img src="https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=300&q=80" alt="Millennium SmartBoard" />
-          </div>
-          <div class="promo-info">
-            <strong>Millennium</strong>
-            <span>Smart Interactive Board ›</span>
-            <small>Learn · Collaborate · Achieve</small>
-          </div>
-        </div>
-
         <div class="sidebar-banner-box">
           <div class="banner-tag-line">Better Tools<br>Brighter Classrooms<br>Smarter Communities</div>
           <div class="banner-bg-m">M</div>
@@ -923,6 +963,6 @@
   <!-- JsBarcode Library for Barcode Generation -->
   <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
   
-  <script src="/js/app.js?v=20261001d"></script>
+  <script src="/js/app.js?v=20261003h"></script>
 </body>
 </html>
