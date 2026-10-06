@@ -226,6 +226,13 @@ export interface Rental {
   rentalNumber: string;             // e.g. 'RNT-2026-001'
   customerId: string;
   customerName: string;
+  /**
+   * The user account that created this booking. Reads are scoped by this value,
+   * so two accounts in the same customer organization cannot see each other's
+   * bookings. `null` for legacy rows that could not be attributed — those are
+   * visible to admins only.
+   */
+  createdByUserId?: string | null;
   deviceId: string;
   deviceModel: string;
   serialNumber: string;

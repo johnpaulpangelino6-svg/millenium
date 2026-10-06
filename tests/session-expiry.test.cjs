@@ -5,6 +5,7 @@
 const puppeteer = require('puppeteer-core');
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const BASE = 'http://localhost:3000';
+const APP = BASE + '/app';
 
 let pass = 0, fail = 0;
 function check(label, ok, detail) {
@@ -23,7 +24,7 @@ function check(label, ok, detail) {
   {
     const ctx = await browser.createBrowserContext();
     const page = await ctx.newPage();
-    await page.goto(BASE, { waitUntil: 'networkidle2' });
+    await page.goto(APP, { waitUntil: 'networkidle2' });
     await page.evaluate(() => {
       localStorage.setItem('millennium_auth_user', JSON.stringify({
         id: 'USR-1789631616961', username: 'orgen', fullName: 'Customer',
@@ -53,7 +54,7 @@ function check(label, ok, detail) {
   {
     const ctx = await browser.createBrowserContext();
     const page = await ctx.newPage();
-    await page.goto(BASE, { waitUntil: 'networkidle2' });
+    await page.goto(APP, { waitUntil: 'networkidle2' });
     await page.evaluate(() => localStorage.clear());
     await page.reload({ waitUntil: 'networkidle2' });
     await new Promise((r) => setTimeout(r, 1500));

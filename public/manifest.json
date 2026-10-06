@@ -2,7 +2,7 @@
   "name": "Millennium SmartBoard Management",
   "short_name": "Millennium",
   "description": "Device monitoring, maintenance ticketing, and warranty tracking for Millennium Interactive SmartBoards",
-  "start_url": "/",
+  "start_url": "/app",
   "display": "standalone",
   "background_color": "#0f172a",
   "theme_color": "#0284c7",
@@ -26,17 +26,17 @@
   "shortcuts": [
     {
       "name": "Dashboard",
-      "url": "/?tab=dashboard",
+      "url": "/app",
       "description": "View dashboard"
     },
     {
       "name": "Devices",
-      "url": "/?tab=devices",
+      "url": "/app",
       "description": "Manage devices"
     },
     {
       "name": "Tickets",
-      "url": "/?tab=tickets",
+      "url": "/app",
       "description": "Service tickets"
     }
   ]

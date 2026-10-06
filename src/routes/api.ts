@@ -112,21 +112,21 @@ function requireRole(...roles: string[]) {
 // ============================================================
 
 /**
- * Case/whitespace-insensitive ownership test.
- * Matches on the stable customer id first, then falls back to the
- * organization name (the two are not always spelled identically).
+ * Ownership test for a single booking.
+ *
+ * A rental belongs to the *account* that created it, not to the customer
+ * organization. Scoping by organization would let any two logins belonging to
+ * the same customer (e.g. two staff accounts for the same school) read each
+ * other's bookings — which is exactly the leak this guards against.
+ *
+ * Rows with no owner (legacy rows the one-time backfill could not attribute)
+ * match nobody: they stay visible to admins only. This fails closed.
  */
-function rentalInScope(rental: any, scope: CustomerScope): boolean {
-  const rentalCustomerId = String(rental?.customerId || '').trim().toLowerCase();
-  const rentalCustomerName = String(rental?.customerName || '').trim().toLowerCase();
-
-  if (scope.customerId && rentalCustomerId && rentalCustomerId === scope.customerId.toLowerCase()) {
-    return true;
-  }
-  if (scope.organization && rentalCustomerName && rentalCustomerName === scope.organization.toLowerCase()) {
-    return true;
-  }
-  return false;
+function rentalOwnedByUser(rental: any, userId: string): boolean {
+  const owner = String(rental?.createdByUserId || '').trim();
+  const requester = String(userId || '').trim();
+  if (!owner || !requester) return false;
+  return owner === requester;
 }
 
 /** Derive dashboard stats from an already-scoped rental list. */
@@ -1378,22 +1378,31 @@ apiRouter.get('/notifications', async (req: Request, res: Response) => {
 });
 
 // --- Audit Logs ---
-apiRouter.get('/audit-logs', async (req: Request, res: Response) => {
-  try {
-    const deviceId = req.query.deviceId as string | undefined;
-    const logs = await db.getAuditLogs(deviceId);
-    res.json({ success: true, data: logs });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+// Admin-only. Entries name other customers' rental numbers and organizations,
+// so this feed must never be readable anonymously or by a customer/technician.
+apiRouter.get(
+  '/audit-logs',
+  requireAuth,
+  requireRole('admin'),
+  async (req: Request, res: Response) => {
+    try {
+      const deviceId = req.query.deviceId as string | undefined;
+      const logs = await db.getAuditLogs(deviceId);
+      res.json({ success: true, data: logs });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
   }
-});
+);
 
 // ============================================================
 // RENTAL SCHEDULING ROUTES — Device Rental & Booking Management
 //
 // ACCESS MODEL (matches ROLE_ACCESS in the frontend):
 //   admin     -> every rental, full control
-//   customer  -> only rentals belonging to their own organization
+//   customer  -> only the bookings their own ACCOUNT created. Deliberately not
+//                scoped by organization: two logins for the same customer must
+//                not see each other's bookings.
 //   technician-> no rental access at all
 //
 // Every route requires a valid bearer token. The identity comes from the signed
@@ -1408,14 +1417,18 @@ function canReadRentals(role: string): boolean {
 
 /**
  * Narrow a rental list to what the caller may see.
- * Admins get everything; a customer gets only their own rows (and an empty list
- * if their account is not linked to a customer record — never the full list).
+ *
+ * Admins get everything; a customer gets only the bookings their own account
+ * created — never the whole organization's bookings, and never an empty-scope
+ * escape hatch to the full list.
  */
-function scopeRentalsForAuth(all: any[], auth: { role: string; scope: CustomerScope | null }): any[] {
+function scopeRentalsForAuth(
+  all: any[],
+  auth: { userId: string; role: string; scope: CustomerScope | null }
+): any[] {
   if (auth.role === 'admin') return all;
   if (auth.role !== 'customer') return [];
-  if (!auth.scope) return [];
-  return all.filter((r) => rentalInScope(r, auth.scope!));
+  return all.filter((r) => rentalOwnedByUser(r, auth.userId));
 }
 
 /**
@@ -1468,9 +1481,10 @@ apiRouter.get(
       const rental = await db.getRentalById(id);
       if (!rental) return res.status(404).json({ success: false, error: 'Rental not found' });
 
-      // A customer may only open their own booking. Return 404 (not 403) so the
-      // response does not confirm that someone else's rental id exists.
-      if (auth.role !== 'admin' && !(auth.scope && rentalInScope(rental, auth.scope))) {
+      // A customer may only open a booking their own account created. Return 404
+      // (not 403) so the response does not confirm that someone else's rental id
+      // exists.
+      if (auth.role !== 'admin' && !rentalOwnedByUser(rental, auth.userId)) {
         return res.status(404).json({ success: false, error: 'Rental not found' });
       }
 
@@ -1520,7 +1534,10 @@ apiRouter.post(
         });
       }
 
-      const rental = await db.createRental({ ...req.body, customerId });
+      // Ownership is stamped from the authenticated account, never from the
+      // request body — a customer can only ever create bookings that belong to
+      // their own account, which is what makes the read scoping work.
+      const rental = await db.createRental({ ...req.body, customerId, createdByUserId: auth.userId });
       res.json({ success: true, data: rental });
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message });

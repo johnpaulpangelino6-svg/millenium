@@ -5,6 +5,7 @@ const path = require('path');
 
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const BASE = 'http://localhost:3000';
+const APP = BASE + '/app';
 const OUT = path.resolve(__dirname, '..', 'screenshots', 'mobile-audit');
 
 (async () => {
@@ -19,7 +20,7 @@ const OUT = path.resolve(__dirname, '..', 'screenshots', 'mobile-audit');
   await page.setCacheEnabled(false);
 
   // sign in
-  await page.goto(BASE + '/', { waitUntil: 'networkidle0' });
+  await page.goto(APP, { waitUntil: 'networkidle0' });
   await page.type('#loginUsername', 'admin');
   await page.type('#loginPassword', '123123');
   await page.click('#loginSubmitBtn');

@@ -6,18 +6,30 @@
 const API_BASE = '/api';
 
 // --- Role Access Configuration ---
-// Defines which tabs each role can access
+// Defines which tabs each role can access.
+// Every role gets 'dashboard' as its landing tab; renderApp() dispatches the
+// 'dashboard' case to a role-specific view (see DASHBOARD_ROLE_VIEWS below).
 const ROLE_ACCESS = {
   admin:      ['dashboard','devices','tickets','customer-portal','warranty','inventory','data-manager','cms','predictive','analytics','rentals'],
-  technician: ['devices','tickets','inventory'],
-  customer:   ['devices','tickets','customer-portal','rentals'],
+  technician: ['dashboard','devices','tickets','inventory'],
+  customer:   ['dashboard','devices','tickets','customer-portal','rentals'],
 };
 
 // Role display metadata
 const ROLE_META = {
   admin:      { icon: '🏢', name: 'Admin Portal',      desc: 'Full system access',          defaultTab: 'dashboard' },
-  technician: { icon: '🔧', name: 'Technician Portal', desc: 'Assigned jobs & inventory',    defaultTab: 'tickets' },
-  customer:   { icon: '🏫', name: 'Customer Portal',   desc: 'My Devices & Tickets',        defaultTab: 'devices' },
+  technician: { icon: '🔧', name: 'Technician Portal', desc: 'Assigned jobs & inventory',   defaultTab: 'dashboard' },
+  customer:   { icon: '🏫', name: 'Customer Portal',   desc: 'My Devices & Tickets',        defaultTab: 'dashboard' },
+};
+
+// Sidebar copy for the shared 'dashboard' nav item. The single nav entry is
+// visible to all three roles, so its label/subtext are swapped in applyRoleUI()
+// rather than duplicated as three separate nav items (which would let two of
+// them drift out of sync).
+const DASHBOARD_NAV_COPY = {
+  admin:      { title: 'Dashboard',            sub: 'Overview & key metrics' },
+  technician: { title: 'My Workspace',         sub: 'Assigned jobs & queue'  },
+  customer:   { title: 'My Dashboard',         sub: 'My devices & records'   },
 };
 
 // Application State
@@ -995,30 +1007,94 @@ function showToast(message, type = 'info') {
 }
 
 // --- Rental ownership helpers ---
-// A rental belongs to the signed-in customer if the stable customer id matches,
-// or failing that the organization name matches (compared case/whitespace-insensitively,
-// because users.organization and customers.organization_name are not always spelled the same).
+// A booking belongs to the ACCOUNT that created it, not to the customer
+// organization. The server already scopes the payload (see GET /api/rentals);
+// this is a second, defensive filter and it must use exactly the same rule.
+// Matching on organization here would re-introduce the leak: two logins for the
+// same customer would see each other's bookings. Rows with no owner are
+// admin-only, so they match nobody here.
 function rentalMatchesUser(rental, user) {
   if (!rental || !user) return false;
-  const userOrg    = (user.organization || '').trim().toLowerCase();
-  const userCustId = (user.customerId   || '').trim().toLowerCase();
-  const rCustId    = (rental.customerId   || '').trim().toLowerCase();
-  const rCustName  = (rental.customerName || '').trim().toLowerCase();
-
-  if (userCustId && rCustId && rCustId === userCustId) return true;
-  if (userOrg    && rCustName && rCustName === userOrg) return true;
-  return false;
+  const ownerId = String(rental.createdByUserId || '').trim();
+  const userId  = String(user.id || '').trim();
+  return !!ownerId && !!userId && ownerId === userId;
 }
 
 /**
  * The single source of truth for "which rentals may this user see".
- * Admins/technicians see everything; customers see only their own bookings.
- * Used by BOTH the Rentals page and the customer portal so the two never disagree.
+ * Admins/technicians see everything; customers see only the bookings their own
+ * account created. Used by BOTH the Rentals page and the customer portal so the
+ * two never disagree.
  */
 function getVisibleRentals() {
   const all = state.rentals || [];
   if (state.currentRole !== 'customer' || !state.currentUser) return all;
   return all.filter(r => rentalMatchesUser(r, state.currentUser));
+}
+
+/**
+ * The single source of truth for "which devices may this user see".
+ *
+ * A customer sees only the devices bound to their organization — matched by
+ * linked customer id first, then by the account's customerId, then by
+ * organization name. Admins and technicians see the whole fleet (technicians
+ * need to reach any device they are dispatched to). The server applies the same
+ * rule in GET /api/devices; this second layer exists so the dashboard, the
+ * portal and the device list can never disagree.
+ */
+function getVisibleDevices() {
+  const all = state.devices || [];
+  const user = state.currentUser;
+  if (state.currentRole !== 'customer' || !user) return all;
+
+  const userOrg    = (user.organization || '').trim().toLowerCase();
+  const userCustId = (user.customerId || '').trim().toLowerCase();
+
+  // The customer record this account is bound to, if any.
+  const matchedCustomer = (state.customers || []).find(c =>
+    (userCustId && String(c.id || '').toLowerCase() === userCustId) ||
+    (userOrg && String(c.organizationName || '').toLowerCase() === userOrg)
+  );
+
+  return all.filter((d) => {
+    const devCustId   = (d.customerId || '').trim().toLowerCase();
+    const devCustName = (d.customerName || '').trim().toLowerCase();
+
+    if (matchedCustomer && devCustId === String(matchedCustomer.id || '').toLowerCase()) return true;
+    if (userCustId && devCustId === userCustId) return true;
+    if (userOrg && devCustName === userOrg) return true;
+    return false;
+  });
+}
+
+/**
+ * The single source of truth for "which tickets may this user see".
+ *
+ * Technicians see only tickets assigned to them. Customers see tickets raised
+ * against one of their devices, or carrying their organization name. Admins see
+ * everything. Mirrors the scoping in GET /api/tickets.
+ */
+function getVisibleTickets() {
+  const all = state.tickets || [];
+  const user = state.currentUser;
+  if (!user) return all;
+
+  if (state.currentRole === 'technician') {
+    const uid = String(user.id || '').trim();
+    return all.filter(t => String(t.assignedTechnicianId || '').trim() === uid);
+  }
+
+  if (state.currentRole === 'customer') {
+    const userOrg = (user.organization || '').trim().toLowerCase();
+    const deviceIds = new Set(getVisibleDevices().map(d => String(d.id || '').toLowerCase()));
+    return all.filter(t => {
+      const tCustName = (t.customerName || '').trim().toLowerCase();
+      if (userOrg && tCustName === userOrg) return true;
+      return deviceIds.has(String(t.deviceId || '').toLowerCase());
+    });
+  }
+
+  return all;
 }
 
 // --- Data Fetchers ---
@@ -1084,14 +1160,17 @@ async function fetchAllData(options) {
       { name: 'inventory',      url: `${API_BASE}/inventory`,           stateKey: 'inventory' },
       { name: 'cms',            url: `${API_BASE}/cms`,                 stateKey: 'cms' },
       { name: 'predictive/alerts', url: `${API_BASE}/predictive/alerts`, stateKey: 'predictiveAlerts' },
-      { name: 'audit-logs',     url: `${API_BASE}/audit-logs`,          stateKey: 'auditLogs' },
       { name: 'customers',      url: `${API_BASE}/customers`,          stateKey: 'customers' },
       { name: 'notifications',  url: `${API_BASE}/notifications`,      stateKey: 'notifications' },
       { name: 'rentals',        url: rentalsUrl,                       stateKey: 'rentals' },
       { name: 'rentals/stats',  url: rentalStatsUrl,                   stateKey: 'rentalStats' },
     ];
 
+    // Admin-only feeds. The audit log names other customers' rental numbers and
+    // organizations, and the user list is company-wide — neither may be pulled
+    // into a customer's or technician's browser, even if no view renders them.
     if (state.currentRole === 'admin') {
+      fetchEntries.push({ name: 'audit-logs', url: `${API_BASE}/audit-logs`, stateKey: 'auditLogs' });
       fetchEntries.push({ name: 'auth/users', url: `${API_BASE}/auth/users`, stateKey: 'allUsers' });
     }
 
@@ -1191,7 +1270,7 @@ function renderApp(options) {
   let html;
   switch (state.currentTab) {
     case 'dashboard':
-      html = renderDashboardView();
+      html = renderDashboardForRole(role);
       break;
     case 'devices':
       html = renderDevicesView();
@@ -1224,7 +1303,7 @@ function renderApp(options) {
       html = renderRentalsView();
       break;
     default:
-      html = renderDashboardView();
+      html = renderDashboardForRole(role);
   }
 
   // A background poll that found nothing new should not touch the DOM at all.
@@ -1260,6 +1339,17 @@ function applyRoleUI() {
     el.style.display = visible ? '' : 'none';
   });
 
+  // The shared 'dashboard' nav item is the landing tab for every role, so its
+  // label has to say what that role is actually looking at.
+  const dashCopy = DASHBOARD_NAV_COPY[role] || DASHBOARD_NAV_COPY.admin;
+  const dashNav = document.querySelector('.nav-item[data-tab="dashboard"]');
+  if (dashNav) {
+    const titleEl = dashNav.querySelector('.nav-title');
+    const subEl = dashNav.querySelector('.nav-sub');
+    if (titleEl) titleEl.textContent = dashCopy.title;
+    if (subEl) subEl.textContent = dashCopy.sub;
+  }
+
   // Highlight the active tab link
   document.querySelectorAll('.nav-item').forEach(item => {
     item.classList.toggle('active', item.dataset.tab === state.currentTab);
@@ -1278,11 +1368,21 @@ function renderSidebarBadges() {
   const bInv  = document.getElementById('badgeInventory');
   const bTckC = document.getElementById('badgeTicketsCustomer');
 
-  if (bDev)  bDev.textContent  = `${onlineCount} Online`;
-  if (bTck)  bTck.textContent  = `${tckCount} Open`;
-  if (bPred) bPred.textContent = `${predCount} Alerts`;
-  if (bInv)  bInv.textContent  = `${invLowCount} Low`;
-  if (bTckC) bTckC.textContent = tckCount > 0 ? `${tckCount} Open` : '';
+  // Numeric pills, with the full wording in the tooltip. A worded badge
+  // ("2 Open") widened the pill enough to squeeze .nav-text-group, which
+  // wrapped "Service & Support" onto a third line inside a 250px sidebar.
+  const setBadge = (el, count, word) => {
+    if (!el) return;
+    el.textContent = String(count);
+    el.title = `${count} ${word}`;
+    el.setAttribute('aria-label', `${count} ${word}`);
+    el.hidden = count === 0;
+  };
+  setBadge(bDev,  onlineCount, 'devices online');
+  setBadge(bTck,  tckCount,    'open tickets');
+  setBadge(bPred, predCount,   'predictive alerts');
+  setBadge(bInv,  invLowCount, 'low-stock parts');
+  setBadge(bTckC, tckCount,    'open tickets');
 }
 
 // --- Notification Logic ---
@@ -1305,7 +1405,7 @@ function renderNotifications() {
   const headerTitle = document.querySelector('.notif-dropdown-header h4');
   if (headerTitle) {
     headerTitle.innerHTML = unreadCount > 0 
-      ? `Notifications <span style="font-size:0.72rem;padding:2px 7px;border-radius:10px;background:rgba(0,242,254,0.18);color:#00f2fe;font-weight:700;letter-spacing:0;">${unreadCount} New</span>`
+      ? `Notifications <span style="font-size:0.72rem;padding:2px 7px;border-radius:10px;background:rgba(0,242,254,0.18);color:var(--neon-cyan);font-weight:700;letter-spacing:0;">${unreadCount} New</span>`
       : `Notifications`;
   }
 
@@ -1424,6 +1524,19 @@ function updateDashboardClock() {
   }
 }
 
+/**
+ * Dispatch the shared 'dashboard' tab to the view that belongs to the role.
+ *
+ * Admin, technician and customer all land on `dashboard`, but they must not see
+ * each other's view — an admin dashboard leaks company-wide revenue, the user
+ * list and other customers' names into a customer's browser.
+ */
+function renderDashboardForRole(role) {
+  if (role === 'customer')   return renderCustomerDashboardView();
+  if (role === 'technician') return renderTechnicianDashboardView();
+  return renderDashboardView();
+}
+
 function renderDashboardView() {
   const total    = state.devices.length;
   const online   = state.devices.filter(d => d.status === 'online').length;
@@ -1458,7 +1571,7 @@ function renderDashboardView() {
   const currentDayTime = new Date().toLocaleDateString('en-US', { weekday: 'long' }) + ', ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   return `
-    <div class="dash-v2-container">
+    <div class="dash-v2-container" data-dash="admin">
       <!-- 1. Top Banner Row: Hero Welcome & Quick Actions -->
       <div class="dash-top-grid">
         <!-- Hero Announcement Card -->
@@ -1530,11 +1643,10 @@ function renderDashboardView() {
               <div class="kpi-v2-value">${total}</div>
             </div>
           </div>
-          <div class="kpi-v2-footer">
-            <span>Registered SmartBoards</span>
-            <span class="kpi-v2-trend">↗ +0 vs. last month</span>
+          <div class="kpi-v2-detail">
+            <span class="kpi-v2-detail-dot"></span>
+            <span>${schoolDevices} school · ${corpDevices} corporate</span>
           </div>
-          <div class="kpi-sparkline"><svg viewBox="0 0 100 25" preserveAspectRatio="none"><path d="M0,20 Q25,5 50,18 T100,8" fill="none" stroke="#00f2fe" stroke-width="2.2"/></svg></div>
         </div>
 
         <div class="kpi-card-v2 kpi-green">
@@ -1545,11 +1657,10 @@ function renderDashboardView() {
               <div class="kpi-v2-value">${online}</div>
             </div>
           </div>
-          <div class="kpi-v2-footer">
-            <span>Fleet active 100%</span>
-            <span class="kpi-v2-trend">↗ +0 vs. last month</span>
+          <div class="kpi-v2-detail">
+            <span class="kpi-v2-detail-dot"></span>
+            <span>${online} of ${total} reporting · ${healthPct}% healthy</span>
           </div>
-          <div class="kpi-sparkline"><svg viewBox="0 0 100 25" preserveAspectRatio="none"><path d="M0,22 Q30,10 60,18 T100,5" fill="none" stroke="#10b981" stroke-width="2.2"/></svg></div>
         </div>
 
         <div class="kpi-card-v2 kpi-amber">
@@ -1560,11 +1671,10 @@ function renderDashboardView() {
               <div class="kpi-v2-value">${warning + offline + maint}</div>
             </div>
           </div>
-          <div class="kpi-v2-footer">
-            <span>${warning} Warn · ${offline} Off · ${maint} Maint</span>
-            <span class="kpi-v2-trend">↗ +0 vs. last month</span>
+          <div class="kpi-v2-detail">
+            <span class="kpi-v2-detail-dot"></span>
+            <span>${warning} warn · ${offline} off · ${maint} maint</span>
           </div>
-          <div class="kpi-sparkline"><svg viewBox="0 0 100 25" preserveAspectRatio="none"><path d="M0,15 Q35,22 70,8 T100,12" fill="none" stroke="#f59e0b" stroke-width="2.2"/></svg></div>
         </div>
 
         <div class="kpi-card-v2 kpi-purple">
@@ -1575,11 +1685,10 @@ function renderDashboardView() {
               <div class="kpi-v2-value">${openTickets.length}</div>
             </div>
           </div>
-          <div class="kpi-v2-footer">
-            <span>${resolvedTix} Resolved total</span>
-            <span class="kpi-v2-trend">↗ +1 vs. last month</span>
+          <div class="kpi-v2-detail">
+            <span class="kpi-v2-detail-dot"></span>
+            <span>${resolvedTix} resolved to date</span>
           </div>
-          <div class="kpi-sparkline"><svg viewBox="0 0 100 25" preserveAspectRatio="none"><path d="M0,18 Q40,5 75,20 T100,6" fill="none" stroke="#a855f7" stroke-width="2.2"/></svg></div>
         </div>
       </div>
 
@@ -1733,6 +1842,575 @@ function renderDashboardView() {
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  `;
+}
+
+// ==========================================================================
+// ROLE DASHBOARDS — CUSTOMER & TECHNICIAN
+//
+// Admin, technician and customer all land on the shared 'dashboard' tab, but
+// they must not see the same page. The admin dashboard is company-wide: it
+// shows revenue, the user list, stock levels and every customer's name. None of
+// that may be rendered into a customer's or a technician's browser, so each
+// role gets its own view assembled only from data the server has already scoped
+// to that account (see getVisibleDevices / getVisibleTickets / getVisibleRentals).
+// ==========================================================================
+
+/** Ticket status → pill tone. One map, so both dashboards agree. */
+const TICKET_TONE = {
+  'Received':   'info',
+  'Diagnosing': 'purple',
+  'Repairing':  'warn',
+  'Resolved':   'ok',
+  'Closed':     'neutral',
+};
+
+/** Rental status → pill tone. */
+const RENTAL_TONE = {
+  'Pending':   'warn',
+  'Approved':  'info',
+  'Active':    'ok',
+  'Returned':  'neutral',
+  'Overdue':   'danger',
+  'Cancelled': 'neutral',
+};
+
+/** Ticket priority → pill tone. */
+const PRIORITY_TONE = {
+  'Critical': 'danger',
+  'High':     'warn',
+  'Medium':   'info',
+  'Low':      'neutral',
+};
+
+/** Render a small tone-coloured pill. `label` is escaped — never pass markup. */
+function tonePill(label, tone) {
+  return `<span class="rec-pill tone-${tone || 'neutral'}">${escapeHtml(String(label == null ? '' : label))}</span>`;
+}
+
+/** Relative time that degrades to an em dash instead of "NaNd ago". */
+function relTime(value) {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return '—';
+  return timeAgo(d);
+}
+
+/** A reusable KPI tile — the same shell the admin dashboard uses. */
+function kpiCard(accent, icon, label, value, detail) {
+  return `
+    <div class="kpi-card-v2 kpi-${accent}">
+      <div class="kpi-v2-header">
+        <div class="kpi-v2-icon">${icon}</div>
+        <div>
+          <div class="kpi-v2-label">${label}</div>
+          <div class="kpi-v2-value">${value}</div>
+        </div>
+      </div>
+      <div class="kpi-v2-detail">
+        <span class="kpi-v2-detail-dot"></span>
+        <span>${detail}</span>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * One row in a dashboard record list.
+ * `title` and `meta` are inserted as-is so callers can compose markup; every
+ * caller passes user-controlled values through escapeHtml().
+ */
+function recordRow({ icon, title, meta, right, tone, onclick }) {
+  const clickable = onclick
+    ? ` onclick="${onclick}" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0"`
+    : '';
+  return `
+    <div class="rec-row"${clickable}>
+      <div class="rec-row-icon">${icon}</div>
+      <div class="rec-row-body">
+        <div class="rec-row-title">${title}</div>
+        <div class="rec-row-meta">${meta}</div>
+      </div>
+      <div class="rec-row-side">
+        ${tone ? tonePill(right, tone) : `<span class="rec-row-value">${right}</span>`}
+      </div>
+    </div>
+  `;
+}
+
+/** Consistent empty state for the record lists. */
+function recordEmpty(icon, title, hint) {
+  return `
+    <div class="rec-empty">
+      <div class="rec-empty-icon">${icon}</div>
+      <div class="rec-empty-title">${title}</div>
+      <div class="rec-empty-hint">${hint}</div>
+    </div>
+  `;
+}
+
+/** A titled record section with an optional "view all" action. */
+function recordSection(title, subtitle, actionHtml, bodyHtml) {
+  return `
+    <section class="rec-section">
+      <div class="rec-section-head">
+        <div>
+          <div class="rec-section-title">${title}</div>
+          ${subtitle ? `<div class="rec-section-sub">${subtitle}</div>` : ''}
+        </div>
+        ${actionHtml || ''}
+      </div>
+      <div class="rec-list">${bodyHtml}</div>
+    </section>
+  `;
+}
+
+// --------------------------------------------------------------------------
+// CUSTOMER DASHBOARD
+// --------------------------------------------------------------------------
+function renderCustomerDashboardView() {
+  const user = state.currentUser || {};
+
+  const myDevices  = getVisibleDevices();
+  const myTickets  = getVisibleTickets();
+  const myBookings = getVisibleRentals();
+
+  // Warranties are keyed by device, so scope them through the visible fleet.
+  const deviceIds = new Set(myDevices.map(d => String(d.id || '').toLowerCase()));
+  const myWarranties = (state.warranties || []).filter(w =>
+    deviceIds.has(String(w.deviceId || '').toLowerCase())
+  );
+
+  const onlineCount     = myDevices.filter(d => d.status === 'online').length;
+  const attentionCount  = myDevices.length - onlineCount;
+  const openTickets     = myTickets.filter(t => t.status !== 'Resolved' && t.status !== 'Closed');
+  const resolvedCount   = myTickets.filter(t => t.status === 'Resolved' || t.status === 'Closed').length;
+  const activeBookings  = myBookings.filter(r => ['Pending', 'Approved', 'Active'].includes(r.status));
+  const overdueBookings = myBookings.filter(r => r.status === 'Overdue');
+  const activeWarranties = myWarranties.filter(w => w.status === 'Under Warranty');
+  const expiringSoon    = activeWarranties.filter(w => Number(w.daysRemaining) <= 90);
+
+  const fleetPct = myDevices.length > 0 ? Math.round((onlineCount / myDevices.length) * 100) : 0;
+  const firstDevId = myDevices.length > 0 ? myDevices[0].id : '';
+
+  const recentTickets = [...myTickets]
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .slice(0, 5);
+  const recentBookings = [...myBookings]
+    .sort((a, b) => new Date(b.createdAt || b.startDate) - new Date(a.createdAt || a.startDate))
+    .slice(0, 5);
+  const fleetPreview = [...myDevices]
+    .sort((a, b) => (a.status === 'online' ? 1 : 0) - (b.status === 'online' ? 1 : 0))
+    .slice(0, 6);
+
+  const now = new Date();
+  const currentDate = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const currentDayTime = now.toLocaleDateString('en-US', { weekday: 'long' }) + ', ' +
+    now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  const orgName = user.organization || user.fullName || user.username || 'Customer';
+
+  const deviceStatusTone = (s) =>
+    s === 'online' ? 'ok' : s === 'offline' ? 'danger' : 'warn';
+  const deviceStatusLabel = (s) => {
+    if (s === 'online') return 'Online';
+    if (s === 'offline') return 'Offline';
+    if (s === 'maintenance') return 'In Service';
+    return 'Warning';
+  };
+
+  return `
+    <div class="dash-v2-container" data-dash="customer">
+      <!-- Hero + Quick Actions -->
+      <div class="dash-top-grid">
+        <div class="hero-banner-card">
+          <div class="hero-text-content">
+            <h1 class="hero-greeting">Welcome back,<br>${escapeHtml(user.fullName || user.username || 'Customer')}!</h1>
+            <p class="hero-subtext">Your devices, service tickets, bookings and warranty coverage — all in one place.</p>
+            <div class="hero-date-chip">
+              <span class="calendar-icon">📅</span>
+              <div>
+                <strong>${currentDate}</strong>
+                <small>${currentDayTime}</small>
+              </div>
+            </div>
+          </div>
+          <div class="hero-stat-cluster">
+            <div class="hero-stat-box">
+              <div class="hero-stat-value">${myDevices.length}</div>
+              <div class="hero-stat-label">My Devices</div>
+            </div>
+            <div class="hero-stat-box">
+              <div class="hero-stat-value">${openTickets.length}</div>
+              <div class="hero-stat-label">Open Tickets</div>
+            </div>
+            <div class="hero-stat-box">
+              <div class="hero-stat-value">${fleetPct}%</div>
+              <div class="hero-stat-label">Online</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="quick-actions-card">
+          <div class="quick-actions-title">Quick Actions</div>
+          <div class="quick-actions-grid">
+            <button class="qa-btn qa-btn-blue" onclick="openCreateTicketModal('${firstDevId}')">
+              <span class="qa-icon">🚨</span>
+              <span>Report a Problem</span>
+            </button>
+            <button class="qa-btn qa-btn-purple" onclick="openRentalModal()">
+              <span class="qa-icon">📅</span>
+              <span>Book a Device</span>
+            </button>
+            <button class="qa-btn qa-btn-teal" onclick="navigateTo('devices')">
+              <span class="qa-icon">🖥️</span>
+              <span>My Devices</span>
+            </button>
+            <button class="qa-btn qa-btn-navy" onclick="fetchAllData()">
+              <span class="qa-icon">🔄</span>
+              <span>Refresh Records</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- KPI row -->
+      <div class="stat-cards-grid-v2">
+        ${kpiCard('blue', '🖥️', 'My Devices', myDevices.length,
+          attentionCount > 0 ? `${onlineCount} online · ${attentionCount} need attention` : 'All devices online')}
+        ${kpiCard('purple', '🎫', 'Open Tickets', openTickets.length,
+          resolvedCount > 0 ? `${resolvedCount} resolved all-time` : 'No closed tickets yet')}
+        ${kpiCard('green', '📅', 'Active Bookings', activeBookings.length,
+          overdueBookings.length > 0 ? `${overdueBookings.length} overdue — action needed` : `${myBookings.length} booking${myBookings.length === 1 ? '' : 's'} on record`)}
+        ${kpiCard('amber', '🛡️', 'Warranty Coverage', activeWarranties.length,
+          expiringSoon.length > 0 ? `${expiringSoon.length} expiring within 90 days` : 'All contracts in good standing')}
+      </div>
+
+      <!-- Records: tickets + orders/bookings -->
+      <div class="dash-2col">
+        ${recordSection(
+          '🎫 My Service Tickets',
+          `${openTickets.length} open · ${resolvedCount} closed`,
+          `<button class="btn btn-secondary btn-sm" onclick="navigateTo('tickets')">View All →</button>`,
+          recentTickets.length === 0
+            ? recordEmpty('🎫', 'No service tickets yet',
+                'If a SmartBoard misbehaves, use <strong>Report a Problem</strong> and our team will be dispatched.')
+            : recentTickets.map(t => recordRow({
+                icon: '🎫',
+                title: escapeHtml(t.ticketNumber || t.id) + ' · ' + escapeHtml(t.title || 'Service request'),
+                meta: `${escapeHtml(t.deviceId || '—')} · ${escapeHtml(t.category || 'General')} · ${escapeHtml(t.priority || 'Medium')} priority · ${relTime(t.createdAt)}`,
+                right: t.status || 'Received',
+                tone: TICKET_TONE[t.status] || 'neutral',
+                onclick: `openTicketDetailModal('${t.id}')`,
+              })).join('')
+        )}
+
+        ${recordSection(
+          '📦 Orders & Bookings',
+          'Your rental orders and their delivery status',
+          `<button class="btn btn-secondary btn-sm" onclick="navigateTo('rentals')">View All →</button>`,
+          recentBookings.length === 0
+            ? recordEmpty('📦', 'No orders yet',
+                'Book a Millennium SmartBoard for an event, training or exhibit — use <strong>Book a Device</strong>.')
+            : recentBookings.map(r => {
+                const days = r.startDate && r.endDate
+                  ? Math.ceil((new Date(r.endDate) - new Date(r.startDate)) / 86400000) + 1
+                  : 0;
+                return recordRow({
+                  icon: '📦',
+                  title: escapeHtml(r.rentalNumber || r.id) + ' · ' + escapeHtml(r.deviceModel || 'Millennium SmartBoard'),
+                  meta: `${r.startDate || '—'} → ${r.endDate || '—'}${days > 0 ? ` · ${days} day${days > 1 ? 's' : ''}` : ''} · ${escapeHtml(r.purpose || 'Rental')}`,
+                  right: r.status || 'Pending',
+                  tone: RENTAL_TONE[r.status] || 'neutral',
+                  onclick: `viewRentalDetail('${r.id}')`,
+                });
+              }).join('')
+        )}
+      </div>
+
+      <!-- My devices -->
+      ${recordSection(
+        '🖥️ My Devices',
+        `${myDevices.length} registered · ${fleetPct}% online`,
+        `<button class="btn btn-secondary btn-sm" onclick="navigateTo('devices')">View All →</button>`,
+        fleetPreview.length === 0
+          ? recordEmpty('🖥️', 'No devices linked yet',
+              'Your purchased SmartBoards appear here once our team binds your serial numbers to this account.')
+          : fleetPreview.map(d => `
+              <div class="rec-device">
+                <div class="rec-device-head">
+                  <span class="rec-device-id">${escapeHtml(d.id)}</span>
+                  ${tonePill(deviceStatusLabel(d.status), deviceStatusTone(d.status))}
+                </div>
+                <div class="rec-device-model">${escapeHtml(d.model || 'Millennium SmartBoard')}</div>
+                <div class="rec-device-meta">📍 ${escapeHtml(d.location || '—')}${d.city ? ', ' + escapeHtml(d.city) : ''}</div>
+                <div class="rec-device-specs">
+                  <span><strong>Serial</strong> ${escapeHtml(d.serialNumber || '—')}</span>
+                  <span><strong>OS</strong> ${escapeHtml(d.osVersion || '—')}</span>
+                  <span><strong>Installed</strong> ${escapeHtml(d.installedAt || '—')}</span>
+                </div>
+                <div class="rec-device-actions">
+                  <button class="btn btn-secondary btn-sm" onclick="openQRModal('${d.id}')">📱 Digital ID</button>
+                  <button class="btn btn-primary btn-sm" onclick="openCreateTicketModal('${d.id}')">🚨 Request Service</button>
+                </div>
+              </div>
+            `).join('')
+      )}
+
+      <!-- Warranty + support -->
+      <div class="dash-2col">
+        ${recordSection(
+          '🛡️ Warranty Coverage',
+          'Coverage bound to your registered devices',
+          '',
+          myWarranties.length === 0
+            ? recordEmpty('🛡️', 'No warranty records',
+                'Warranty terms appear here once a device is registered against your organization.')
+            : myWarranties.map(w => {
+                const days = Number(w.daysRemaining);
+                const tone = w.status !== 'Under Warranty' ? 'neutral'
+                  : (Number.isFinite(days) && days <= 90 ? 'warn' : 'ok');
+                return recordRow({
+                  icon: '🛡️',
+                  title: escapeHtml(w.deviceModel || 'Millennium SmartBoard'),
+                  meta: `${escapeHtml(w.deviceId || '—')} · ${escapeHtml(w.coverageType || 'Standard coverage')} · expires ${escapeHtml(w.expiryDate || '—')}`,
+                  right: w.status || 'Under Warranty',
+                  tone,
+                });
+              }).join('')
+        )}
+
+        <section class="rec-section">
+          <div class="rec-section-head">
+            <div>
+              <div class="rec-section-title">📞 Need Help?</div>
+              <div class="rec-section-sub">Account and support details for ${escapeHtml(orgName)}</div>
+            </div>
+          </div>
+          <div class="rec-list">
+            <div class="rec-support">
+              <div class="rec-support-row"><span>Account</span><strong>${escapeHtml(user.username || '—')}</strong></div>
+              <div class="rec-support-row"><span>Organization</span><strong>${escapeHtml(user.organization || '—')}</strong></div>
+              <div class="rec-support-row"><span>Email</span><strong>${escapeHtml(user.email || '—')}</strong></div>
+              <div class="rec-support-row"><span>Location</span><strong>${escapeHtml(user.location || '—')}</strong></div>
+            </div>
+            <div class="rec-support-lines">
+              <div><strong>Hotline 1:</strong> <a href="tel:+639755826830">+63 975 582 6830</a></div>
+              <div><strong>Hotline 2:</strong> <a href="tel:+639815409835">+63 981 540 9835</a></div>
+              <div><strong>Email:</strong> <a href="mailto:info@brains.asia">info@brains.asia</a></div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  `;
+}
+
+// --------------------------------------------------------------------------
+// TECHNICIAN DASHBOARD
+// --------------------------------------------------------------------------
+function renderTechnicianDashboardView() {
+  const user = state.currentUser || {};
+
+  // state.tickets is already scoped to this technician by the server; the
+  // helper re-applies the same rule so a role change can never widen it.
+  const myTickets = getVisibleTickets();
+  const allDevices = getVisibleDevices();
+
+  const openTickets   = myTickets.filter(t => t.status !== 'Resolved' && t.status !== 'Closed');
+  const inProgress    = myTickets.filter(t => ['Diagnosing', 'Repairing'].includes(t.status));
+  const received      = myTickets.filter(t => t.status === 'Received');
+  const resolved      = myTickets.filter(t => t.status === 'Resolved' || t.status === 'Closed');
+  const critical      = myTickets.filter(t => t.priority === 'Critical' && t.status !== 'Resolved' && t.status !== 'Closed');
+  const high          = myTickets.filter(t => t.priority === 'High' && t.status !== 'Resolved' && t.status !== 'Closed');
+
+  // The devices this technician is actually working on.
+  const servicedIds = new Set(myTickets.map(t => String(t.deviceId || '').toLowerCase()));
+  const servicedDevices = allDevices.filter(d => servicedIds.has(String(d.id || '').toLowerCase()));
+
+  // Parts consumed across this technician's tickets.
+  const partsMap = new Map();
+  myTickets.forEach(t => {
+    (t.partsUsed || []).forEach(p => {
+      const key = p.partId || p.partName;
+      if (!key) return;
+      const cur = partsMap.get(key) || { name: p.partName || key, qty: 0 };
+      cur.qty += Number(p.quantity) || 0;
+      partsMap.set(key, cur);
+    });
+  });
+  const partsUsed = [...partsMap.values()].sort((a, b) => b.qty - a.qty).slice(0, 6);
+
+  const lowStock = (state.inventory || [])
+    .filter(p => p.status !== 'In Stock')
+    .sort((a, b) => (Number(a.stockQuantity) || 0) - (Number(b.stockQuantity) || 0))
+    .slice(0, 6);
+
+  const resolveRate = myTickets.length > 0
+    ? Math.round((resolved.length / myTickets.length) * 100)
+    : 0;
+
+  // Work queue: open work first, then the most urgent, then the oldest.
+  const PRIORITY_RANK = { Critical: 0, High: 1, Medium: 2, Low: 3 };
+  const queue = [...openTickets].sort((a, b) => {
+    const pr = (PRIORITY_RANK[a.priority] ?? 9) - (PRIORITY_RANK[b.priority] ?? 9);
+    if (pr !== 0) return pr;
+    return new Date(a.createdAt) - new Date(b.createdAt);
+  }).slice(0, 6);
+
+  const now = new Date();
+  const currentDate = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const currentDayTime = now.toLocaleDateString('en-US', { weekday: 'long' }) + ', ' +
+    now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  return `
+    <div class="dash-v2-container" data-dash="technician">
+      <!-- Hero + Quick Actions -->
+      <div class="dash-top-grid">
+        <div class="hero-banner-card">
+          <div class="hero-text-content">
+            <h1 class="hero-greeting">Welcome back,<br>${escapeHtml(user.fullName || user.username || 'Technician')}!</h1>
+            <p class="hero-subtext">Your assigned jobs, the devices you service, and the parts you have consumed.</p>
+            <div class="hero-date-chip">
+              <span class="calendar-icon">📅</span>
+              <div>
+                <strong>${currentDate}</strong>
+                <small>${currentDayTime}</small>
+              </div>
+            </div>
+          </div>
+          <div class="hero-stat-cluster">
+            <div class="hero-stat-box">
+              <div class="hero-stat-value">${openTickets.length}</div>
+              <div class="hero-stat-label">Open Jobs</div>
+            </div>
+            <div class="hero-stat-box">
+              <div class="hero-stat-value">${critical.length}</div>
+              <div class="hero-stat-label">Critical</div>
+            </div>
+            <div class="hero-stat-box">
+              <div class="hero-stat-value">${resolveRate}%</div>
+              <div class="hero-stat-label">Resolve Rate</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="quick-actions-card">
+          <div class="quick-actions-title">Quick Actions</div>
+          <div class="quick-actions-grid">
+            <button class="qa-btn qa-btn-blue" onclick="navigateTo('tickets')">
+              <span class="qa-icon">🎫</span>
+              <span>My Job Queue</span>
+            </button>
+            <button class="qa-btn qa-btn-teal" onclick="navigateTo('devices')">
+              <span class="qa-icon">🖥️</span>
+              <span>Devices</span>
+            </button>
+            <button class="qa-btn qa-btn-purple" onclick="navigateTo('inventory')">
+              <span class="qa-icon">📦</span>
+              <span>Parts & Stock</span>
+            </button>
+            <button class="qa-btn qa-btn-navy" onclick="fetchAllData()">
+              <span class="qa-icon">🔄</span>
+              <span>Refresh Queue</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- KPI row -->
+      <div class="stat-cards-grid-v2">
+        ${kpiCard('blue', '🎫', 'Assigned Tickets', myTickets.length,
+          `${openTickets.length} still open`)}
+        ${kpiCard('amber', '🔧', 'In Progress', inProgress.length,
+          `${received.length} awaiting first response`)}
+        ${kpiCard('green', '✅', 'Resolved', resolved.length,
+          `${resolveRate}% of everything assigned to you`)}
+        ${kpiCard('purple', '🖥️', 'Devices Serviced', servicedDevices.length,
+          servicedDevices.length === 1 ? '1 device in your ticket history' : `${servicedDevices.length} devices in your ticket history`)}
+      </div>
+
+      ${(critical.length > 0 || high.length > 0) ? `
+        <div class="tech-alert-bar">
+          <span class="tech-alert-icon">⚠️</span>
+          <div>
+            <strong>Priority work waiting</strong>
+            <span>${critical.length} critical and ${high.length} high-priority job${(critical.length + high.length) === 1 ? '' : 's'} need attention.</span>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="navigateTo('tickets')">Open Queue →</button>
+        </div>
+      ` : ''}
+
+      <!-- Work queue + parts -->
+      <div class="dash-2col">
+        ${recordSection(
+          '🧰 My Work Queue',
+          'Open jobs, most urgent first',
+          `<button class="btn btn-secondary btn-sm" onclick="navigateTo('tickets')">View All →</button>`,
+          queue.length === 0
+            ? recordEmpty('✅', 'Queue is clear',
+                'You have no open jobs assigned right now. New assignments appear here automatically.')
+            : queue.map(t => recordRow({
+                icon: t.priority === 'Critical' ? '🔥' : t.priority === 'High' ? '⚠️' : '🔧',
+                title: escapeHtml(t.ticketNumber || t.id) + ' · ' + escapeHtml(t.title || 'Service request'),
+                meta: `${escapeHtml(t.customerName || '—')} · ${escapeHtml(t.deviceId || '—')} · ${escapeHtml(t.category || 'General')} · ${relTime(t.createdAt)}`,
+                right: t.status || 'Received',
+                tone: TICKET_TONE[t.status] || 'neutral',
+                onclick: `openTicketDetailModal('${t.id}')`,
+              })).join('')
+        )}
+
+        ${recordSection(
+          '📦 Parts I Have Used',
+          `${partsUsed.reduce((s, p) => s + p.qty, 0)} units across your tickets`,
+          `<button class="btn btn-secondary btn-sm" onclick="navigateTo('inventory')">Inventory →</button>`,
+          partsUsed.length === 0
+            ? recordEmpty('📦', 'No parts logged',
+                'Parts you attach to a ticket are tallied here so stock stays accurate.')
+            : partsUsed.map(p => recordRow({
+                icon: '🔩',
+                title: escapeHtml(p.name),
+                meta: 'Consumed on your service tickets',
+                right: `${p.qty} ×`,
+              })).join('')
+        )}
+      </div>
+
+      <!-- Serviced devices + low stock -->
+      <div class="dash-2col">
+        ${recordSection(
+          '🖥️ Devices I Service',
+          'Devices appearing in your ticket history',
+          `<button class="btn btn-secondary btn-sm" onclick="navigateTo('devices')">View All →</button>`,
+          servicedDevices.length === 0
+            ? recordEmpty('🖥️', 'No devices yet',
+                'Once a ticket is assigned to you, the device it concerns is listed here.')
+            : servicedDevices.slice(0, 6).map(d => recordRow({
+                icon: '🖥️',
+                title: escapeHtml(d.model || 'Millennium SmartBoard') + ' · ' + escapeHtml(d.id),
+                meta: `📍 ${escapeHtml(d.location || '—')} · ${escapeHtml(d.customerName || '—')} · ${escapeHtml(d.serialNumber || '—')}`,
+                right: d.status === 'online' ? 'Online' : d.status === 'offline' ? 'Offline' : 'Attention',
+                tone: d.status === 'online' ? 'ok' : d.status === 'offline' ? 'danger' : 'warn',
+              })).join('')
+        )}
+
+        ${recordSection(
+          '📉 Low Stock Parts',
+          'Order these before the next job',
+          `<button class="btn btn-secondary btn-sm" onclick="navigateTo('inventory')">Restock →</button>`,
+          lowStock.length === 0
+            ? recordEmpty('✅', 'Stock levels healthy',
+                'Every part is above its minimum threshold.')
+            : lowStock.map(p => recordRow({
+                icon: '📉',
+                title: escapeHtml(p.name || p.partCode || 'Part'),
+                meta: `${escapeHtml(p.partCode || '—')} · min ${Number(p.minThreshold) || 0} · ${escapeHtml(p.category || 'General')}`,
+                right: `${Number(p.stockQuantity) || 0} left`,
+                tone: p.status === 'Out of Stock' ? 'danger' : 'warn',
+              })).join('')
+        )}
       </div>
     </div>
   `;
@@ -1920,50 +2598,73 @@ function renderDevicesView() {
   `;
 }
 
-// Customer-facing ticket card with direct Chat button
+// Shared empty-lane placeholder. A bare <p> left an empty stage looking like a
+// large blank box, which read as a rendering failure rather than "nothing here".
+function renderKanbanEmpty(icon, title, hint) {
+  return `
+    <div class="kanban-empty">
+      <span class="kanban-empty-ico">${icon}</span>
+      <strong>${title}</strong>
+      <span>${hint}</span>
+    </div>
+  `;
+}
+
+// Customer-facing ticket card.
+// Shares the card classes with the admin board so the two cannot drift apart,
+// and carries the same priority/status edge bar for at-a-glance scanning.
 function renderTicketCardCustomer(t) {
-  const statusColor =
-    t.status === 'Resolved' || t.status === 'Closed' ? '#16a34a'
-    : t.status === 'Repairing' ? '#7c3aed'
-    : t.status === 'Diagnosing' ? '#d97706'
-    : '#2563eb';
+  const isClosed = t.status === 'Resolved' || t.status === 'Closed';
   const statusIcon =
-    t.status === 'Resolved' || t.status === 'Closed' ? '✅'
+    isClosed ? '✅'
     : t.status === 'Repairing' ? '🔧'
     : t.status === 'Diagnosing' ? '🔍'
     : '📥';
+  const submitted = new Date(t.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
   return `
-    <div class="ticket-card" onclick="openTicketDetailModal('${t.id}')" style="cursor: pointer;">
+    <article class="ticket-card ticket-card-customer ${isClosed ? 'is-closed' : 'is-open'}"
+      tabindex="0"
+      onclick="openTicketDetailModal('${t.id}')"
+      onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openTicketDetailModal('${t.id}')}">
       <div class="ticket-top">
         <span class="ticket-id">${t.ticketNumber}</span>
-        <span style="font-size:0.78rem;font-weight:700;color:${statusColor};background:rgba(0,0,0,0.06);padding:2px 8px;border-radius:4px;">
-          ${statusIcon} ${t.status}
+        <span class="ticket-status ${isClosed ? 'is-closed' : 'is-open'}">${statusIcon} ${t.status}</span>
+      </div>
+      <h4 class="ticket-title">${escapeHtml(t.title)}</h4>
+      <div class="ticket-facts">
+        <span class="ticket-fact ticket-fact-wide" title="${escapeHtml(t.deviceId)} — ${escapeHtml(t.deviceModel || '')}">
+          <span class="ticket-fact-ico">🖥️</span><b>${escapeHtml(t.deviceId)}</b><span class="ticket-fact-soft">${escapeHtml(t.deviceModel || '')}</span>
+        </span>
+        <span class="ticket-fact" title="Category">
+          <span class="ticket-fact-ico">🏷️</span><span>${escapeHtml(t.category || '—')}</span>
+        </span>
+        <span class="ticket-fact" title="Warranty coverage">
+          <span class="ticket-fact-ico">🛡️</span>
+          <span class="${t.warrantyCovered ? 'warranty-badge-active' : 'warranty-badge-expired'}">${t.warrantyCovered ? 'Covered' : 'Not covered'}</span>
+        </span>
+        <span class="ticket-fact" title="Assigned technician">
+          <span class="ticket-fact-ico">👤</span><span>${escapeHtml(t.assignedTechnician || 'Pending assignment')}</span>
         </span>
       </div>
-      <div class="ticket-title">${escapeHtml(t.title)}</div>
-      <div class="ticket-meta">
-        <span><strong>Device:</strong> ${t.deviceId} (${t.deviceModel})</span>
-        <span><strong>Category:</strong> ${t.category}</span>
-        <span><strong>Warranty:</strong> <span class="${t.warrantyCovered ? 'warranty-badge-active' : 'warranty-badge-expired'}">${t.warrantyCovered ? 'Covered ✅' : 'Not Covered'}</span></span>
-        <span><strong>Technician:</strong> ${t.assignedTechnician || 'Pending assignment'}</span>
+      <div class="ticket-foot">
+        <span class="ticket-date" title="Submitted ${new Date(t.createdAt).toLocaleDateString()}">🕒 ${submitted}</span>
+        <span class="ticket-actions">
+          <button type="button" class="ticket-btn ticket-btn-chat"
+            onclick="event.stopPropagation();openTicketDetailModal('${t.id}')">💬 Chat with Admin</button>
+        </span>
       </div>
-      <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.06);">
-        <div style="font-size:0.7rem;color:var(--text-muted);">
-          Submitted: ${new Date(t.createdAt).toLocaleDateString()}
-        </div>
-        <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); openTicketDetailModal('${t.id}')" style="padding: 4px 10px; font-size: 0.74rem; display: flex; align-items: center; gap: 5px; font-weight: 700;">
-          💬 Chat with Admin
-        </button>
-      </div>
-    </div>
+    </article>
   `;
 }
 
 // 3. Maintenance & Service Ticket View
 function renderTicketsView() {
-  const categories = ['All', 'Touchscreen', 'OPS Hardware', 'Software', 'Display Panel', 'Network', 'Power Board'];
-  
+  const role = state.currentRole;
+  const isCustomer = role === 'customer';
+  const isTech = role === 'technician';
+  const isAdmin = role === 'admin';
+
   // Apply search filter to tickets if search query exists
   let filteredTickets = state.tickets;
   if (state.searchQuery) {
@@ -1985,56 +2686,59 @@ function renderTicketsView() {
   const repairing = filteredTickets.filter((t) => t.status === 'Repairing');
   const resolved = filteredTickets.filter((t) => t.status === 'Resolved' || t.status === 'Closed');
 
+  // Admin / technician card. Priority drives a coloured edge bar (--ticket-accent)
+  // so a lane can be scanned without reading every chip.
   function renderTicketCard(t) {
-    const priorityColor =
-      t.priority === 'Critical' ? '#f43f5e' : t.priority === 'High' ? '#f59e0b' : t.priority === 'Medium' ? '#38bdf8' : '#10b981';
+    const priClass = `pri-${String(t.priority || 'medium').toLowerCase()}`;
+    const logged = new Date(t.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
     return `
-      <div class="ticket-card" onclick="openTicketDetailModal('${t.id}')">
+      <article class="ticket-card ${priClass}"
+        tabindex="0"
+        onclick="openTicketDetailModal('${t.id}')"
+        onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openTicketDetailModal('${t.id}')}">
         <div class="ticket-top">
           <span class="ticket-id">${t.ticketNumber}</span>
-          <span style="font-size: 0.72rem; font-weight: 700; color: ${priorityColor}; background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px;">
-            ${t.priority}
+          <span class="ticket-priority is-${String(t.priority || 'medium').toLowerCase()}">${t.priority}</span>
+        </div>
+        <h4 class="ticket-title">${escapeHtml(t.title)}</h4>
+        <div class="ticket-facts">
+          <span class="ticket-fact ticket-fact-wide" title="${escapeHtml(t.deviceId)} — ${escapeHtml(t.deviceModel || '')}">
+            <span class="ticket-fact-ico">🖥️</span><b>${escapeHtml(t.deviceId)}</b><span class="ticket-fact-soft">${escapeHtml(t.deviceModel || '')}</span>
+          </span>
+          <span class="ticket-fact" title="Client">
+            <span class="ticket-fact-ico">🏫</span><span>${escapeHtml(t.customerName || '—')}</span>
+          </span>
+          <span class="ticket-fact" title="Category">
+            <span class="ticket-fact-ico">🏷️</span><span>${escapeHtml(t.category || '—')}</span>
+          </span>
+          <span class="ticket-fact" title="Warranty coverage">
+            <span class="ticket-fact-ico">🛡️</span>
+            <span class="${t.warrantyCovered ? 'warranty-badge-active' : 'warranty-badge-expired'}">${t.warrantyCovered ? 'Covered' : 'Not covered'}</span>
+          </span>
+          <span class="ticket-fact" title="Assigned technician">
+            <span class="ticket-fact-ico">👤</span><span>${escapeHtml(t.assignedTechnician || 'Unassigned')}</span>
           </span>
         </div>
-        <div class="ticket-title">${escapeHtml(t.title)}</div>
-        <div class="ticket-meta">
-          <span><strong>Device:</strong> ${t.deviceId} (${t.deviceModel})</span>
-          <span><strong>Client:</strong> ${t.customerName}</span>
-          <span><strong>Category:</strong> ${t.category}</span>
-          <span><strong>Warranty:</strong> <span class="${t.warrantyCovered ? 'warranty-badge-active' : 'warranty-badge-expired'}">${t.warrantyCovered ? 'Covered ✅' : 'Expired ⚠️'}</span></span>
-          <span><strong>Assigned:</strong> ${t.assignedTechnician}</span>
-        </div>
         ${t.partsUsed && t.partsUsed.length > 0 ? `
-          <div style="font-size: 0.72rem; background: rgba(0, 242, 254, 0.1); padding: 4px 8px; border-radius: 4px; color: var(--neon-cyan);">
-            🔩 Parts: ${t.partsUsed.map((p) => `${p.quantity}x ${p.partName}`).join(', ')}
+          <div class="ticket-parts" title="${escapeHtml(t.partsUsed.map((p) => `${p.quantity}x ${p.partName}`).join(', '))}">
+            🔩 <span>${t.partsUsed.map((p) => `${p.quantity}× ${escapeHtml(p.partName)}`).join(', ')}</span>
           </div>
         ` : ''}
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;">
-          <div style="font-size: 0.7rem; color: var(--text-muted);">
-            Logged: ${new Date(t.createdAt).toLocaleDateString()}
-          </div>
-          <div style="display: flex; gap: 6px; align-items: center;">
-            <button onclick="event.stopPropagation(); openTicketDetailModal('${t.id}')"
-              style="font-size:0.72rem;padding:3px 9px;border-radius:6px;border:1px solid rgba(0,242,254,0.35);background:rgba(0,242,254,0.12);color:#00f2fe;cursor:pointer;font-weight:700;display:flex;align-items:center;gap:4px;">
-              💬 Chat
-            </button>
+        <div class="ticket-foot">
+          <span class="ticket-date" title="Logged ${new Date(t.createdAt).toLocaleDateString()}">🕒 ${logged}</span>
+          <span class="ticket-actions">
+            <button type="button" class="ticket-btn ticket-btn-chat" title="Open ticket chat"
+              onclick="event.stopPropagation();openTicketDetailModal('${t.id}')">💬 Chat</button>
             ${isAdmin ? `
-              <button onclick="event.stopPropagation();deleteTicket('${t.id}')"
-                style="font-size:0.72rem;padding:3px 9px;border-radius:6px;border:1px solid #f43f5e55;background:rgba(244,63,94,0.1);color:#f43f5e;cursor:pointer;font-weight:700;">
-                🗑️ Delete
-              </button>
+              <button type="button" class="ticket-btn ticket-btn-danger" title="Delete ticket"
+                onclick="event.stopPropagation();deleteTicket('${t.id}')">🗑️</button>
             ` : ''}
-          </div>
+          </span>
         </div>
-      </div>
+      </article>
     `;
   }
-
-  const role = state.currentRole;
-  const isCustomer = role === 'customer';
-  const isTech = role === 'technician';
-  const isAdmin = role === 'admin';
 
   // Customer only sees their own tickets
   if (isCustomer) {
@@ -2099,13 +2803,23 @@ function renderTicketsView() {
         ℹ️ <strong>Customer View:</strong> You can report issues and track your repair status. For urgent matters, call our support hotline.
       </div>
       <div class="kanban-board">
-        <div class="kanban-column">
-          <div class="kanban-header"><span>🔴 Open Requests (${open.length})</span></div>
-          ${open.length === 0 ? '<p style="padding:16px;color:var(--text-muted);">No open requests. 🎉</p>' : open.map(t => renderTicketCardCustomer(t)).join('')}
+        <div class="kanban-column stage-open${open.length === 0 ? ' is-empty' : ''}">
+          <div class="kanban-header">
+            <span class="kanban-header-label">🔴 Open Requests</span>
+            <span class="kanban-count">${open.length}</span>
+          </div>
+          ${open.length === 0
+            ? renderKanbanEmpty('🎉', 'No open requests', 'Everything you reported has been closed.')
+            : open.map(t => renderTicketCardCustomer(t)).join('')}
         </div>
-        <div class="kanban-column">
-          <div class="kanban-header"><span>✅ Closed Requests (${closed.length})</span></div>
-          ${closed.map(t => renderTicketCardCustomer(t)).join('')}
+        <div class="kanban-column stage-resolved${closed.length === 0 ? ' is-empty' : ''}">
+          <div class="kanban-header">
+            <span class="kanban-header-label">✅ Closed Requests</span>
+            <span class="kanban-count">${closed.length}</span>
+          </div>
+          ${closed.length === 0
+            ? renderKanbanEmpty('📭', 'Nothing closed yet', 'Resolved requests will be listed here.')
+            : closed.map(t => renderTicketCardCustomer(t)).join('')}
         </div>
       </div>
     `;
@@ -2136,48 +2850,54 @@ function renderTicketsView() {
 
     <!-- Kanban Columns -->
     <div class="kanban-board">${received.length === 0 && diagnosing.length === 0 && repairing.length === 0 && resolved.length === 0 && isTech ? `
-      <div style="grid-column: 1 / -1; text-align: center; padding: 60px 20px; background: rgba(0, 242, 254, 0.05); border-radius: 12px; border: 1px dashed rgba(0, 242, 254, 0.3);">
-        <div style="font-size: 3rem; margin-bottom: 16px;">📭</div>
-        <h3 style="font-size: 1.3rem; font-weight: 700; margin-bottom: 8px; color: var(--neon-cyan);">No Tickets Assigned Yet</h3>
-        <p style="color: var(--text-secondary); font-size: 0.95rem;">
-          You don't have any assigned service tickets at the moment. Check back later or contact your admin.
-        </p>
+      <div class="kanban-empty kanban-empty-lg">
+        <span class="kanban-empty-ico">📭</span>
+        <strong>No tickets assigned yet</strong>
+        <span>You don't have any assigned service tickets at the moment. Check back later or contact your admin.</span>
       </div>
     ` : `
       <!-- 1. Received -->
-      <div class="kanban-column">
+      <div class="kanban-column stage-received${received.length === 0 ? ' is-empty' : ''}">
         <div class="kanban-header">
-          <span>📥 Received (${received.length})</span>
-          <span class="status-pill status-offline">${received.length} Pending</span>
+          <span class="kanban-header-label">📥 Received</span>
+          <span class="kanban-count">${received.length}</span>
         </div>
-        ${received.length === 0 ? '<p style="padding:16px;color:var(--text-muted);">No tickets in this stage.</p>' : received.map(renderTicketCard).join('')}
+        ${received.length === 0
+          ? renderKanbanEmpty('📥', 'Nothing received', 'New service requests land here.')
+          : received.map(renderTicketCard).join('')}
       </div>
 
       <!-- 2. Diagnosing -->
-      <div class="kanban-column">
+      <div class="kanban-column stage-diagnosing${diagnosing.length === 0 ? ' is-empty' : ''}">
         <div class="kanban-header">
-          <span>🔍 Diagnosing (${diagnosing.length})</span>
-          <span class="status-pill status-warning">${diagnosing.length} In Progress</span>
+          <span class="kanban-header-label">🔍 Diagnosing</span>
+          <span class="kanban-count">${diagnosing.length}</span>
         </div>
-        ${diagnosing.length === 0 ? '<p style="padding:16px;color:var(--text-muted);">No tickets in this stage.</p>' : diagnosing.map(renderTicketCard).join('')}
+        ${diagnosing.length === 0
+          ? renderKanbanEmpty('🔍', 'Nothing in diagnosis', 'Tickets under investigation appear here.')
+          : diagnosing.map(renderTicketCard).join('')}
       </div>
 
       <!-- 3. Repairing -->
-      <div class="kanban-column">
+      <div class="kanban-column stage-repairing${repairing.length === 0 ? ' is-empty' : ''}">
         <div class="kanban-header">
-          <span>⚙️ Repairing (${repairing.length})</span>
-          <span class="status-pill status-maintenance">${repairing.length} On-Site</span>
+          <span class="kanban-header-label">⚙️ Repairing</span>
+          <span class="kanban-count">${repairing.length}</span>
         </div>
-        ${repairing.length === 0 ? '<p style="padding:16px;color:var(--text-muted);">No tickets in this stage.</p>' : repairing.map(renderTicketCard).join('')}
+        ${repairing.length === 0
+          ? renderKanbanEmpty('⚙️', 'Nothing in repair', 'Devices currently being worked on appear here.')
+          : repairing.map(renderTicketCard).join('')}
       </div>
 
       <!-- 4. Resolved -->
-      <div class="kanban-column">
+      <div class="kanban-column stage-resolved${resolved.length === 0 ? ' is-empty' : ''}">
         <div class="kanban-header">
-          <span>✅ Resolved (${resolved.length})</span>
-          <span class="status-pill status-online">${resolved.length} Closed</span>
+          <span class="kanban-header-label">✅ Resolved</span>
+          <span class="kanban-count">${resolved.length}</span>
         </div>
-        ${resolved.length === 0 ? '<p style="padding:16px;color:var(--text-muted);">No tickets in this stage.</p>' : resolved.map(renderTicketCard).join('')}
+        ${resolved.length === 0
+          ? renderKanbanEmpty('✅', 'Nothing resolved yet', 'Closed tickets are archived here.')
+          : resolved.map(renderTicketCard).join('')}
       </div>
     `}
     </div>
@@ -2188,28 +2908,9 @@ function renderTicketsView() {
 function renderCustomerPortalView() {
   const user = state.currentUser;
 
-  // Filter devices belonging to this customer / organization
-  let customerDevices = [];
-  if (user) {
-    const userOrg = (user.organization || '').trim().toLowerCase();
-    const userCustId = (user.customerId || '').trim().toLowerCase();
-
-    // Find linked customer organization if exists
-    const matchedCustomer = (state.customers || []).find(c =>
-      (userCustId && c.id.toLowerCase() === userCustId) ||
-      (userOrg && c.organizationName.toLowerCase() === userOrg)
-    );
-
-    customerDevices = (state.devices || []).filter((d) => {
-      const devCustId = (d.customerId || '').trim().toLowerCase();
-      const devCustName = (d.customerName || '').trim().toLowerCase();
-
-      if (matchedCustomer && devCustId === matchedCustomer.id.toLowerCase()) return true;
-      if (userCustId && devCustId === userCustId) return true;
-      if (userOrg && devCustName === userOrg) return true;
-      return false;
-    });
-  }
+  // Devices belonging to this customer / organization. Shared with the customer
+  // dashboard so the portal and the dashboard can never show different fleets.
+  const customerDevices = getVisibleDevices();
 
   const clientName = user ? (user.organization || user.fullName || user.username) : 'Valued Customer';
   const firstDevId = customerDevices.length > 0 ? customerDevices[0].id : '';
@@ -2231,7 +2932,7 @@ function renderCustomerPortalView() {
     <div class="glass-panel" style="background: linear-gradient(135deg, rgba(0, 242, 254, 0.1) 0%, rgba(17, 24, 39, 0.8) 100%); border-color: rgba(0, 242, 254, 0.3);">
       <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
         <div>
-          <h2 style="font-size: 1.3rem; font-weight: 800; color: #ffffff;">Institutional SmartBoard Ecosystem</h2>
+          <h2 style="font-size: 1.3rem; font-weight: 800; color: var(--text-primary);">Institutional SmartBoard Ecosystem</h2>
           <p style="color: var(--text-secondary); font-size: 0.9rem; margin-top: 4px;">
             ${customerDevices.length > 0 
               ? `You currently have <strong>${customerDevices.length} Millennium Interactive Displays</strong> installed under active corporate/academic SLA.`
@@ -2255,7 +2956,7 @@ function renderCustomerPortalView() {
       <!-- Empty Device State for Newly Created Customer Accounts -->
       <div class="glass-panel" style="text-align: center; padding: 48px 24px; margin-top: 20px; border: 1px dashed rgba(0, 242, 254, 0.3);">
         <div style="font-size: 3.5rem; margin-bottom: 12px; filter: drop-shadow(0 0 15px rgba(0,242,254,0.4));">🖥️📦</div>
-        <h2 style="font-size: 1.4rem; font-weight: 800; color: #ffffff; margin-bottom: 8px;">No Millennium SmartBoards Assigned Yet</h2>
+        <h2 style="font-size: 1.4rem; font-weight: 800; color: var(--text-primary); margin-bottom: 8px;">No Millennium SmartBoards Assigned Yet</h2>
         <p style="color: var(--text-secondary); max-width: 580px; margin: 0 auto 20px; font-size: 0.95rem; line-height: 1.6;">
           Your customer account is verified and ready. Our administrative team assigns your purchased <strong>Millennium 86", 75", or 65" SmartBoards</strong> once your sales purchase order or serial numbers are verified.
         </p>
@@ -2274,8 +2975,8 @@ function renderCustomerPortalView() {
           <div style="font-weight: 700; color: var(--neon-cyan); margin-bottom: 6px;">📞 Have your purchase invoice or serial number ready?</div>
           <div style="color: var(--text-muted); margin-bottom: 10px;">Please contact Brains Infinite Innovations support to immediately bind your purchased units to this portal:</div>
           <div style="display: flex; flex-direction: column; gap: 6px;">
-            <div><strong style="color: #ffffff;">Hotline 1:</strong> <a href="tel:+639755826830" style="color: var(--neon-cyan); text-decoration: none;">+63 975 582 6830</a></div>
-            <div><strong style="color: #ffffff;">Hotline 2:</strong> <a href="tel:+639815409835" style="color: var(--neon-cyan); text-decoration: none;">+63 981 540 9835</a></div>
+            <div><strong style="color: var(--text-primary);">Hotline 1:</strong> <a href="tel:+639755826830" style="color: var(--neon-cyan); text-decoration: none;">+63 975 582 6830</a></div>
+            <div><strong style="color: var(--text-primary);">Hotline 2:</strong> <a href="tel:+639815409835" style="color: var(--neon-cyan); text-decoration: none;">+63 981 540 9835</a></div>
             <div style="color: var(--text-muted); font-size: 0.8rem; margin-top: 4px;">📍 Suite 1004 Atlanta Center, 31 Annapolis St., Greenhills, San Juan City Philippines</div>
           </div>
         </div>
@@ -2298,7 +2999,7 @@ function renderCustomerPortalView() {
                 ${dev.status === 'online' ? '🟢 Online' : '⚠️ Warning'}
               </span>
             </div>
-            <div style="font-size: 1.15rem; font-weight: 800; color: #ffffff;">${dev.model}</div>
+            <div style="font-size: 1.15rem; font-weight: 800; color: var(--text-primary);">${dev.model}</div>
             <div style="font-size: 0.85rem; color: var(--text-secondary);">📍 ${dev.location}</div>
             
             <div style="background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px; font-size: 0.78rem; display: flex; flex-direction: column; gap: 4px; margin-top: 8px;">
@@ -2394,7 +3095,7 @@ function renderCustomerBookings(user) {
                 <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
                   <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#8b5cf6,#7c3aed);display:flex;align-items:center;justify-content:center;font-size:1.4rem;flex-shrink:0;">🖥️</div>
                   <div>
-                    <div style="font-weight:700;font-size:0.95rem;color:#fff;">${r.deviceModel || 'Millennium SmartBoard'}</div>
+                    <div style="font-weight:700;font-size:0.95rem;color:var(--text-primary);">${r.deviceModel || 'Millennium SmartBoard'}</div>
                     <div style="font-size:0.78rem;color:var(--text-muted);">${r.ticketNumber || r.rentalNumber || ''} · ${days} day${days > 1 ? 's' : ''} · ${r.startDate} → ${r.endDate}</div>
                     ${r.purpose ? `<div style="font-size:0.78rem;color:var(--text-secondary);margin-top:2px;">📌 ${r.purpose}</div>` : ''}
                   </div>
@@ -2415,35 +3116,17 @@ function renderCustomerBookings(user) {
 // 5. Warranty Management View
 function renderWarrantyView() {
   const isCustomer = state.currentRole === 'customer';
+  // Scope warranties through the shared visible-fleet helper, so the warranty
+  // page, the portal and the customer dashboard can never disagree about which
+  // devices — and therefore which contracts — belong to this account.
   const filteredWarranties = isCustomer
     ? (() => {
-        const user = state.currentUser;
-        if (!user) return [];
-        const userOrg = (user.organization || '').trim().toLowerCase();
-        const userCustId = (user.customerId || '').trim().toLowerCase();
-
-        // Find the matched customer record by org name or customerId
-        const matchedCustomer = (state.customers || []).find(c =>
-          (userCustId && c.id.toLowerCase() === userCustId) ||
-          (userOrg && c.organizationName.toLowerCase() === userOrg)
+        const deviceIds = new Set(
+          getVisibleDevices().map(d => String(d.id || '').toLowerCase())
         );
-
-        // Get IDs of devices assigned to this customer
-        const customerDeviceIds = new Set(
-          (state.devices || [])
-            .filter(d => {
-              const devCustId = (d.customerId || '').trim().toLowerCase();
-              const devCustName = (d.customerName || '').trim().toLowerCase();
-              if (matchedCustomer && devCustId === matchedCustomer.id.toLowerCase()) return true;
-              if (userCustId && devCustId === userCustId) return true;
-              if (userOrg && devCustName === userOrg) return true;
-              return false;
-            })
-            .map(d => d.id)
+        return (state.warranties || []).filter(w =>
+          deviceIds.has(String(w.deviceId || '').toLowerCase())
         );
-
-        // Return only warranties for those devices
-        return state.warranties.filter(w => customerDeviceIds.has(w.deviceId));
       })()
     : state.warranties;
 
@@ -2664,7 +3347,7 @@ function renderPredictiveView() {
             <div style="display: flex; align-items: center; gap: 12px;">
               <span style="font-size: 1.8rem;">⚠️</span>
               <div>
-                <h3 style="font-size: 1.2rem; font-weight: 800; color: #ffffff;">
+                <h3 style="font-size: 1.2rem; font-weight: 800; color: var(--text-primary);">
                   ${alert.riskFactor}
                 </h3>
                 <div style="font-size: 0.85rem; color: var(--text-secondary);">
@@ -2700,7 +3383,7 @@ function renderPredictiveView() {
 
           <div style="background: rgba(0,0,0,0.35); border-left: 3px solid var(--neon-cyan); padding: 12px 16px; border-radius: 4px;">
             <strong style="color: var(--neon-cyan); font-size: 0.82rem; text-transform: uppercase;">AI Recommended Preventive Action:</strong>
-            <p style="font-size: 0.9rem; margin-top: 4px; color: #ffffff;">${alert.recommendedAction}</p>
+            <p style="font-size: 0.9rem; margin-top: 4px; color: var(--text-primary);">${alert.recommendedAction}</p>
           </div>
 
           <div style="display: flex; justify-content: flex-end; gap: 10px;">
@@ -2820,7 +3503,7 @@ function renderAnalyticsView() {
         </div>
 
         <div style="background: var(--bg-surface); padding: 20px; border-radius: 12px; border: 1px solid var(--border-subtle);">
-          <div style="font-size: 2.4rem; font-weight: 800; color: #38bdf8; font-family: 'JetBrains Mono';">₱1.2M</div>
+          <div style="font-size: 2.4rem; font-weight: 800; color: var(--accent-blue-text); font-family: 'JetBrains Mono';">₱1.2M</div>
           <div style="font-size: 0.85rem; font-weight: 700; color: var(--text-secondary); margin-top: 4px;">Inventory Stock Value</div>
         </div>
       </div>
@@ -2881,7 +3564,7 @@ function switchDataManagerTab(tab) {
 // --- Data Manager: Users Sub-tab ---
 function renderDMUsersTab() {
   const users = state.allUsers || [];
-  const roleColors = { admin: '#a855f7', technician: '#38bdf8', customer: '#34d399' };
+  const roleColors = { admin: 'var(--accent-purple-text)', technician: 'var(--accent-blue-text)', customer: 'var(--accent-green-text)' };
 
   return `
     <div class="glass-panel">
@@ -3219,9 +3902,9 @@ function openCreateUserModal() {
 
   const overlay = document.createElement('div');
   overlay.id = 'userModalOverlay';
-  overlay.style.cssText = 'position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.65);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9000;background:rgba(15,23,42,0.65);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(8px);';
   overlay.innerHTML = `
-    <div style="background:var(--bg-card,#1a1a2e);border:1px solid rgba(0,242,254,0.2);border-radius:20px;padding:32px 36px;width:100%;max-width:500px;box-shadow:0 20px 60px rgba(0,0,0,0.5);">
+    <div class="modal-content" style="max-width:500px;">
       <h2 style="font-size:1.2rem;font-weight:800;margin-bottom:20px;">👤 Create System User</h2>
       <div style="display:flex;flex-direction:column;gap:14px;">
         <div><label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:5px;">Full Name *</label>
@@ -3243,7 +3926,7 @@ function openCreateUserModal() {
           <input id="uOrg" class="form-input" placeholder="e.g. ABC University" /></div>
         <div><label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:5px;">Location</label>
           <input id="uLocation" class="form-input" placeholder="e.g. Quezon City" /></div>
-        <div id="uErrorMsg" style="color:#f43f5e;font-size:0.82rem;display:none;"></div>
+        <div id="uErrorMsg" class="form-error" role="alert" style="display:none;"></div>
         <div style="display:flex;gap:12px;margin-top:6px;">
           <button class="btn btn-secondary" style="flex:1;" onclick="document.getElementById('userModalOverlay').remove()">Cancel</button>
           <button class="btn btn-primary" style="flex:1;" onclick="submitCreateUser()">✅ Create User</button>
@@ -3294,9 +3977,9 @@ function openEditUserModal(userId) {
 
   const overlay = document.createElement('div');
   overlay.id = 'userModalOverlay';
-  overlay.style.cssText = 'position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.65);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9000;background:rgba(15,23,42,0.65);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(8px);';
   overlay.innerHTML = `
-    <div style="background:var(--bg-card,#1a1a2e);border:1px solid rgba(0,242,254,0.2);border-radius:20px;padding:32px 36px;width:100%;max-width:500px;box-shadow:0 20px 60px rgba(0,0,0,0.5);">
+    <div class="modal-content" style="max-width:500px;">
       <h2 style="font-size:1.2rem;font-weight:800;margin-bottom:20px;">✏️ Edit User — <span style="color:var(--neon-cyan);">@${user.username}</span></h2>
       <div style="display:flex;flex-direction:column;gap:14px;">
         <div><label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:5px;">Full Name</label>
@@ -3315,7 +3998,7 @@ function openEditUserModal(userId) {
           <input id="euOrg" class="form-input" value="${user.organization || ''}" /></div>
         <div><label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:5px;">Location</label>
           <input id="euLocation" class="form-input" value="${user.location || ''}" /></div>
-        <div id="euErrorMsg" style="color:#f43f5e;font-size:0.82rem;display:none;"></div>
+        <div id="euErrorMsg" class="form-error" role="alert" style="display:none;"></div>
         <div style="display:flex;gap:12px;margin-top:6px;">
           <button class="btn btn-secondary" style="flex:1;" onclick="document.getElementById('userModalOverlay').remove()">Cancel</button>
           <button class="btn btn-primary" style="flex:1;" onclick="submitEditUser('${userId}')">💾 Save Changes</button>
@@ -3386,9 +4069,9 @@ function openCreateCustomerModal() {
 
   const overlay = document.createElement('div');
   overlay.id = 'customerModalOverlay';
-  overlay.style.cssText = 'position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.65);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9000;background:rgba(15,23,42,0.65);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(8px);';
   overlay.innerHTML = `
-    <div style="background:var(--bg-card,#1a1a2e);border:1px solid rgba(168,85,247,0.25);border-radius:20px;padding:32px 36px;width:100%;max-width:500px;box-shadow:0 20px 60px rgba(0,0,0,0.5);">
+    <div class="modal-content" style="max-width:500px;">
       <h2 style="font-size:1.2rem;font-weight:800;margin-bottom:20px;">🏢 Add Customer Organization</h2>
       <div style="display:flex;flex-direction:column;gap:14px;">
         <div><label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:5px;">Organization Name *</label>
@@ -3408,7 +4091,7 @@ function openCreateCustomerModal() {
           <input id="cAddress" class="form-input" placeholder="Building, Street, Barangay" /></div>
         <div><label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:5px;">City</label>
           <input id="cCity" class="form-input" placeholder="e.g. Quezon City" value="Metro Manila" /></div>
-        <div id="cErrorMsg" style="color:#f43f5e;font-size:0.82rem;display:none;"></div>
+        <div id="cErrorMsg" class="form-error" role="alert" style="display:none;"></div>
         <div style="display:flex;gap:12px;margin-top:6px;">
           <button class="btn btn-secondary" style="flex:1;" onclick="document.getElementById('customerModalOverlay').remove()">Cancel</button>
           <button class="btn btn-primary" style="flex:1;" onclick="submitCreateCustomer()">✅ Add Organization</button>
@@ -3736,20 +4419,20 @@ function openTicketDetailModal(ticketId) {
     if (isCustomer) {
       // CUSTOMER VIEW: Only the private customer↔admin channel
       chatSectionHtml = `
-      <div style="background: rgba(10,16,36,0.9); padding: 16px; border-radius: 12px;
+      <div style="background: var(--bg-muted); padding: 16px; border-radius: 12px;
                   border: 1px solid rgba(16,185,129,0.35); box-shadow: 0 4px 20px rgba(0,0,0,0.4);">
         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
-          <h4 style="font-size:0.96rem; font-weight:700; margin:0; color:#34d399; display:flex; align-items:center; gap:8px;">
-            💬 Customer Support Chat <span style="font-size:0.68rem;font-weight:400;color:#64748b;">(Private — Admin & Support only)</span>
+          <h4 style="font-size:0.96rem; font-weight:700; margin:0; color:var(--accent-green-text); display:flex; align-items:center; gap:8px;">
+            💬 Customer Support Chat <span style="font-size:0.68rem;font-weight:400;color:var(--text-muted);">(Private — Admin & Support only)</span>
           </h4>
-          <span style="font-size:0.72rem;padding:2px 9px;border-radius:9999px;background:rgba(16,185,129,0.18);color:#34d399;font-weight:700;">● Private Channel</span>
+          <span style="font-size:0.72rem;padding:2px 9px;border-radius:9999px;background:rgba(16,185,129,0.18);color:var(--accent-green-text);font-weight:700;">● Private Channel</span>
         </div>
         <p style="font-size:0.78rem; color:var(--text-secondary); margin-bottom:12px;">
           This is a <strong>private conversation</strong> between you and Millennium SmartBoard Admin/Support.
           Your messages are <strong>not visible</strong> to technicians.
         </p>
         <div id="ticketChatMessages" style="max-height:280px; min-height:120px; overflow-y:auto;
-             background:#070c1d; border:1px solid rgba(16,185,129,0.2); border-radius:10px;
+             background:var(--bg-canvas); border:1px solid rgba(16,185,129,0.2); border-radius:10px;
              padding:14px; margin-bottom:12px;">
           <div style="text-align:center; color:var(--text-muted); font-size:0.8rem; padding:20px;">
             <div class="spinner" style="margin:10px auto;"></div>
@@ -3759,7 +4442,7 @@ function openTicketDetailModal(ticketId) {
         <div style="display:flex; gap:8px;">
           <input type="text" id="ticketChatInput" class="form-input"
             placeholder="Message Millennium Support (private)..."
-            style="flex:1; background:#070d20; border-color:rgba(16,185,129,0.3);"
+            style="flex:1; background:var(--bg-surface); border-color:rgba(16,185,129,0.3);"
             onkeypress="if(event.key==='Enter') sendTicketMessage('customer')" />
           <button class="btn btn-primary btn-sm" onclick="sendTicketMessage('customer')"
             style="display:flex; align-items:center; gap:6px; font-weight:700; padding:0 16px;
@@ -3771,20 +4454,20 @@ function openTicketDetailModal(ticketId) {
     } else if (isAdmin) {
       // ADMIN VIEW: Two tabs — Staff Channel + Customer Support Channel
       chatSectionHtml = `
-      <div style="background:rgba(10,16,36,0.9); padding:16px; border-radius:12px;
+      <div style="background:var(--bg-muted); padding:16px; border-radius:12px;
                   border:1px solid rgba(0,242,254,0.28); box-shadow:0 4px 20px rgba(0,0,0,0.4);">
         <h4 style="font-size:0.96rem; font-weight:700; margin:0 0 12px 0; color:var(--neon-cyan);">👑 Admin Chat Channels</h4>
         <!-- Tab Switcher -->
         <div style="display:flex; gap:8px; margin-bottom:14px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:10px;">
           <button id="tabStaffChat" onclick="switchTicketChatTab('staff','${tck.id}')"
             style="padding:6px 14px; border-radius:8px; font-size:0.82rem; font-weight:700; cursor:pointer;
-                   background:rgba(0,242,254,0.2); color:#00f2fe; border:1px solid rgba(0,242,254,0.4);
+                   background:rgba(0,242,254,0.2); color:var(--neon-cyan); border:1px solid rgba(0,242,254,0.4);
                    transition:all 0.2s;">
             🔧 Staff Channel
           </button>
           <button id="tabCustomerChat" onclick="switchTicketChatTab('customer','${tck.id}')"
             style="padding:6px 14px; border-radius:8px; font-size:0.82rem; font-weight:700; cursor:pointer;
-                   background:rgba(255,255,255,0.04); color:#94a3b8; border:1px solid rgba(255,255,255,0.12);
+                   background:var(--bg-muted); color:var(--text-secondary); border:1px solid var(--border-color);
                    transition:all 0.2s;">
             💬 Customer Support
           </button>
@@ -3795,7 +4478,7 @@ function openTicketDetailModal(ticketId) {
         </p>
         <!-- Messages Container -->
         <div id="ticketChatMessages" style="max-height:280px; min-height:120px; overflow-y:auto;
-             background:#070c1d; border:1px solid rgba(0,242,254,0.15); border-radius:10px;
+             background:var(--bg-canvas); border:1px solid rgba(0,242,254,0.15); border-radius:10px;
              padding:14px; margin-bottom:12px;">
           <div style="text-align:center; color:var(--text-muted); font-size:0.8rem; padding:20px;">
             <div class="spinner" style="margin:10px auto;"></div>
@@ -3806,7 +4489,7 @@ function openTicketDetailModal(ticketId) {
         <div style="display:flex; gap:8px;">
           <input type="text" id="ticketChatInput" class="form-input"
             placeholder="Reply to technician (staff channel)..."
-            style="flex:1; background:#070d20; border-color:rgba(0,242,254,0.3);"
+            style="flex:1; background:var(--bg-surface); border-color:rgba(0,242,254,0.3);"
             onkeypress="if(event.key==='Enter') sendTicketMessage(state._activeChatTab||'staff')" />
           <button class="btn btn-primary btn-sm" onclick="sendTicketMessage(state._activeChatTab||'staff')"
             style="display:flex; align-items:center; gap:6px; font-weight:700; padding:0 16px;">
@@ -3817,19 +4500,19 @@ function openTicketDetailModal(ticketId) {
     } else if (isAssignedTech) {
       // TECHNICIAN VIEW: Staff channel only
       chatSectionHtml = `
-      <div style="background:rgba(10,16,36,0.9); padding:16px; border-radius:12px;
+      <div style="background:var(--bg-muted); padding:16px; border-radius:12px;
                   border:1px solid rgba(168,85,247,0.3); box-shadow:0 4px 20px rgba(0,0,0,0.4);">
         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
-          <h4 style="font-size:0.96rem; font-weight:700; margin:0; color:#c084fc; display:flex; align-items:center; gap:8px;">
-            🔧 Staff Channel <span style="font-size:0.68rem;font-weight:400;color:#64748b;">(Admin & Technician)</span>
+          <h4 style="font-size:0.96rem; font-weight:700; margin:0; color:var(--accent-purple-text); display:flex; align-items:center; gap:8px;">
+            🔧 Staff Channel <span style="font-size:0.68rem;font-weight:400;color:var(--text-muted);">(Admin & Technician)</span>
           </h4>
-          <span style="font-size:0.72rem;padding:2px 9px;border-radius:9999px;background:rgba(168,85,247,0.2);color:#c084fc;font-weight:700;">● Tech Dispatch</span>
+          <span style="font-size:0.72rem;padding:2px 9px;border-radius:9999px;background:rgba(168,85,247,0.2);color:var(--accent-purple-text);font-weight:700;">● Tech Dispatch</span>
         </div>
         <p style="font-size:0.78rem; color:var(--text-secondary); margin-bottom:12px;">
           Internal coordination with admin. <strong>Customer messages are kept separate and private.</strong>
         </p>
         <div id="ticketChatMessages" style="max-height:280px; min-height:120px; overflow-y:auto;
-             background:#070c1d; border:1px solid rgba(168,85,247,0.2); border-radius:10px;
+             background:var(--bg-canvas); border:1px solid rgba(168,85,247,0.2); border-radius:10px;
              padding:14px; margin-bottom:12px;">
           <div style="text-align:center; color:var(--text-muted); font-size:0.8rem; padding:20px;">
             <div class="spinner" style="margin:10px auto;"></div>
@@ -3839,7 +4522,7 @@ function openTicketDetailModal(ticketId) {
         <div style="display:flex; gap:8px;">
           <input type="text" id="ticketChatInput" class="form-input"
             placeholder="Reply to admin or field update..."
-            style="flex:1; background:#070d20; border-color:rgba(168,85,247,0.3);"
+            style="flex:1; background:var(--bg-surface); border-color:rgba(168,85,247,0.3);"
             onkeypress="if(event.key==='Enter') sendTicketMessage('staff')" />
           <button class="btn btn-primary btn-sm" onclick="sendTicketMessage('staff')"
             style="display:flex; align-items:center; gap:6px; font-weight:700; padding:0 16px;
@@ -3852,8 +4535,8 @@ function openTicketDetailModal(ticketId) {
 
     body.innerHTML = `
       <div style="display:flex; flex-direction:column; gap:14px;">
-        <div style="background:var(--bg-card); padding:14px; border-radius:8px; border:1px solid var(--border-subtle);">
-          <h3 style="font-size:1.1rem; font-weight:800; color:#ffffff;">${escapeHtml(tck.title)}</h3>
+        <div style="background:var(--bg-muted); padding:14px; border-radius:8px; border:1px solid var(--border-subtle);">
+          <h3 style="font-size:1.1rem; font-weight:800; color:var(--text-primary);">${escapeHtml(tck.title)}</h3>
           <p style="color:var(--text-secondary); font-size:0.88rem; margin-top:6px;">${escapeHtml(tck.description)}</p>
         </div>
 
@@ -3896,7 +4579,7 @@ function openTicketDetailModal(ticketId) {
           </div>
         </div>
 
-        <div style="background:rgba(0,0,0,0.3); padding:16px; border-radius:10px; border:1px solid var(--border-bright);">
+        <div style="background:var(--bg-muted); padding:16px; border-radius:10px; border:1px solid var(--border-color);">
           <h4 style="font-size:0.95rem; font-weight:700; margin-bottom:8px; color:var(--neon-cyan);">🔩 Consume Spare Part from Inventory</h4>
           <p style="font-size:0.78rem; color:var(--text-secondary); margin-bottom:10px;">
             Select a replacement part used by the technician to automatically deduct from company inventory.
@@ -3975,26 +4658,26 @@ function switchTicketChatTab(tab, ticketId) {
   if (tab === 'staff') {
     if (staffBtn) {
       staffBtn.style.background = 'rgba(0,242,254,0.2)';
-      staffBtn.style.color = '#00f2fe';
+      staffBtn.style.color = 'var(--neon-cyan)';
       staffBtn.style.border = '1px solid rgba(0,242,254,0.4)';
     }
     if (customerBtn) {
-      customerBtn.style.background = 'rgba(255,255,255,0.04)';
-      customerBtn.style.color = '#94a3b8';
-      customerBtn.style.border = '1px solid rgba(255,255,255,0.12)';
+      customerBtn.style.background = 'var(--bg-muted)';
+      customerBtn.style.color = 'var(--text-secondary)';
+      customerBtn.style.border = '1px solid var(--border-color)';
     }
     if (subtitle) subtitle.textContent = 'Staff channel — coordination with assigned technician. Customers cannot see this.';
     if (input) input.placeholder = 'Reply to technician (staff channel)...';
   } else {
     if (customerBtn) {
       customerBtn.style.background = 'rgba(16,185,129,0.2)';
-      customerBtn.style.color = '#34d399';
+      customerBtn.style.color = 'var(--accent-green-text)';
       customerBtn.style.border = '1px solid rgba(16,185,129,0.4)';
     }
     if (staffBtn) {
-      staffBtn.style.background = 'rgba(255,255,255,0.04)';
-      staffBtn.style.color = '#94a3b8';
-      staffBtn.style.border = '1px solid rgba(255,255,255,0.12)';
+      staffBtn.style.background = 'var(--bg-muted)';
+      staffBtn.style.color = 'var(--text-secondary)';
+      staffBtn.style.border = '1px solid var(--border-color)';
     }
     if (subtitle) subtitle.textContent = 'Customer support channel — private conversation with the customer. Technicians cannot see this.';
     if (input) input.placeholder = 'Reply to customer (private support)...';
@@ -4088,15 +4771,15 @@ async function loadTicketMessages(ticketId, isSilent = false, channel = 'staff')
           let roleTag = '', bubbleBg = '', bubbleBorder = '';
 
           if (msg.senderRole === 'admin') {
-            roleTag = `<span style="background:rgba(0,242,254,0.18);color:#00f2fe;padding:2px 7px;border-radius:4px;font-size:0.68rem;font-weight:700;">👑 Admin</span>`;
+            roleTag = `<span style="background:rgba(0,242,254,0.18);color:var(--neon-cyan);padding:2px 7px;border-radius:4px;font-size:0.68rem;font-weight:700;">👑 Admin</span>`;
             bubbleBg = isCurrentUser ? 'rgba(0,242,254,0.18)' : 'rgba(0,242,254,0.10)';
             bubbleBorder = 'rgba(0,242,254,0.35)';
           } else if (msg.senderRole === 'customer') {
-            roleTag = `<span style="background:rgba(16,185,129,0.18);color:#34d399;padding:2px 7px;border-radius:4px;font-size:0.68rem;font-weight:700;">🏢 Customer</span>`;
+            roleTag = `<span style="background:rgba(16,185,129,0.18);color:var(--accent-green-text);padding:2px 7px;border-radius:4px;font-size:0.68rem;font-weight:700;">🏢 Customer</span>`;
             bubbleBg = isCurrentUser ? 'rgba(16,185,129,0.18)' : 'rgba(16,185,129,0.10)';
             bubbleBorder = 'rgba(16,185,129,0.35)';
           } else {
-            roleTag = `<span style="background:rgba(168,85,247,0.18);color:#c084fc;padding:2px 7px;border-radius:4px;font-size:0.68rem;font-weight:700;">🔧 Technician</span>`;
+            roleTag = `<span style="background:rgba(168,85,247,0.18);color:var(--accent-purple-text);padding:2px 7px;border-radius:4px;font-size:0.68rem;font-weight:700;">🔧 Technician</span>`;
             bubbleBg = isCurrentUser ? 'rgba(168,85,247,0.18)' : 'rgba(168,85,247,0.10)';
             bubbleBorder = 'rgba(168,85,247,0.35)';
           }
@@ -4107,15 +4790,15 @@ async function loadTicketMessages(ticketId, isSilent = false, channel = 'staff')
           return `
             <div style="text-align:${textAlign}; margin-bottom:12px;">
               <div style="display:inline-block; max-width:82%; ${marginSide}; text-align:left;">
-                <div style="display:flex; align-items:center; gap:6px; font-size:0.72rem; color:#94a3b8; margin-bottom:4px;
+                <div style="display:flex; align-items:center; gap:6px; font-size:0.72rem; color:var(--text-secondary); margin-bottom:4px;
                             justify-content:${isCurrentUser ? 'flex-end' : 'flex-start'};">
-                  <strong style="color:${isCurrentUser ? '#00f2fe' : '#ffffff'};">${isCurrentUser ? 'You' : escapeHtml(msg.senderName)}</strong>
+                  <strong style="color:${isCurrentUser ? 'var(--neon-cyan)' : 'var(--text-primary)'};">${isCurrentUser ? 'You' : escapeHtml(msg.senderName)}</strong>
                   ${roleTag}
-                  <span style="font-size:0.65rem; color:#64748b;">${formatTimestamp(msg.createdAt)}</span>
+                  <span style="font-size:0.65rem; color:var(--text-muted);">${formatTimestamp(msg.createdAt)}</span>
                 </div>
                 <div style="background:${bubbleBg}; border:1px solid ${bubbleBorder}; padding:10px 14px;
-                            border-radius:12px; font-size:0.86rem; color:#f1f5f9; word-break:break-word;
-                            line-height:1.45; box-shadow:0 2px 6px rgba(0,0,0,0.25);">
+                            border-radius:12px; font-size:0.86rem; color:var(--text-primary); word-break:break-word;
+                            line-height:1.45; box-shadow:var(--shadow-xs);">
                   ${escapeHtml(msg.message)}
                 </div>
               </div>
@@ -4255,90 +4938,120 @@ async function consumePartForSelectedTicket() {
   }
 }
 
+/** Close the Restock Shipment dialog (used by every button in it). */
+function closeRestockModal() {
+  document.getElementById('restockModalOverlay')?.remove();
+}
+
 // Restock Inventory Modal
 function openRestockModal() {
   const existing = document.getElementById('restockModalOverlay');
   if (existing) existing.remove();
 
+  const inventory = state.inventory || [];
+
   const overlay = document.createElement('div');
   overlay.id = 'restockModalOverlay';
-  overlay.style.cssText = 'position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px);';
+  overlay.className = 'modal-backdrop';
+
   overlay.innerHTML = `
-    <div style="background:var(--bg-card,#1a1a2e);border:1px solid rgba(0,242,254,0.3);border-radius:20px;padding:30px 34px;width:100%;max-width:540px;box-shadow:0 25px 70px rgba(0,0,0,0.6);">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-        <h2 style="font-size:1.2rem;font-weight:800;color:#ffffff;display:flex;align-items:center;gap:8px;margin:0;">📦 Restock Inventory Shipment</h2>
-        <button type="button" class="modal-close" onclick="document.getElementById('restockModalOverlay').remove()" style="font-size:1.4rem;background:none;border:none;color:#94a3b8;cursor:pointer;">&times;</button>
-      </div>
-      <p style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:18px;">
-        Record newly arrived parts from suppliers to update live stock levels for Millennium SmartBoard service operations.
-      </p>
-
-      <div style="display:flex;gap:8px;margin-bottom:18px;border-bottom:1px solid rgba(255,255,255,0.08);padding-bottom:10px;">
-        <button id="tabExistingPart" type="button" class="btn btn-sm btn-primary" onclick="toggleRestockMode('existing')" style="padding:6px 14px;font-weight:700;">Existing Part</button>
-        <button id="tabNewPart" type="button" class="btn btn-sm btn-secondary" onclick="toggleRestockMode('new')" style="padding:6px 14px;font-weight:700;">➕ New Part Catalog</button>
+    <div class="modal-content modal-form" style="max-width:560px;" role="dialog" aria-modal="true" aria-labelledby="restockModalTitle">
+      <div class="modal-header">
+        <h3 class="modal-title" id="restockModalTitle">📦 Restock Inventory Shipment</h3>
+        <button type="button" class="modal-close" aria-label="Close" onclick="closeRestockModal()">×</button>
       </div>
 
-      <!-- Restock Existing Part Section -->
-      <div id="restockExistingSection" style="display:flex;flex-direction:column;gap:14px;">
-        <div>
-          <label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:5px;">Select Part to Restock *</label>
-          <select id="restockPartSelect" class="form-input">
-            <option value="">— Select an inventory item (${(state.inventory || []).length} Available) —</option>
-            ${(state.inventory || []).map(p => `<option value="${p.id}">${p.partCode} — ${p.name} (Current: ${p.stockQuantity} in stock)</option>`).join('')}
-          </select>
-        </div>
-        <div>
-          <label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:5px;">Quantity to Add (Shipment Received) *</label>
-          <input id="restockQuantity" class="form-input" type="number" min="1" max="1000" value="10" />
-        </div>
-      </div>
+      <form onsubmit="event.preventDefault(); submitRestockShipment();">
+        <div class="form-body">
 
-      <!-- Add New Part Catalog Section -->
-      <div id="restockNewSection" style="display:none;flex-direction:column;gap:12px;">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-          <div>
-            <label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:4px;">Part Code *</label>
-            <input id="newPartCode" class="form-input" placeholder="e.g. MSB-OPS-03" />
+          <p class="form-hint" style="margin-top:-4px;">
+            Record newly arrived parts from suppliers to update live stock levels for
+            Millennium SmartBoard service operations.
+          </p>
+
+          <div class="seg-tabs" role="tablist" aria-label="Restock mode">
+            <button id="tabExistingPart" type="button" class="seg-tab is-active" role="tab"
+              aria-selected="true" onclick="toggleRestockMode('existing')">Existing Part</button>
+            <button id="tabNewPart" type="button" class="seg-tab" role="tab"
+              aria-selected="false" onclick="toggleRestockMode('new')">➕ New Part Catalog</button>
           </div>
-          <div>
-            <label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:4px;">Category *</label>
-            <select id="newPartCategory" class="form-input">
-              <option value="Module">Module</option>
-              <option value="Display">Display</option>
-              <option value="Power">Power</option>
-              <option value="Audio">Audio</option>
-              <option value="Touch">Touch Surface</option>
-              <option value="Accessory">Accessory</option>
-            </select>
-          </div>
-        </div>
-        <div>
-          <label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:4px;">Part Name *</label>
-          <input id="newPartName" class="form-input" placeholder="e.g. 4K Camera & Integrated Mic Array" />
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-          <div>
-            <label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:4px;">Initial Quantity *</label>
-            <input id="newPartStock" class="form-input" type="number" min="1" value="5" />
-          </div>
-          <div>
-            <label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:4px;">Min Threshold</label>
-            <input id="newPartThreshold" class="form-input" type="number" min="1" value="3" />
-          </div>
-        </div>
-      </div>
 
-      <div id="restockErrorMsg" style="color:#f43f5e;font-size:0.82rem;margin-top:10px;display:none;"></div>
+          <!-- Restock an existing part -->
+          <div id="restockExistingSection" class="form-section">
+            <div class="form-section-title">📦 Shipment Details</div>
+            <div class="form-group">
+              <label class="form-label" for="restockPartSelect">Select Part to Restock *</label>
+              <select id="restockPartSelect" class="form-select">
+                <option value="">— Select an inventory item (${inventory.length} Available) —</option>
+                ${inventory.map(p => `<option value="${p.id}">${p.partCode} — ${p.name} (Current: ${p.stockQuantity} in stock)</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+              <label class="form-label" for="restockQuantity">Quantity to Add (Shipment Received) *</label>
+              <input id="restockQuantity" class="form-input" type="number" min="1" max="1000" value="10" />
+              <p class="form-hint">Added to the part's current stock level.</p>
+            </div>
+          </div>
 
-      <div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;">
-        <button type="button" class="btn btn-secondary" style="flex:1;min-width:80px;" onclick="document.getElementById('restockModalOverlay').remove()">Cancel</button>
-        <button type="button" class="btn btn-secondary" style="flex:1.2;min-width:130px;" onclick="document.getElementById('restockModalOverlay').remove(); navigateTo('inventory');">📋 View Inventory</button>
-        <button type="button" class="btn btn-primary" style="flex:1.4;min-width:150px;" onclick="submitRestockShipment()">📥 Confirm Shipment</button>
-      </div>
+          <!-- Add a brand-new part to the catalog -->
+          <div id="restockNewSection" class="form-section" style="display:none;">
+            <div class="form-section-title">➕ New Catalog Entry</div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="newPartCode">Part Code *</label>
+                <input id="newPartCode" class="form-input" placeholder="e.g. MSB-OPS-03" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="newPartCategory">Category *</label>
+                <select id="newPartCategory" class="form-select">
+                  <option value="Module">Module</option>
+                  <option value="Display">Display</option>
+                  <option value="Power">Power</option>
+                  <option value="Audio">Audio</option>
+                  <option value="Touch">Touch Surface</option>
+                  <option value="Accessory">Accessory</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="newPartName">Part Name *</label>
+              <input id="newPartName" class="form-input" placeholder="e.g. 4K Camera &amp; Integrated Mic Array" />
+            </div>
+            <div class="form-row">
+              <div class="form-group" style="margin-bottom:0;">
+                <label class="form-label" for="newPartStock">Initial Quantity *</label>
+                <input id="newPartStock" class="form-input" type="number" min="1" value="5" />
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label class="form-label" for="newPartThreshold">Min Threshold</label>
+                <input id="newPartThreshold" class="form-input" type="number" min="1" value="3" />
+              </div>
+            </div>
+          </div>
+
+          <div id="restockErrorMsg" class="form-error" role="alert" style="display:none;"></div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeRestockModal()">Cancel</button>
+          <button type="button" class="btn btn-secondary" onclick="closeRestockModal(); navigateTo('inventory');">📋 View Inventory</button>
+          <button type="submit" class="btn btn-primary">📥 Confirm Shipment</button>
+        </div>
+      </form>
     </div>
   `;
+
   document.body.appendChild(overlay);
-  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+  requestAnimationFrame(() => overlay.classList.add('active'));
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeRestockModal(); });
+
+  const onKey = (e) => {
+    if (e.key === 'Escape') {
+      closeRestockModal();
+      document.removeEventListener('keydown', onKey);
+    }
+  };
+  document.addEventListener('keydown', onKey);
 }
 
 function toggleRestockMode(mode) {
@@ -4349,17 +5062,20 @@ function toggleRestockMode(mode) {
   const errEl = document.getElementById('restockErrorMsg');
   if (errEl) errEl.style.display = 'none';
 
-  if (mode === 'existing') {
-    if (existingSection) existingSection.style.display = 'flex';
-    if (newSection) newSection.style.display = 'none';
-    if (tabExisting) { tabExisting.className = 'btn btn-sm btn-primary'; }
-    if (tabNew) { tabNew.className = 'btn btn-sm btn-secondary'; }
-  } else {
-    if (existingSection) existingSection.style.display = 'none';
-    if (newSection) newSection.style.display = 'flex';
-    if (tabExisting) { tabExisting.className = 'btn btn-sm btn-secondary'; }
-    if (tabNew) { tabNew.className = 'btn btn-sm btn-primary'; }
-  }
+  const isExisting = mode === 'existing';
+  if (existingSection) existingSection.style.display = isExisting ? '' : 'none';
+  if (newSection) newSection.style.display = isExisting ? 'none' : '';
+
+  // The segmented control marks the active tab. It no longer swaps
+  // .btn-primary / .btn-secondary, which made an inactive tab read as a
+  // primary action.
+  const setTab = (el, active) => {
+    if (!el) return;
+    el.classList.toggle('is-active', active);
+    el.setAttribute('aria-selected', String(active));
+  };
+  setTab(tabExisting, isExisting);
+  setTab(tabNew, !isExisting);
 }
 
 async function submitRestockShipment() {
@@ -4524,10 +5240,10 @@ async function verifyWarrantyFromInput() {
       resultBox.innerHTML = `
         <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.4); padding: 18px; border-radius: 12px;">
           <div style="display: flex; justify-content: space-between; align-items: center;">
-            <h3 style="color: #34d399; font-size: 1.15rem; font-weight: 800;">VERIFIED: UNDER WARRANTY ✅</h3>
+            <h3 style="color: var(--accent-green-text); font-size: 1.15rem; font-weight: 800;">VERIFIED: UNDER WARRANTY ✅</h3>
             <span class="status-pill status-online">${w.daysRemaining} Days Remaining</span>
           </div>
-          <div style="font-size: 0.88rem; margin-top: 8px; color: #ffffff;">
+          <div style="font-size: 0.88rem; margin-top: 8px; color: var(--text-primary);">
             Device: <strong>${w.deviceId}</strong> (${w.deviceModel}) | Client: <strong>${w.customerName}</strong>
           </div>
           <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 4px;">
@@ -6358,8 +7074,8 @@ function renderRentalList(rentals, isAdmin) {
                     <span style="
                       font-size:0.74rem;padding:3px 8px;border-radius:6px;font-weight:600;
                       ${r.priority === 'High' ? 'background:rgba(244,63,94,0.15);color:#f43f5e;' :
-                        r.priority === 'Medium' ? 'background:rgba(245,158,11,0.15);color:#f59e0b;' :
-                        'background:rgba(34,197,94,0.15);color:#22c55e;'}
+                        r.priority === 'Medium' ? 'background:rgba(245,158,11,0.15);color:var(--accent-amber-text);' :
+                        'background:rgba(34,197,94,0.15);color:var(--accent-green-text);'}
                     ">${r.priority}</span>
                   </td>
                   ${isAdmin ? `

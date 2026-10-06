@@ -5,10 +5,11 @@ const path = require('path');
 
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const BASE = 'http://localhost:3000';
+const APP = BASE + '/app';
 const OUT = path.resolve('screenshots/mobile-audit');
 
 async function login(page, u, p) {
-  await page.goto(BASE, { waitUntil: 'networkidle2', timeout: 60000 });
+  await page.goto(APP, { waitUntil: 'networkidle2', timeout: 60000 });
   await page.evaluate(() => localStorage.clear());
   await page.reload({ waitUntil: 'networkidle2' });
   await new Promise((r) => setTimeout(r, 1500));
@@ -85,7 +86,7 @@ const overflowProbe = () => {
   await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   const errs = [];
   page.on('pageerror', (e) => errs.push(String(e.message)));
-  await page.goto(BASE, { waitUntil: 'networkidle2', timeout: 60000 });
+  await page.goto(APP, { waitUntil: 'networkidle2', timeout: 60000 });
   await page.evaluate(() => localStorage.clear());
   await page.reload({ waitUntil: 'networkidle2' });
   await new Promise((r) => setTimeout(r, 2500));

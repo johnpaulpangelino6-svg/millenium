@@ -6,6 +6,7 @@ const puppeteer = require('puppeteer-core');
 const path = require('path');
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const BASE = 'http://localhost:3000';
+const APP = BASE + '/app';
 
 let pass = 0, fail = 0;
 function check(label, ok, detail) {
@@ -25,7 +26,7 @@ async function runAs(browser, username, password, label) {
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 
-  await page.goto(BASE, { waitUntil: 'networkidle2', timeout: 60000 });
+  await page.goto(APP, { waitUntil: 'networkidle2', timeout: 60000 });
   await page.evaluate(() => localStorage.clear());
   await page.reload({ waitUntil: 'networkidle2' });
   await new Promise((r) => setTimeout(r, 2000));

@@ -17,6 +17,7 @@ const path = require('path');
 
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const BASE = 'http://localhost:3000';
+const APP = BASE + '/app';
 const APP_JS = path.resolve(__dirname, '..', 'public', 'js', 'app.js');
 
 let passed = 0, failed = 0;
@@ -74,7 +75,7 @@ const seedStorage = (theme, token, user) => {
   const seedCtx = await browser.createBrowserContext();
   const seed = await seedCtx.newPage();
   await seed.setCacheEnabled(false);
-  await seed.goto(BASE + '/', { waitUntil: 'networkidle0' });
+  await seed.goto(APP, { waitUntil: 'networkidle0' });
   await seed.type('#loginUsername', 'admin');
   await seed.type('#loginPassword', '123123');
   await seed.click('#loginSubmitBtn');
@@ -94,7 +95,7 @@ const seedStorage = (theme, token, user) => {
     await page.setCacheEnabled(false);
     await page.evaluateOnNewDocument(SAMPLER);
     await page.evaluateOnNewDocument(seedStorage, 'dark', session.token, session.user);
-    await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
+    await page.goto(APP, { waitUntil: 'domcontentloaded' });
     await page.waitForNetworkIdle({ idleTime: 400 }).catch(() => {});
     await sleep(2600);
 
@@ -129,7 +130,7 @@ const seedStorage = (theme, token, user) => {
     await page.setCacheEnabled(false);
     await page.evaluateOnNewDocument(SAMPLER);
     await page.evaluateOnNewDocument(seedStorage, 'light', session.token, session.user);
-    await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
+    await page.goto(APP, { waitUntil: 'domcontentloaded' });
     await page.waitForNetworkIdle({ idleTime: 400 }).catch(() => {});
     await sleep(2600);
 
@@ -188,7 +189,7 @@ const seedStorage = (theme, token, user) => {
     await page.setViewport({ width: 1440, height: 900 });
     await page.setCacheEnabled(false);
     await page.evaluateOnNewDocument(seedStorage, 'dark', null, null);
-    await page.goto(BASE + '/', { waitUntil: 'networkidle0' });
+    await page.goto(APP, { waitUntil: 'networkidle0' });
     await sleep(600);
     const out = await page.evaluate(() => ({
       overlay: getComputedStyle(document.getElementById('authPortalOverlay')).display,
@@ -208,7 +209,7 @@ const seedStorage = (theme, token, user) => {
     await page.setViewport({ width: 1440, height: 900 });
     await page.setCacheEnabled(false);
     await page.evaluateOnNewDocument(seedStorage, 'dark', 'not-a-valid-token', JSON.stringify({ id: 'x', role: 'admin', username: 'x' }));
-    await page.goto(BASE + '/', { waitUntil: 'networkidle0' });
+    await page.goto(APP, { waitUntil: 'networkidle0' });
     await sleep(900);
     const out = await page.evaluate(() => ({
       overlay: getComputedStyle(document.getElementById('authPortalOverlay')).display,
@@ -227,7 +228,7 @@ const seedStorage = (theme, token, user) => {
     await page.setViewport({ width: 1440, height: 900 });
     await page.setCacheEnabled(false);
     await page.evaluateOnNewDocument(seedStorage, 'dark', session.token, session.user);
-    await page.goto(BASE + '/', { waitUntil: 'networkidle0' });
+    await page.goto(APP, { waitUntil: 'networkidle0' });
     await sleep(2000);
 
     // Tag an existing node with a plain JS property: this does not alter
@@ -265,7 +266,7 @@ const seedStorage = (theme, token, user) => {
     await page.setViewport({ width: 1440, height: 900 });
     await page.setCacheEnabled(false);
     await page.evaluateOnNewDocument(seedStorage, 'dark', session.token, session.user);
-    await page.goto(BASE + '/', { waitUntil: 'networkidle0' });
+    await page.goto(APP, { waitUntil: 'networkidle0' });
     await sleep(2000);
 
     const navs = [];

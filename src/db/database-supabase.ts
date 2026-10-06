@@ -390,6 +390,7 @@ class MillenniumDatabase {
           rental_number TEXT UNIQUE NOT NULL,
           customer_id TEXT NOT NULL,
           customer_name TEXT NOT NULL,
+          created_by_user_id TEXT,
           device_id TEXT NOT NULL,
           device_model TEXT NOT NULL,
           serial_number TEXT NOT NULL,
@@ -422,6 +423,38 @@ class MillenniumDatabase {
       await client.query(`CREATE INDEX IF NOT EXISTS idx_rentals_device_id ON rentals(device_id);`);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_rentals_status ON rentals(status);`);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_rentals_date_range ON rentals(start_date, end_date);`);
+
+      // ----------------------------------------------------------------------
+      // RENTAL OWNERSHIP (privacy) — migration support
+      //
+      // A booking belongs to the account that created it, NOT to the customer
+      // organization. Two accounts inside the same organization (e.g. two staff
+      // logins for the same school) must not see each other's bookings, so
+      // reads are scoped by `created_by_user_id` rather than by organization.
+      //
+      // Existing rows predate this column. Backfill them best-effort by matching
+      // the booking's contact e-mail to a customer account. Rows that cannot be
+      // matched are deliberately left NULL — a NULL owner means "admin only",
+      // which fails closed instead of guessing and leaking.
+      // ----------------------------------------------------------------------
+      await client.query(`
+        DO $$ 
+        BEGIN 
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='rentals' AND column_name='created_by_user_id') THEN
+            ALTER TABLE rentals ADD COLUMN created_by_user_id TEXT DEFAULT NULL;
+          END IF;
+        END $$;
+      `);
+      await client.query(`
+        UPDATE rentals r
+        SET created_by_user_id = u.id
+        FROM users u
+        WHERE r.created_by_user_id IS NULL
+          AND COALESCE(r.contact_email, '') <> ''
+          AND lower(r.contact_email) = lower(u.email)
+          AND u.role = 'customer';
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_rentals_created_by_user ON rentals(created_by_user_id);`);
 
       console.log('  ✅ PostgreSQL schema initialized.');
     } finally {
@@ -1435,6 +1468,7 @@ class MillenniumDatabase {
       rentalNumber: row.rental_number,
       customerId: row.customer_id,
       customerName: row.customer_name,
+      createdByUserId: row.created_by_user_id || null,
       deviceId: row.device_id,
       deviceModel: row.device_model,
       serialNumber: row.serial_number,
@@ -1515,10 +1549,11 @@ class MillenniumDatabase {
         id, rental_number, customer_id, customer_name, device_id, device_model, serial_number,
         start_date, end_date, status, priority, purpose, delivery_address, delivery_date, pickup_date,
         daily_rate, total_cost, deposit_amount, deposit_status,
-        contact_person, contact_phone, contact_email, notes, condition_checklist_pre, condition_checklist_post
+        contact_person, contact_phone, contact_email, notes, condition_checklist_pre, condition_checklist_post,
+        created_by_user_id
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-        $16, $17, $18, $19, $20, $21, $22, $23, $24, $25
+        $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26
       ) RETURNING *
     `, [
       id, rentalNumber, data.customerId, cust.organization_name,
@@ -1532,6 +1567,7 @@ class MillenniumDatabase {
       data.contactPhone || cust.phone || '',
       data.contactEmail || cust.email || '',
       data.notes || '', data.conditionChecklistPre || '', data.conditionChecklistPost || '',
+      data.createdByUserId || null,
     ]);
 
     // Log to audit
@@ -1612,6 +1648,8 @@ class MillenniumDatabase {
     const values: any[] = [];
     let paramIdx = 1;
 
+    // NOTE: `createdByUserId` is intentionally absent — booking ownership is
+    // immutable, so an admin edit can never hand a booking to another account.
     const fieldMap: Record<string, string> = {
       startDate: 'start_date',
       endDate: 'end_date',

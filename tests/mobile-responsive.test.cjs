@@ -17,6 +17,7 @@ const path = require('path');
 
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const BASE = 'http://localhost:3000';
+const APP = BASE + '/app';
 const OUT = path.resolve('screenshots/mobile-audit');
 
 let pass = 0, fail = 0;
@@ -47,7 +48,7 @@ async function newPhone(browser, d) {
 }
 
 async function login(page, u, p) {
-  await page.goto(BASE, { waitUntil: 'networkidle2', timeout: 60000 });
+  await page.goto(APP, { waitUntil: 'networkidle2', timeout: 60000 });
   await page.evaluate(() => localStorage.clear());
   await page.reload({ waitUntil: 'networkidle2' });
   await new Promise((r) => setTimeout(r, 1800));
@@ -68,7 +69,7 @@ async function login(page, u, p) {
   console.log('\n=== 1. SIGN-IN SCREEN ===');
   for (const d of DEVICES) {
     const { ctx, page } = await newPhone(browser, d);
-    await page.goto(BASE, { waitUntil: 'networkidle2', timeout: 60000 });
+    await page.goto(APP, { waitUntil: 'networkidle2', timeout: 60000 });
     await page.evaluate(() => localStorage.clear());
     await page.reload({ waitUntil: 'networkidle2' });
     await new Promise((r) => setTimeout(r, 2200));

@@ -54,7 +54,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;800;900&family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800;900&family=Playfair+Display:ital,wght@1,500;1,600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/style.css?v=20261003h" />
+  <link rel="stylesheet" href="/css/style.css?v=20261004c" />
 </head>
 <body>
 
@@ -463,6 +463,15 @@
     </div>
 
     <div class="header-meta">
+      <!-- Light / dark switch. Shares localStorage['millennium-theme'] with the
+           landing page, so the choice follows the user across the whole system.
+           The glyph is set by applyTheme() in app.js. -->
+      <button class="header-theme-btn" id="themeToggleBtn" type="button"
+              onclick="toggleTheme()" title="Switch between light and dark mode"
+              aria-label="Switch between light and dark mode">
+        <span id="themeToggleIcon" aria-hidden="true">☀️</span>
+      </button>
+
       <!-- Notification Container -->
       <div class="notif-wrapper" style="position: relative;">
         <button class="header-notif-btn" id="notifBtn" title="Notifications" aria-label="Notifications" onclick="toggleNotifications(event)">
@@ -520,8 +529,11 @@
 
     <!-- Sidebar -->
     <aside class="app-sidebar" id="appSidebar">
-      <!-- Dashboard Nav Tab (Active for Admin) -->
-      <a href="#" class="nav-item nav-item-main active" data-tab="dashboard" data-roles="admin" onclick="navigateTo('dashboard')">
+      <!-- Dashboard Nav Tab — the landing tab for EVERY role.
+           renderApp() dispatches the 'dashboard' case to a role-specific view,
+           and applyRoleUI() swaps the title/subtext via DASHBOARD_NAV_COPY, so
+           there is exactly one nav entry to keep in sync. -->
+      <a href="#" class="nav-item nav-item-main active" data-tab="dashboard" data-roles="admin technician customer" onclick="navigateTo('dashboard')">
         <div class="nav-icon-sq cyan-gradient">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
         </div>
@@ -963,6 +975,6 @@
   <!-- JsBarcode Library for Barcode Generation -->
   <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
   
-  <script src="/js/app.js?v=20261003h"></script>
+  <script src="/js/app.js?v=20261004c"></script>
 </body>
 </html>

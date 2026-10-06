@@ -6,6 +6,7 @@ const path = require('path');
 
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const BASE = 'http://localhost:3000';
+const APP = BASE + '/app';
 const OUT = path.resolve(__dirname, '..', 'screenshots', 'no-refresh');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -18,7 +19,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const seedCtx = await browser.createBrowserContext();
   const seed = await seedCtx.newPage();
   await seed.setCacheEnabled(false);
-  await seed.goto(BASE + '/', { waitUntil: 'networkidle0' });
+  await seed.goto(APP, { waitUntil: 'networkidle0' });
   await seed.type('#loginUsername', 'admin');
   await seed.type('#loginPassword', '123123');
   await seed.click('#loginSubmitBtn');
@@ -39,7 +40,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     localStorage.setItem('millennium_auth_user', u);
   }, s.token, s.user);
 
-  const nav = page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
+  const nav = page.goto(APP, { waitUntil: 'domcontentloaded' });
   let prev = 0;
   for (const at of [70, 180, 320]) {
     await sleep(at - prev); prev = at;
@@ -60,7 +61,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     localStorage.setItem('millennium_auth_token', t);
     localStorage.setItem('millennium_auth_user', u);
   }, s.token, s.user);
-  const nav2 = p2.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
+  const nav2 = p2.goto(APP, { waitUntil: 'domcontentloaded' });
   prev = 0;
   for (const at of [70, 320]) {
     await sleep(at - prev); prev = at;

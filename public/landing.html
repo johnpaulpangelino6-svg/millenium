@@ -58,15 +58,19 @@
       --grad:          linear-gradient(135deg, #0284c7 0%, #2563eb 48%, #7c3aed 100%);
       --grad-text:     linear-gradient(120deg, #0284c7 0%, #2563eb 45%, #7c3aed 100%);
       --ring:          rgba(2, 132, 199, 0.28);
-      --shadow-sm:     0 1px 2px rgba(13, 21, 38, .05), 0 1px 3px rgba(13, 21, 38, .04);
-      --shadow-md:     0 8px 24px -6px rgba(13, 21, 38, .10), 0 2px 8px -2px rgba(13, 21, 38, .05);
-      --shadow-lg:     0 24px 56px -18px rgba(13, 21, 38, .22), 0 8px 20px -8px rgba(13, 21, 38, .08);
+      --shadow-sm:     0 1px 2px rgba(13, 21, 38, .04), 0 2px 6px -2px rgba(13, 21, 38, .06);
+      --shadow-md:     0 10px 28px -8px rgba(13, 21, 38, .12), 0 3px 10px -3px rgba(13, 21, 38, .06);
+      --shadow-lg:     0 28px 60px -20px rgba(13, 21, 38, .24), 0 10px 24px -10px rgba(13, 21, 38, .10);
       --header-bg:     rgba(255, 255, 255, .86);
       --code-bg:       #eef2f8;
       --radius:        16px;
       --radius-lg:     22px;
       --maxw:          1180px;
       --ease:          cubic-bezier(.4, 0, .2, 1);
+      /* Expo-out. Used for every entrance so the motion decelerates into
+         place instead of easing in and out — the difference between "a div
+         faded in" and something that feels crafted. */
+      --ease-out:      cubic-bezier(.16, 1, .3, 1);
     }
 
     [data-theme="dark"] {
@@ -172,11 +176,10 @@
        brand reads identically here and inside the app: Cinzel 900 with the
        metallic platinum/chrome gradient clipped to the text.
 
-       Theme selectors are INVERTED relative to style.css. There, :root is the
-       dark palette and [data-theme="light"] overrides it. Here the base :root
-       IS the light palette and [data-theme="dark"] overrides it — so the
-       darker chrome (for a light background) is the base rule and the bright
-       chrome (for a dark background) is the [data-theme="dark"] rule.
+       Both files are light-first, so the darker chrome (for a light background)
+       is the base rule here and the bright chrome (for a dark background) is
+       the [data-theme="dark"] rule. Light mode is expressed by *removing* the
+       attribute in both files, never by data-theme="light".
 
        Keep both gradients in sync with style.css if the brand is ever restyled.
        ------------------------------------------------------------------ */
@@ -314,14 +317,24 @@
     .shot-bar span { margin-left: 8px; font-size: .74rem; color: var(--text-3); font-weight: 600; letter-spacing: .04em; }
 
     .stat-strip {
-      display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 26px;
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 28px;
     }
     .stat {
+      position: relative; overflow: hidden;
       background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow-sm);
+      border-radius: var(--radius); padding: 17px 18px 16px; box-shadow: var(--shadow-sm);
+      transition: transform .22s var(--ease), box-shadow .22s var(--ease);
     }
-    .stat b { display: block; font-family: 'Outfit', sans-serif; font-size: 1.5rem; font-weight: 900; }
-    .stat span { font-size: .76rem; color: var(--text-3); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+    .stat:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+    .stat::before {
+      content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+      background: var(--grad);
+    }
+    .stat b {
+      display: block; font-family: 'Outfit', sans-serif; font-size: 1.55rem; font-weight: 900;
+      line-height: 1.1; letter-spacing: -.02em; font-variant-numeric: tabular-nums;
+    }
+    .stat span { font-size: .72rem; color: var(--text-3); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 
     /* =========================== SECTIONS =========================== */
     /* Offset for the sticky header when jumping to a section by hash */
@@ -329,39 +342,56 @@
     .band { position: relative; z-index: 1; padding: 88px 0; }
     .band-alt { background: var(--surface-2); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
 
-    .sec-head { max-width: 720px; margin-bottom: 46px; }
+    .sec-head { max-width: 760px; margin-bottom: 52px; }
+    /* Pill, matching the hero eyebrow, so every section opens the same way. */
     .sec-tag {
-      display: inline-block; font-size: .72rem; font-weight: 800; letter-spacing: .18em;
-      text-transform: uppercase; color: var(--brand); margin-bottom: 12px;
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: .72rem; font-weight: 800; letter-spacing: .16em;
+      text-transform: uppercase; color: var(--brand);
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 999px; padding: 6px 14px; margin-bottom: 16px;
+      box-shadow: var(--shadow-sm);
     }
-    .sec-head h2 { font-size: clamp(1.65rem, 3.4vw, 2.4rem); font-weight: 800; }
-    .sec-head p { margin-top: 14px; color: var(--text-2); font-size: 1.02rem; }
+    .sec-tag::before {
+      content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--brand);
+    }
+    .sec-head h2 { font-size: clamp(1.7rem, 3.5vw, 2.5rem); font-weight: 800; letter-spacing: -.028em; }
+    .sec-head p { margin-top: 15px; color: var(--text-2); font-size: 1.03rem; }
 
     /* ---------- Features ---------- */
-    .feat-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+    /* 9 cards → a clean 3×3 on desktop, no ragged last row. */
+    .feat-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; }
     .feat {
       background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 26px 24px 24px;
+      border-radius: var(--radius-lg); padding: 28px 26px 26px;
       box-shadow: var(--shadow-sm); position: relative; overflow: hidden;
+      display: flex; flex-direction: column;
       transition: transform .22s var(--ease), box-shadow .22s var(--ease), border-color .22s var(--ease);
     }
+    /* Brand hairline that sweeps across the top edge on hover. */
     .feat::after {
       content: ''; position: absolute; inset: 0 0 auto 0; height: 3px;
       background: var(--grad); opacity: 0; transition: opacity .22s var(--ease);
     }
-    .feat:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); border-color: var(--border-strong); }
+    .feat:hover { transform: translateY(-4px); box-shadow: var(--shadow-lg); border-color: var(--border-strong); }
     .feat:hover::after { opacity: 1; }
     .feat-ico {
-      width: 46px; height: 46px; border-radius: 13px; margin-bottom: 18px;
+      width: 46px; height: 46px; border-radius: 14px; margin-bottom: 18px;
       display: grid; place-items: center; color: #fff; background: var(--grad);
-      box-shadow: 0 8px 18px -8px rgba(2, 132, 199, .8);
+      /* The inset top highlight reads as a lit edge — the detail that makes a
+         flat gradient square look crafted rather than default. */
+      box-shadow: 0 8px 18px -8px rgba(2, 132, 199, .75), inset 0 1px 0 rgba(255, 255, 255, .4);
     }
-    .feat h3 { font-size: 1.06rem; font-weight: 700; margin-bottom: 8px; }
-    .feat p { font-size: .9rem; color: var(--text-2); }
+    .feat h3 { font-size: 1.07rem; font-weight: 700; margin-bottom: 9px; letter-spacing: -.012em; }
+    .feat p { font-size: .905rem; color: var(--text-2); margin-bottom: 18px; }
+    /* `margin-top: auto` pins every tag to the card's baseline, so the row of
+       tags lines up even when the descriptions differ in length. */
     .feat-tag {
-      display: inline-block; margin-top: 14px; font-size: .7rem; font-weight: 700;
-      letter-spacing: .08em; text-transform: uppercase; color: var(--text-3);
-      background: var(--code-bg); border-radius: 999px; padding: 4px 10px;
+      display: inline-block; margin-top: auto; align-self: flex-start;
+      font-size: .68rem; font-weight: 700;
+      letter-spacing: .09em; text-transform: uppercase; color: var(--text-3);
+      background: var(--code-bg); border: 1px solid var(--border);
+      border-radius: 999px; padding: 4px 11px;
     }
 
     /* ---------- How it works ---------- */
@@ -468,10 +498,16 @@
     /* ---------- Final CTA ---------- */
     .final-cta {
       position: relative; overflow: hidden; border-radius: var(--radius-lg);
-      background: var(--grad); color: #fff; padding: 56px 44px;
+      background: var(--grad); color: #fff; padding: 62px 44px;
       box-shadow: var(--shadow-lg); text-align: center;
     }
-    .final-cta h2 { color: #fff; font-size: clamp(1.6rem, 3.2vw, 2.2rem); font-weight: 900; }
+    /* Soft top-light, so the flat gradient reads as a lit surface. */
+    .final-cta::before {
+      content: ''; position: absolute; inset: 0; pointer-events: none;
+      background: radial-gradient(120% 150% at 50% -30%, rgba(255, 255, 255, .26), transparent 62%);
+    }
+    .final-cta > * { position: relative; z-index: 1; }
+    .final-cta h2 { color: #fff; font-size: clamp(1.65rem, 3.3vw, 2.3rem); font-weight: 900; letter-spacing: -.026em; }
     .final-cta p { margin: 14px auto 0; max-width: 60ch; color: rgba(255, 255, 255, .9); }
     .final-cta .btn-ghost { background: rgba(255, 255, 255, .14); border-color: rgba(255, 255, 255, .5); color: #fff; backdrop-filter: blur(6px); }
     .final-cta .btn-ghost:hover { background: #fff; color: #0d1526; }
@@ -482,7 +518,7 @@
     /* ---------- Footer ---------- */
     .site-foot {
       border-top: 1px solid var(--border); background: var(--surface-2);
-      padding: 40px 0; margin-top: 0;
+      padding: 44px 0; margin-top: 0;
     }
     .foot-inner {
       display: flex; flex-wrap: wrap; gap: 20px;
@@ -490,18 +526,53 @@
     }
     .foot-brand { display: flex; align-items: center; gap: 12px; }
     .foot-brand img { width: 30px; height: 30px; object-fit: contain; }
-    .foot-brand strong { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: .92rem; display: block; }
+    .foot-brand strong { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: .92rem; display: block; letter-spacing: -.01em; }
     .foot-brand small { color: var(--text-3); font-size: .78rem; }
-    .foot-links { display: flex; flex-wrap: wrap; gap: 20px; font-size: .84rem; color: var(--text-3); font-weight: 600; }
+    .foot-links { display: flex; flex-wrap: wrap; gap: 22px; font-size: .84rem; color: var(--text-3); font-weight: 600; }
+    .foot-links a { transition: color .18s var(--ease); }
     .foot-links a:hover { color: var(--brand); }
 
-    /* ---------- Reveal on scroll ---------- */
-    .reveal { opacity: 0; transform: translateY(18px); transition: opacity .6s var(--ease), transform .6s var(--ease); }
-    .reveal.in { opacity: 1; transform: none; }
+    /* ---------- Reveal on scroll ----------
+       Every animated block carries BOTH `.reveal` (opacity + the transition)
+       and one direction modifier, so a single `.reveal { opacity:1 }` override
+       can neutralise all of them at once — the screenshot harness relies on
+       that. Never put a direction modifier on without `.reveal`.
+
+       `--d` is the stagger delay. The script assigns it from each element's
+       index among its `.reveal` siblings, so a grid cascades in without any
+       per-card markup. */
+    .reveal {
+      opacity: 0;
+      transform: translate3d(0, 26px, 0);
+      transition: opacity .7s var(--ease-out), transform .8s var(--ease-out), filter .7s var(--ease-out);
+      transition-delay: var(--d, 0ms);
+    }
+    /* Only while it is still waiting to appear — leaving `will-change` on for
+       the whole page pins a compositor layer per card for no reason. */
+    .reveal:not(.in) { will-change: opacity, transform; }
+
+    .reveal-up   { transform: translate3d(0, 26px, 0); }
+    .reveal-down { transform: translate3d(0, -22px, 0); }
+    .reveal-l    { transform: translate3d(-38px, 0, 0); }
+    .reveal-r    { transform: translate3d(38px, 0, 0); }
+    .reveal-zoom { transform: scale(.93) translate3d(0, 18px, 0); }
+    .reveal-soft { transform: translate3d(0, 14px, 0) scale(.985); filter: blur(7px); }
+
+    /* `.reveal.in` outranks every modifier above on specificity (0,2,0 vs
+       0,1,0), so the reset does not need !important. */
+    .reveal.in { opacity: 1; transform: none; filter: none; }
+
     @media (prefers-reduced-motion: reduce) {
       html { scroll-behavior: auto; }
-      .reveal { opacity: 1; transform: none; transition: none; }
+      .reveal { opacity: 1; transform: none; filter: none; transition: none; }
       .feat:hover, .role:hover, .btn:hover, .step:hover { transform: none; }
+      /* Scroll-linked decoration is motion by definition — switch it off. */
+      .hero-visual, .aurora span { transform: none !important; }
+      .site-head::after, .feat::before { display: none; }
+      .hero-cue { display: none; }
+      .hero-copy > *, .hero-visual { animation: none; }
+      .hero h1 .grad { animation: none; background-position: 0% 50%; }
+      .final-cta::before { animation: none; }
     }
 
     /* ========================== RESPONSIVE ========================== */
@@ -509,6 +580,24 @@
       .hero-grid { grid-template-columns: 1fr; gap: 40px; }
       .feat-grid, .role-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .about-grid { grid-template-columns: 1fr; gap: 34px; }
+    }
+
+    /* Nine feature cards at two-per-row leave one card alone on the last row.
+       Let it span the row and lay it out horizontally, so it reads as a
+       deliberate closing card instead of a stray. */
+    @media (max-width: 1000px) and (min-width: 641px) {
+      .feat-grid > :last-child {
+        grid-column: 1 / -1;
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        column-gap: 20px;
+        row-gap: 8px;
+        align-content: start;
+      }
+      .feat-grid > :last-child .feat-ico { grid-column: 1; grid-row: 1 / span 3; margin-bottom: 0; }
+      .feat-grid > :last-child h3 { grid-column: 2; grid-row: 1; margin-bottom: 0; }
+      .feat-grid > :last-child p { grid-column: 2; grid-row: 2; margin-bottom: 0; }
+      .feat-grid > :last-child .feat-tag { grid-column: 2; grid-row: 3; justify-self: start; margin-top: 0; }
     }
     @media (max-width: 720px) {
       .head-inner { flex-wrap: wrap; gap: 12px; padding: 14px 0 12px; }
@@ -539,6 +628,158 @@
     @media (max-width: 420px) {
       .stat-strip { grid-template-columns: 1fr; }
       .wrap { padding: 0 18px; }
+    }
+
+    /* ==================================================================
+       SCROLL MOTION & POLISH
+       Appended after the responsive block on purpose: these are new
+       selectors, and the few that override existing ones (.head-inner,
+       .hero h1 .grad, .step) need to win at equal specificity.
+       ================================================================== */
+
+    /* ---------- Reading progress ----------
+       Absolutely positioned INSIDE the sticky header. It must NOT be
+       `position: fixed` — the page is designed with exactly one pinned
+       element and the suite asserts nothing else is fixed/sticky, so the bar
+       rides along on the header instead of floating. */
+    .site-head::after {
+      content: '';
+      position: absolute; left: 0; right: 0; bottom: -1px; height: 2px;
+      background: var(--grad);
+      transform: scaleX(var(--sp, 0));
+      transform-origin: 0 50%;
+      opacity: 0;
+      transition: opacity .3s var(--ease);
+      pointer-events: none;
+    }
+    .site-head.is-stuck::after { opacity: 1; }
+
+    /* ---------- Parallax ----------
+       `--sy` is the scroll offset in px, written once per animation frame by
+       the scroll handler. Different multipliers per layer give depth. */
+    .hero-visual { transform: translate3d(0, calc(var(--sy, 0) * -0.05px), 0); }
+    .aurora .a1 { transform: translate3d(0, calc(var(--sy, 0) * 0.10px), 0); }
+    .aurora .a2 { transform: translate3d(0, calc(var(--sy, 0) * 0.17px), 0); }
+    .aurora .a3 { transform: translate3d(0, calc(var(--sy, 0) * 0.06px), 0); }
+
+    /* ---------- The header condenses once it detaches from the top ---------- */
+    .head-inner { transition: padding .35s var(--ease); }
+    .site-head.is-stuck .head-inner { padding-top: 11px; padding-bottom: 9px; }
+
+    /* ---------- Hero: a sheen that travels across the gradient words ---------- */
+    .hero h1 .grad {
+      background-size: 220% 100%;
+      animation: sheen 7s var(--ease) infinite;
+    }
+    @keyframes sheen {
+      0%, 100% { background-position: 0% 50%; }
+      50%      { background-position: 100% 50%; }
+    }
+
+    /* ---------- Hero: scroll cue ---------- */
+    .hero-cue {
+      display: inline-flex; align-items: center; gap: 10px;
+      margin-top: 36px; font-size: .73rem; font-weight: 800;
+      letter-spacing: .14em; text-transform: uppercase; color: var(--text-3);
+    }
+    .hero-cue i {
+      display: grid; place-items: center;
+      width: 27px; height: 27px; border-radius: 50%;
+      border: 1px solid var(--border-strong); color: var(--brand);
+      animation: cue 2.2s var(--ease) infinite;
+    }
+    @keyframes cue {
+      0%, 100% { transform: translateY(0);   opacity: .6; }
+      50%      { transform: translateY(5px); opacity: 1; }
+    }
+
+    /* ---------- Hero: staged entrance on load ----------
+       Deliberately NOT `.reveal` — this content is above the fold, so it must
+       never depend on the scroll observer (if the observer never fired, the
+       hero would stay invisible). `both` fill leaves every element in its final
+       visible state. The visual animates `opacity` only, because its `transform`
+       belongs to the parallax above and the two would fight. */
+    .hero-copy > * { animation: heroIn .8s var(--ease-out) both; }
+    .hero-copy > :nth-child(1) { animation-delay: .04s; }
+    .hero-copy > :nth-child(2) { animation-delay: .12s; }
+    .hero-copy > :nth-child(3) { animation-delay: .20s; }
+    .hero-copy > :nth-child(4) { animation-delay: .28s; }
+    .hero-copy > :nth-child(5) { animation-delay: .36s; }
+    .hero-copy > :nth-child(6) { animation-delay: .44s; }
+    @keyframes heroIn {
+      from { opacity: 0; transform: translate3d(0, 20px, 0); }
+      to   { opacity: 1; transform: none; }
+    }
+    .hero-visual { animation: heroFade .9s var(--ease-out) both; }
+    @keyframes heroFade { from { opacity: 0; } to { opacity: 1; } }
+
+    /* ---------- Feature cards: cursor-tracking spotlight ----------
+       `isolation: isolate` gives the card its own stacking context so the
+       `z-index:-1` pseudo can sit ABOVE the card background but BELOW the
+       text — without it the glow would either hide behind the card or wash
+       over the copy. */
+    .feat { isolation: isolate; }
+    .feat::before {
+      content: '';
+      position: absolute; inset: 0; z-index: -1; pointer-events: none;
+      background: radial-gradient(340px circle at var(--mx, 50%) var(--my, 0%),
+        color-mix(in srgb, var(--brand) 16%, transparent), transparent 72%);
+      opacity: 0; transition: opacity .3s var(--ease);
+    }
+    .feat:hover::before { opacity: 1; }
+    .feat-ico { transition: transform .3s var(--ease-out); }
+    .feat:hover .feat-ico { transform: translateY(-2px) scale(1.05); }
+
+    /* ---------- Steps: a gradient rail that grows on hover ---------- */
+    .step { position: relative; overflow: hidden; }
+    .step::before {
+      content: ''; position: absolute; left: 0; top: 16px; bottom: 16px; width: 3px;
+      border-radius: 0 3px 3px 0; background: var(--grad);
+      transform: scaleY(0); transform-origin: 50% 0;
+      transition: transform .45s var(--ease-out);
+    }
+    .step:hover::before { transform: scaleY(1); }
+
+    /* ---------- Stats ---------- */
+    .stat b { transition: color .3s var(--ease); }
+    .stat:hover b { color: var(--brand); }
+
+    /* ---------- Soften the alternating band edges ----------
+       `z-index:-1` keeps the wash above the section background but below the
+       content; `.band` already establishes a stacking context (z-index:1). */
+    .band-alt::before,
+    .band-alt::after {
+      content: ''; position: absolute; left: 0; right: 0; height: 130px;
+      z-index: -1; pointer-events: none;
+    }
+    .band-alt::before { top: 0;    background: linear-gradient(180deg, color-mix(in srgb, var(--brand) 5%, transparent), transparent); }
+    .band-alt::after  { bottom: 0; background: linear-gradient(0deg,  color-mix(in srgb, var(--violet) 5%, transparent), transparent); }
+
+    /* ---------- Final CTA: a slow drifting glow ---------- */
+    .final-cta::before { animation: cta-glow 12s var(--ease) infinite alternate; }
+    @keyframes cta-glow {
+      from { transform: translate3d(-4%, 0, 0) scale(1); }
+      to   { transform: translate3d(4%, 0, 0) scale(1.08); }
+    }
+
+    /* ---------- Phones: keep the motion, drop the cost ----------
+       Parallax on a narrow screen reads as jitter (the layers are already
+       stacked vertically), and sideways entrances push content off-screen. */
+    /* Sideways entrances only have room to travel once the `.wrap` column has
+       slack on both sides. Below this width the 24px inner padding is the only
+       slack, so a 38px offset would poke past the viewport edge. */
+    @media (max-width: 1240px) {
+      .reveal-l, .reveal-r { transform: translate3d(0, 20px, 0); }
+    }
+
+    @media (max-width: 720px) {
+      .site-head.is-stuck .head-inner { padding-top: 10px; padding-bottom: 9px; }
+      .hero-visual,
+      .aurora .a1, .aurora .a2, .aurora .a3 { transform: none; }
+      .reveal,
+      .reveal-up, .reveal-down, .reveal-l, .reveal-r, .reveal-zoom, .reveal-soft {
+        transform: translate3d(0, 18px, 0);
+      }
     }
   </style>
 </head>
@@ -571,14 +812,14 @@
       </svg>
     </button>
 
-    <a class="btn btn-primary btn-head" href="/">Get started</a>
+    <a class="btn btn-primary btn-head" href="/app">Get started</a>
   </div>
 </header>
 
 <!-- =============================== HERO =============================== -->
 <section class="hero">
   <div class="wrap hero-grid">
-    <div>
+    <div class="hero-copy">
       <span class="eyebrow"><span class="pulse"></span>New user guide</span>
       <h1>Everything you need to<br /><span class="grad">run your SmartBoards</span></h1>
       <p class="hero-lede">
@@ -587,13 +828,19 @@
         This page is a quick guided tour of what the system does and how to use it.
       </p>
       <div class="hero-cta">
-        <a class="btn btn-primary btn-lg" href="/">
+        <a class="btn btn-primary btn-lg" href="/app">
           Get started
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
         </a>
         <a class="btn btn-ghost btn-lg" href="#how-it-works">See how it works</a>
       </div>
       <p class="hero-note">Scroll down to read the full guide — or jump straight in, it takes a minute.</p>
+      <span class="hero-cue" aria-hidden="true">
+        <i>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </i>
+        Scroll to explore
+      </span>
     </div>
 
     <div class="hero-visual">
@@ -601,10 +848,10 @@
         <div class="shot-bar"><i></i><i></i><i></i><span>millennium-smartboard / dashboard</span></div>
         <img src="/images/smartboard-boardroom.jpg" alt="A Millennium SmartBoard in a conference room" />
       </div>
-      <div class="stat-strip">
-        <div class="stat"><b>11</b><span>Modules</span></div>
-        <div class="stat"><b>3</b><span>User roles</span></div>
-        <div class="stat"><b>24/7</b><span>Monitoring</span></div>
+      <div class="stat-strip" id="statStrip">
+        <div class="stat"><b data-count="11">11</b><span>Modules</span></div>
+        <div class="stat"><b data-count="3">3</b><span>User roles</span></div>
+        <div class="stat"><b data-count="24" data-suffix="/7">24/7</b><span>Monitoring</span></div>
       </div>
     </div>
   </div>
@@ -613,14 +860,14 @@
 <!-- ============================= FEATURES ============================= -->
 <section class="band" id="features">
   <div class="wrap">
-    <div class="sec-head reveal">
+    <div class="sec-head reveal reveal-l">
       <span class="sec-tag">Features</span>
       <h2>One system for the whole lifecycle of a board</h2>
       <p>From the moment a board is registered to the day it is retired, every record, repair and report lives in the same place.</p>
     </div>
 
     <div class="feat-grid">
-      <article class="feat reveal">
+      <article class="feat reveal reveal-up">
         <div class="feat-ico">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
         </div>
@@ -629,7 +876,7 @@
         <span class="feat-tag">Admin</span>
       </article>
 
-      <article class="feat reveal">
+      <article class="feat reveal reveal-up">
         <div class="feat-ico">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
         </div>
@@ -638,7 +885,7 @@
         <span class="feat-tag">All roles</span>
       </article>
 
-      <article class="feat reveal">
+      <article class="feat reveal reveal-up">
         <div class="feat-ico">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V5a2 2 0 0 1 2-2h2"/><path d="M4 17v2a2 2 0 0 0 2 2h2"/><path d="M20 7V5a2 2 0 0 0-2-2h-2"/><path d="M20 17v2a2 2 0 0 1-2 2h-2"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
         </div>
@@ -647,7 +894,7 @@
         <span class="feat-tag">All roles</span>
       </article>
 
-      <article class="feat reveal">
+      <article class="feat reveal reveal-up">
         <div class="feat-ico">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
         </div>
@@ -656,7 +903,7 @@
         <span class="feat-tag">Admin</span>
       </article>
 
-      <article class="feat reveal">
+      <article class="feat reveal reveal-up">
         <div class="feat-ico">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
         </div>
@@ -665,16 +912,7 @@
         <span class="feat-tag">Admin · Technician</span>
       </article>
 
-      <article class="feat reveal">
-        <div class="feat-ico">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a7 7 0 0 0-4 12.7V17a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-2.3A7 7 0 0 0 12 2z"/><line x1="9" y1="22" x2="15" y2="22"/></svg>
-        </div>
-        <h3>Predictive maintenance</h3>
-        <p>Early-warning signals on units showing rising failure risk, so parts can be ordered and repairs scheduled before a board goes down.</p>
-        <span class="feat-tag">Admin</span>
-      </article>
-
-      <article class="feat reveal">
+      <article class="feat reveal reveal-up">
         <div class="feat-ico">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
         </div>
@@ -683,16 +921,7 @@
         <span class="feat-tag">Admin</span>
       </article>
 
-      <article class="feat reveal">
-        <div class="feat-ico">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 9l5 3-5 3z"/></svg>
-        </div>
-        <h3>Content management</h3>
-        <p>Publish and schedule the playlists, lessons and welcome screens that run on the boards across your sites.</p>
-        <span class="feat-tag">Admin</span>
-      </article>
-
-      <article class="feat reveal">
+      <article class="feat reveal reveal-up">
         <div class="feat-ico">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
         </div>
@@ -701,7 +930,7 @@
         <span class="feat-tag">Admin · Customer</span>
       </article>
 
-      <article class="feat reveal">
+      <article class="feat reveal reveal-up">
         <div class="feat-ico">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg>
         </div>
@@ -710,7 +939,7 @@
         <span class="feat-tag">All roles</span>
       </article>
 
-      <article class="feat reveal">
+      <article class="feat reveal reveal-up">
         <div class="feat-ico">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         </div>
@@ -725,14 +954,14 @@
 <!-- =========================== HOW IT WORKS =========================== -->
 <section class="band band-alt" id="how-it-works">
   <div class="wrap">
-    <div class="sec-head reveal">
+    <div class="sec-head reveal reveal-l">
       <span class="sec-tag">How it works</span>
       <h2>From sign-in to a resolved repair</h2>
       <p>The normal day-to-day flow, in the order you will actually use it. Skip to whichever step you need.</p>
     </div>
 
     <div class="steps">
-      <div class="step reveal">
+      <div class="step reveal reveal-l">
         <div class="step-num">01</div>
         <div>
           <h3>Sign in to your account</h3>
@@ -741,7 +970,7 @@
         </div>
       </div>
 
-      <div class="step reveal">
+      <div class="step reveal reveal-l">
         <div class="step-num">02</div>
         <div>
           <h3>Find the board you care about</h3>
@@ -750,7 +979,7 @@
         </div>
       </div>
 
-      <div class="step reveal">
+      <div class="step reveal reveal-l">
         <div class="step-num">03</div>
         <div>
           <h3>Raise a ticket when something breaks</h3>
@@ -759,7 +988,7 @@
         </div>
       </div>
 
-      <div class="step reveal">
+      <div class="step reveal reveal-l">
         <div class="step-num">04</div>
         <div>
           <h3>Track the repair to completion</h3>
@@ -768,12 +997,12 @@
         </div>
       </div>
 
-      <div class="step reveal">
+      <div class="step reveal reveal-l">
         <div class="step-num">05</div>
         <div>
           <h3>Keep an eye on the bigger picture</h3>
-          <p>Use the dashboard, predictive alerts and reports to spot repeat offenders, watch stock, and check whether a board is still under warranty.</p>
-          <div class="step-meta"><span class="chip">Dashboard</span><span class="chip">Reports</span><span class="chip">Predictive</span><span class="chip chip-muted">Admin</span></div>
+          <p>Use the dashboard and reports to spot repeat offenders, watch stock, and check whether a board is still under warranty.</p>
+          <div class="step-meta"><span class="chip">Dashboard</span><span class="chip">Reports</span><span class="chip chip-muted">Admin</span></div>
         </div>
       </div>
     </div>
@@ -783,14 +1012,14 @@
 <!-- ============================ USER ROLES ============================ -->
 <section class="band" id="user-roles">
   <div class="wrap">
-    <div class="sec-head reveal">
+    <div class="sec-head reveal reveal-l">
       <span class="sec-tag">User roles</span>
       <h2>Three roles, three different views</h2>
       <p>Your role decides which modules appear in the sidebar. If a module is not listed below, it will not be visible to that role at all.</p>
     </div>
 
     <div class="role-grid">
-      <article class="role role-admin reveal">
+      <article class="role role-admin reveal reveal-zoom">
         <div class="role-ico">
           <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
         </div>
@@ -808,7 +1037,7 @@
         <div class="role-foot">Lands on <code>Dashboard</code> after signing in</div>
       </article>
 
-      <article class="role role-tech reveal">
+      <article class="role role-tech reveal reveal-zoom">
         <div class="role-ico">
           <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
         </div>
@@ -824,7 +1053,7 @@
         <div class="role-foot">Lands on <code>Tickets</code> after signing in</div>
       </article>
 
-      <article class="role role-customer reveal">
+      <article class="role role-customer reveal reveal-zoom">
         <div class="role-ico">
           <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/><line x1="9" y1="9" x2="9" y2="9.01"/><line x1="9" y1="13" x2="9" y2="13.01"/><line x1="9" y1="17" x2="9" y2="17.01"/></svg>
         </div>
@@ -848,7 +1077,7 @@
 <section class="band band-alt" id="about">
   <div class="wrap">
     <div class="about-grid">
-      <div class="about-copy reveal">
+      <div class="about-copy reveal reveal-l">
         <span class="sec-tag">About</span>
         <h2 style="font-size: clamp(1.65rem, 3.4vw, 2.4rem); font-weight: 800;">Built around the Millennium SmartBoard</h2>
         <p style="margin-top:16px;">
@@ -882,7 +1111,7 @@
         </ul>
       </div>
 
-      <aside class="about-card reveal">
+      <aside class="about-card reveal reveal-r">
         <h3>At a glance</h3>
         <p>What you are signing in to</p>
         <div class="spec">
@@ -897,11 +1126,11 @@
       </aside>
     </div>
 
-    <div class="final-cta reveal" style="margin-top: 76px;">
+    <div class="final-cta reveal reveal-soft" style="margin-top: 76px;">
       <h2>Ready to get started?</h2>
       <p>Sign in with the account you were issued. If you do not have one yet, ask your administrator to create it for you.</p>
       <div class="cta-row">
-        <a class="btn btn-white btn-lg" href="/">
+        <a class="btn btn-white btn-lg" href="/app">
           Get started
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
         </a>
@@ -913,7 +1142,7 @@
 
 <!-- ============================== FOOTER ============================== -->
 <footer class="site-foot">
-  <div class="wrap foot-inner">
+  <div class="wrap foot-inner reveal">
     <div class="foot-brand">
       <img src="/images/brains-logo.svg" alt="" />
       <div>
@@ -926,7 +1155,7 @@
       <a href="#how-it-works">How it works</a>
       <a href="#user-roles">User roles</a>
       <a href="#about">About</a>
-      <a href="/">Sign in</a>
+      <a href="/app">Sign in</a>
     </nav>
   </div>
 </footer>
@@ -969,15 +1198,63 @@
     });
   }
 
-  /* ---------- Sticky header: add the separating border/shadow once the
-       page has scrolled away from the very top ---------- */
+  /* ---------- Scroll-linked chrome ----------
+       One rAF-throttled handler drives three things: the header's stuck state,
+       the reading-progress bar (`--sp`) and the parallax layers (`--sy`).
+       The values are written as CSS custom properties on the SMALLEST element
+       that needs them — setting them on :root would invalidate the computed
+       style of the whole tree on every frame. The JS never touches layout;
+       every transform lives in the stylesheet. */
   var head = document.querySelector('.site-head');
-  function onScroll() {
-    if (head) head.classList.toggle('is-stuck', window.pageYOffset > 8);
+  var aurora = document.querySelector('.aurora');
+  var heroVisual = document.querySelector('.hero-visual');
+  var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  var ticking = false;
+
+  function applyScroll() {
+    ticking = false;
+    var y = window.pageYOffset || document.documentElement.scrollTop || 0;
+
+    if (head) {
+      head.classList.toggle('is-stuck', y > 8);
+      var span = document.documentElement.scrollHeight - window.innerHeight;
+      head.style.setProperty('--sp', span > 0 ? Math.min(1, y / span).toFixed(4) : '0');
+    }
+
+    revealRemaining();
+
+    if (reduceMotion.matches) return;
+
+    // Capped so the hero visual cannot drift out of its own section on a
+    // very long scroll.
+    var sy = Math.min(y, 1200);
+    if (aurora) aurora.style.setProperty('--sy', sy);
+    if (heroVisual) heroVisual.style.setProperty('--sy', sy);
   }
+
+  /* The reveal observer's bottom `rootMargin` inset is a PERCENTAGE of the
+     viewport, so the last block on the page can sit permanently inside that
+     excluded band. On a 900px-tall window the 8% inset is 72px and the footer
+     is only ~50px tall, so it never intersected and stayed at opacity 0 for
+     good. Whenever the user reaches the bottom, reveal whatever is left. */
+  function revealRemaining() {
+    var remaining = document.querySelectorAll('.reveal:not(.in)');
+    if (!remaining.length) return;
+    var atBottom = window.innerHeight + window.pageYOffset >=
+      document.documentElement.scrollHeight - 2;
+    if (!atBottom) return;
+    remaining.forEach(function (el) { el.classList.add('in'); });
+  }
+
+  function onScroll() {
+    if (ticking) return;
+    ticking = true;
+    window.requestAnimationFrame(applyScroll);
+  }
+
   window.addEventListener('scroll', onScroll, { passive: true });
   window.addEventListener('resize', onScroll, { passive: true });
-  onScroll();
+  applyScroll();
 
   /* ---------- Smooth anchor scrolling. The header is sticky, so we scroll
        the document and subtract the header's height to avoid landing with
@@ -1019,8 +1296,23 @@
     sections.forEach(function (s) { spy.observe(s); });
   }
 
-  /* ---------- Gentle reveal as sections scroll into view ---------- */
-  var reveals = document.querySelectorAll('.reveal');
+  /* ---------- Staggered reveal as sections scroll into view ----------
+       The delay is derived from each element's index among its `.reveal`
+       SIBLINGS, so a grid cascades in without any per-card markup while a lone
+       block (a section heading) still fires immediately. Capped so a long list
+       never crawls. */
+  var reveals = Array.prototype.slice.call(document.querySelectorAll('.reveal'));
+
+  reveals.forEach(function (el) {
+    var parent = el.parentElement;
+    if (!parent) return;
+    var siblings = Array.prototype.filter.call(parent.children, function (c) {
+      return c.classList && c.classList.contains('reveal');
+    });
+    if (siblings.length < 2) return;
+    el.style.setProperty('--d', Math.min(siblings.indexOf(el) * 80, 480) + 'ms');
+  });
+
   if ('IntersectionObserver' in window && reveals.length) {
     var ro = new IntersectionObserver(function (entries, obs) {
       entries.forEach(function (entry) {
@@ -1032,6 +1324,67 @@
     reveals.forEach(function (el) { ro.observe(el); });
   } else {
     reveals.forEach(function (el) { el.classList.add('in'); });
+  }
+
+  /* ---------- Stats: count up the first time they come into view ---------- */
+  var counters = Array.prototype.slice.call(document.querySelectorAll('[data-count]'));
+
+  function runCount(el) {
+    var target = parseInt(el.getAttribute('data-count'), 10);
+    var suffix = el.getAttribute('data-suffix') || '';
+    if (isNaN(target)) return;
+    if (reduceMotion.matches) { el.textContent = target + suffix; return; }
+
+    var duration = 1100;
+    var start = null;
+    function step(ts) {
+      if (start === null) start = ts;
+      var p = Math.min(1, (ts - start) / duration);
+      // Cubic ease-out, so the number decelerates into its final value instead
+      // of stopping dead.
+      el.textContent = Math.round(target * (1 - Math.pow(1 - p, 3))) + suffix;
+      if (p < 1) window.requestAnimationFrame(step);
+    }
+    window.requestAnimationFrame(step);
+  }
+
+  if (counters.length) {
+    // Zero them BEFORE first paint. The real value stays in the HTML as a
+    // no-JS fallback; without this the browser would paint the final number
+    // and then visibly jump back down to start counting.
+    counters.forEach(function (el) {
+      el.textContent = '0' + (el.getAttribute('data-suffix') || '');
+    });
+
+    if ('IntersectionObserver' in window) {
+      var co = new IntersectionObserver(function (entries, obs) {
+        entries.forEach(function (entry) {
+          if (!entry.isIntersecting) return;
+          runCount(entry.target);
+          obs.unobserve(entry.target);
+        });
+      }, { threshold: 0.4 });
+      counters.forEach(function (el) { co.observe(el); });
+    } else {
+      counters.forEach(runCount);
+    }
+  }
+
+  /* ---------- Feature cards: a spotlight that follows the cursor ----------
+       Pointer-only. Touch devices never fire mousemove, so the glow simply
+       stays off there and the card keeps its existing hover lift. */
+  if (window.matchMedia('(hover: hover)').matches) {
+    document.querySelectorAll('.feat').forEach(function (card) {
+      card.addEventListener('mousemove', function (e) {
+        var r = card.getBoundingClientRect();
+        card.style.setProperty('--mx', (e.clientX - r.left) + 'px');
+        card.style.setProperty('--my', (e.clientY - r.top) + 'px');
+      });
+      card.addEventListener('mouseleave', function () {
+        card.style.removeProperty('--mx');
+        card.style.removeProperty('--my');
+      });
+    });
   }
 })();
 </script>

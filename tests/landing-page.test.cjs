@@ -15,6 +15,7 @@ const path = require('path');
 
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const BASE = 'http://localhost:3000';
+const APP = BASE + '/app';
 const OUT = path.resolve('screenshots');
 
 let pass = 0, fail = 0;
@@ -226,8 +227,21 @@ const SECTIONS = ['features', 'how-it-works', 'user-roles', 'about'];
     aboutSpecs: document.querySelectorAll('#about .spec-row').length,
     getStarted: Array.prototype.filter.call(
       document.querySelectorAll('a.btn'), (a) => /get started/i.test(a.textContent)).length,
+    featureTitles: Array.prototype.map.call(
+      document.querySelectorAll('#features .feat h3'), (h) => h.textContent.trim()),
+    visibleText: document.body.innerText,
   }));
   check('features section lists feature cards', content.featureCards >= 8, 'cards=' + content.featureCards);
+  // The user asked for these two to come off the landing page entirely — not
+  // just the cards, but any copy that still advertises them.
+  check('no feature card advertises Predictive maintenance',
+    !content.featureTitles.some((t) => /predictive/i.test(t)), content.featureTitles.join(' | '));
+  check('no feature card advertises Content management',
+    !content.featureTitles.some((t) => /content management/i.test(t)), content.featureTitles.join(' | '));
+  check('"Predictive" appears nowhere in the visible page text',
+    !/predictive/i.test(content.visibleText));
+  check('"Content management" appears nowhere in the visible page text',
+    !/content management/i.test(content.visibleText));
   check('how-it-works lists numbered steps', content.steps >= 4, 'steps=' + content.steps);
   check('user roles shows exactly 3 roles', content.roleCards === 3, 'roles=' + content.roleCards);
   check('roles are Administrator / Technician / Customer',
@@ -342,7 +356,7 @@ const SECTIONS = ['features', 'how-it-works', 'user-roles', 'about'];
   const actx = await browser.createBrowserContext();
   const apage = await actx.newPage();
   await apage.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
-  await apage.goto(BASE, { waitUntil: 'networkidle2', timeout: 60000 });
+  await apage.goto(APP, { waitUntil: 'networkidle2', timeout: 60000 });
   await apage.evaluate(() => localStorage.clear());
   await apage.reload({ waitUntil: 'networkidle2' });
   await new Promise((r) => setTimeout(r, 2000));
@@ -374,7 +388,7 @@ const SECTIONS = ['features', 'how-it-works', 'user-roles', 'about'];
     const bp = await bctx.newPage();
     await bp.setCacheEnabled(false);
     await bp.evaluateOnNewDocument(() => localStorage.setItem('millennium-theme', 'dark'));
-    await bp.goto(BASE + '/', { waitUntil: 'networkidle0' });
+    await bp.goto(APP, { waitUntil: 'networkidle0' });
     await new Promise((r) => setTimeout(r, 600));
     const appBrand = await bp.evaluate(() => {
       const el = document.querySelector('.millennium-word');

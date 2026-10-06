@@ -9,6 +9,7 @@ const path = require('path');
 
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const BASE = 'http://localhost:3000';
+const APP = BASE + '/app';
 const OUT = path.resolve(__dirname, '..', 'screenshots', 'mobile-audit');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -22,7 +23,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const seedCtx = await browser.createBrowserContext();
   const seed = await seedCtx.newPage();
   await seed.setCacheEnabled(false);
-  await seed.goto(BASE + '/', { waitUntil: 'networkidle0' });
+  await seed.goto(APP, { waitUntil: 'networkidle0' });
   await seed.type('#loginUsername', 'admin');
   await seed.type('#loginPassword', '123123');
   await seed.click('#loginSubmitBtn');
@@ -74,7 +75,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     localStorage.setItem('millennium_auth_user', usr);
   }, storage.token, storage.user);
 
-  await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
+  await page.goto(APP, { waitUntil: 'domcontentloaded' });
   const shots = [{ at: 70 }, { at: 180 }, { at: 320 }];
   let prev = 0;
   for (const s of shots) {

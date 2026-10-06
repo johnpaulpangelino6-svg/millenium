@@ -16,6 +16,7 @@ const path = require('path');
 
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const BASE = 'http://localhost:3000';
+const APP = BASE + '/app';
 const OUT = path.resolve('screenshots');
 
 let pass = 0, fail = 0;
@@ -31,7 +32,7 @@ const ACCOUNTS = {
 };
 
 async function login(page, u, p) {
-  await page.goto(BASE, { waitUntil: 'networkidle2', timeout: 60000 });
+  await page.goto(APP, { waitUntil: 'networkidle2', timeout: 60000 });
   await page.evaluate(() => localStorage.clear());
   await page.reload({ waitUntil: 'networkidle2' });
   await new Promise((r) => setTimeout(r, 1500));
@@ -155,7 +156,7 @@ async function login(page, u, p) {
   const ctx = await browser.createBrowserContext();
   const page = await ctx.newPage();
   await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
-  await page.goto(BASE, { waitUntil: 'networkidle2', timeout: 60000 });
+  await page.goto(APP, { waitUntil: 'networkidle2', timeout: 60000 });
   await page.evaluate(() => localStorage.clear());
   await page.reload({ waitUntil: 'networkidle2' });
   await new Promise((r) => setTimeout(r, 1500));

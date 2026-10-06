@@ -36,6 +36,29 @@ app.use(passport.session());
 
 // Static frontend assets
 const publicPath = path.resolve(process.cwd(), 'public');
+
+// ---------------------------------------------------------------------------
+// Entry points
+//   '/'    -> the PUBLIC LANDING PAGE. This is what a visitor sees first when
+//             they open the link, before they have an account or a session.
+//   '/app' -> the signed-in dashboard shell.
+//
+// These MUST be declared BEFORE express.static. Static would otherwise answer
+// '/' with public/index.html (its default directory index) and the landing
+// page would never appear.
+//
+// Note: '/app' has no trailing slash on purpose. A trailing slash would make
+// the shell's root-relative asset URLs resolve under /app/, breaking them.
+// ---------------------------------------------------------------------------
+app.get('/', (req: Request, res: Response) => {
+  res.sendFile(path.resolve(publicPath, 'landing.html'));
+});
+
+app.get('/app', (req: Request, res: Response) => {
+  res.sendFile(path.resolve(publicPath, 'index.html'));
+});
+
+// Styles, scripts, images, and the bare /index.html + /landing.html files.
 app.use(express.static(publicPath));
 
 // API Router
@@ -64,7 +87,9 @@ app.use('/api', (req: Request, res: Response) => {
   });
 });
 
-// Public landing page / new-user guide.
+// Alias for the landing page.
+// '/' is now the canonical entry point; /landing is kept because the app's
+// sign-in screen links to it ("See what every feature and role does").
 // Must be declared BEFORE the SPA fallback, otherwise the catch-all below
 // would serve index.html for /landing and the page would never appear.
 // (/landing.html is already served directly by express.static.)
@@ -72,7 +97,9 @@ app.get('/landing', (req: Request, res: Response) => {
   res.sendFile(path.resolve(publicPath, 'landing.html'));
 });
 
-// Fallback to index.html for SPA frontend routing
+// Fallback to index.html for SPA frontend routing.
+// The app has no client-side URL router (tabs are state, not paths), so this
+// only catches mistyped/unknown paths and serves the dashboard shell.
 app.use((req: Request, res: Response) => {
   res.sendFile(path.resolve(publicPath, 'index.html'));
 });

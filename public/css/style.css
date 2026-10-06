@@ -86,6 +86,18 @@
   --glow-magenta-sm: 0 0 14px rgba(236, 72, 153, 0.35);
   --glow-purple-sm: 0 0 14px rgba(168, 85, 247, 0.35);
   --glow-emerald-sm: 0 0 14px rgba(52, 211, 153, 0.35);
+
+  /* Accent *text* colours.
+     --success / --danger / --warning are fill colours: as small text they only
+     reach ~2.4:1 on a white surface. These are the readable pair, and they were
+     referenced by 15 rules (.ticket-priority, .ticket-status, .warranty-badge-*,
+     .ticket-btn-danger, .form-error, .quad-item, .alert-pill) before ever being
+     defined — so every one of those declarations was silently dropped. */
+  --accent-rose-text:   #be123c;
+  --accent-amber-text:  #b45309;
+  --accent-blue-text:   #0369a1;
+  --accent-green-text:  #047857;
+  --accent-purple-text: #6d28d9;
 }
 
 /* ==========================================================================
@@ -141,6 +153,14 @@
   --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.75);
   --shadow-glow: 0 0 32px rgba(0, 242, 254, 0.35);
   --shadow-glow-magenta: 0 0 32px rgba(236, 72, 153, 0.3);
+
+  /* Accent text colours on dark surfaces — the bright counterparts of the
+     light-theme values in :root. */
+  --accent-rose-text:   #fb7185;
+  --accent-amber-text:  #fbbf24;
+  --accent-blue-text:   #38bdf8;
+  --accent-green-text:  #34d399;
+  --accent-purple-text: #c084fc;
 }
 
 /* Base Reset & Typography */
@@ -1670,27 +1690,28 @@ body::before {
 }
 
 /* ==========================================================================
-   Kanban Board
+   Tickets — kanban board, lanes, cards
+   --------------------------------------------------------------------------
+   Layout notes (learned the hard way):
+   - The board uses `auto-fit`, NOT `repeat(4, 1fr)`. A fixed 4-track grid left
+     the customer's 2-lane board occupying only half the width, and the old hard
+     breakpoints (4 -> 2 -> 1) fought the content. `auto-fit` also collapses
+     tracks that have no lane element and yields a 4 -> 3 -> 2 -> 1 progression,
+     so no separate media queries are needed.
+   - Cards are driven by classes and tokens only. The previous markup carried
+     ~10 inline hex/rgba values, and the priority chip's
+     `background: rgba(255,255,255,.05)` was invisible on a white lane.
    ========================================================================== */
 .kanban-board {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(248px, 1fr));
   gap: 16px;
-}
-
-@media (max-width: 1200px) {
-  .kanban-board {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 680px) {
-  .kanban-board {
-    grid-template-columns: 1fr;
-  }
+  align-items: start;
 }
 
 .kanban-column {
+  position: relative;
+  min-width: 0;                 /* let cards shrink instead of widening the page */
   background: var(--bg-surface);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
@@ -1699,67 +1720,292 @@ body::before {
   flex-direction: column;
   gap: 12px;
   box-shadow: var(--shadow-sm);
+  overflow: hidden;
 }
+
+/* Stage accent: one colour per lane so the board reads as a pipeline. */
+.kanban-column::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: var(--stage-accent, var(--border-color));
+}
+.kanban-column.stage-received,
+.kanban-column.stage-open       { --stage-accent: #38bdf8; }
+.kanban-column.stage-diagnosing { --stage-accent: #f59e0b; }
+.kanban-column.stage-repairing  { --stage-accent: #a855f7; }
+.kanban-column.stage-resolved   { --stage-accent: #10b981; }
+.kanban-column.is-empty         { --stage-accent: var(--border-color); }
 
 .kanban-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
   padding-bottom: 10px;
   border-bottom: 1px solid var(--border-color);
   font-family: 'Outfit', sans-serif;
   font-weight: 700;
-  font-size: 0.92rem;
+  font-size: 0.9rem;
   color: var(--text-primary);
 }
 
+.kanban-header-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Count chip. Replaces the old status-pill, which repeated the count and showed
+   "0 In Progress" in warning amber — an alarming colour for an empty lane. */
+.kanban-count {
+  flex: none;
+  min-width: 22px;
+  padding: 1px 7px;
+  border-radius: var(--radius-full);
+  font-size: 0.72rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  background: var(--bg-muted);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+.kanban-column.is-empty .kanban-count { color: var(--text-muted); }
+
+/* Empty lane: a quiet placeholder. A bare <p> made an empty stage look like a
+   blank box, i.e. like a rendering failure rather than "nothing here". */
+.kanban-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 18px 12px;
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  text-align: center;
+}
+.kanban-empty strong { font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); }
+.kanban-empty-ico { font-size: 1.3rem; opacity: 0.6; }
+.kanban-empty-lg { grid-column: 1 / -1; padding: 48px 20px; }
+.kanban-empty-lg .kanban-empty-ico { font-size: 2.6rem; }
+.kanban-empty-lg strong { font-size: 1.15rem; }
+.kanban-empty-lg span:last-child { max-width: 46ch; font-size: 0.9rem; }
+
+/* ------------------------------- ticket card ------------------------------ */
 .ticket-card {
+  --ticket-accent: var(--border-color);
+  position: relative;
+  overflow: hidden;
+  min-width: 0;
   background: var(--bg-canvas);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
-  padding: 14px;
+  padding: 13px 13px 13px 16px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 9px;
   box-shadow: var(--shadow-xs);
   cursor: pointer;
   transition: var(--transition);
+  outline: none;
 }
+
+/* Priority / status edge bar — the at-a-glance cue for scanning a lane. */
+.ticket-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--ticket-accent);
+}
+.ticket-card.pri-critical { --ticket-accent: #f43f5e; }
+.ticket-card.pri-high     { --ticket-accent: #f59e0b; }
+.ticket-card.pri-medium   { --ticket-accent: #38bdf8; }
+.ticket-card.pri-low      { --ticket-accent: #10b981; }
+.ticket-card.is-open      { --ticket-accent: #38bdf8; }
+.ticket-card.is-closed    { --ticket-accent: #10b981; }
 
 .ticket-card:hover {
   box-shadow: var(--shadow-md);
-  border-color: var(--border-focus);
+  border-color: var(--border-hover);
   transform: translateY(-2px);
+}
+.ticket-card:focus-visible {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px rgba(0, 242, 254, 0.25);
 }
 
 .ticket-top {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 .ticket-id {
+  min-width: 0;
   font-weight: 700;
   color: var(--primary);
-  font-size: 0.8rem;
+  font-size: 0.76rem;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+
+.ticket-priority,
+.ticket-status {
+  flex: none;
+  font-size: 0.66rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.ticket-priority.is-critical { color: var(--accent-rose-text);  background: rgba(244, 63, 94, 0.12);  border-color: rgba(244, 63, 94, 0.35); }
+.ticket-priority.is-high     { color: var(--accent-amber-text); background: rgba(245, 158, 11, 0.14); border-color: rgba(245, 158, 11, 0.35); }
+.ticket-priority.is-medium   { color: var(--accent-blue-text);  background: rgba(56, 189, 248, 0.14); border-color: rgba(56, 189, 248, 0.32); }
+.ticket-priority.is-low      { color: var(--accent-green-text); background: rgba(16, 185, 129, 0.14); border-color: rgba(16, 185, 129, 0.32); }
+
+.ticket-status.is-open   { color: var(--accent-blue-text);  background: rgba(56, 189, 248, 0.14); border-color: rgba(56, 189, 248, 0.32); }
+.ticket-status.is-closed { color: var(--accent-green-text); background: rgba(16, 185, 129, 0.14); border-color: rgba(16, 185, 129, 0.32); }
 
 .ticket-title {
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   font-weight: 700;
+  line-height: 1.32;
   color: var(--text-primary);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
-.ticket-meta {
+/* Facts: icon + value in a responsive grid, replacing five stacked
+   "Label: value" rows that wrapped to ~110px of card height in a 264px lane. */
+.ticket-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  gap: 5px 10px;
+  min-width: 0;
+}
+.ticket-fact {
   display: flex;
-  flex-direction: column;
-  gap: 3px;
-  font-size: 0.78rem;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.74rem;
+  line-height: 1.35;
   color: var(--text-secondary);
 }
+.ticket-fact-wide { grid-column: 1 / -1; }
+.ticket-fact-ico { flex: none; }
+.ticket-fact > b,
+.ticket-fact > span:not(.ticket-fact-ico) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ticket-fact > b { flex: 0 0 auto; color: var(--text-primary); font-weight: 700; }
+/* Secondary part of a fact (e.g. the device model after the serial). It is the
+   part that truncates first, so the identifier stays whole. */
+.ticket-fact-soft { flex: 1 1 auto; color: var(--text-muted); }
 
-.warranty-badge-active { color: var(--success); font-weight: 700; }
-.warranty-badge-expired { color: var(--danger); font-weight: 700; }
+.ticket-parts {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 5px 9px;
+  border-radius: var(--radius-sm);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--neon-cyan);
+  background: rgba(0, 242, 254, 0.09);
+  border: 1px solid rgba(0, 242, 254, 0.22);
+}
+.ticket-parts > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ticket-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 1px;
+  padding-top: 9px;
+  border-top: 1px solid var(--border-color);
+}
+.ticket-date {
+  flex: none;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.ticket-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* Real buttons, instead of four inline-styled ones that could not be themed. */
+.ticket-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: var(--bg-muted);
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: var(--transition);
+}
+.ticket-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.ticket-btn-chat {
+  color: var(--neon-cyan);
+  background: rgba(0, 242, 254, 0.1);
+  border-color: rgba(0, 242, 254, 0.3);
+}
+.ticket-btn-chat:hover { background: rgba(0, 242, 254, 0.18); color: var(--neon-cyan); }
+.ticket-btn-danger {
+  padding: 4px 8px;
+  color: var(--accent-rose-text);
+  background: rgba(244, 63, 94, 0.08);
+  border-color: rgba(244, 63, 94, 0.3);
+}
+.ticket-btn-danger:hover { background: rgba(244, 63, 94, 0.16); color: var(--accent-rose-text); }
+
+/* --success / --danger are fill colours; at 0.74rem on a white lane #10b981
+   measures ~2.4:1. The accent-text tokens are the readable pair. */
+.warranty-badge-active { color: var(--accent-green-text); font-weight: 700; }
+.warranty-badge-expired { color: var(--accent-rose-text); font-weight: 700; }
 
 /* ==========================================================================
    Modals
@@ -7153,6 +7399,7 @@ body {
 }
 
 .kpi-card-v2 {
+  --kpi-accent: #64748b;
   background: #0a132a;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 18px;
@@ -7162,6 +7409,34 @@ body {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  gap: 16px;
+  transition: transform var(--motion-duration-fast) var(--motion-ease),
+              box-shadow var(--motion-duration-fast) var(--motion-ease),
+              border-color var(--motion-duration-fast) var(--motion-ease);
+}
+
+/* Per-card accent — drives both the edge bar and the detail dot, so the
+   colour identity of each KPI is declared in exactly one place. */
+.kpi-card-v2.kpi-blue   { --kpi-accent: #00f2fe; }
+.kpi-card-v2.kpi-green  { --kpi-accent: #10b981; }
+.kpi-card-v2.kpi-amber  { --kpi-accent: #f59e0b; }
+.kpi-card-v2.kpi-purple { --kpi-accent: #a855f7; }
+
+.kpi-card-v2::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--kpi-accent);
+  opacity: 0.85;
+}
+
+.kpi-card-v2:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow: 0 12px 26px -10px rgba(0, 0, 0, 0.55);
 }
 
 .kpi-v2-header {
@@ -7171,13 +7446,15 @@ body {
 }
 
 .kpi-v2-icon {
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
+  width: 44px;
+  height: 44px;
+  border-radius: 13px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.2rem;
+  font-size: 1.25rem;
+  flex: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
 }
 
 .kpi-blue .kpi-v2-icon { background: rgba(0, 242, 254, 0.15); color: #00f2fe; }
@@ -7189,36 +7466,36 @@ body {
   font-size: 0.78rem;
   color: #94a3b8;
   font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 .kpi-v2-value {
-  font-size: 1.6rem;
+  font-size: 1.95rem;
   font-weight: 800;
   color: #ffffff;
-  line-height: 1.1;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
 }
 
-.kpi-v2-footer {
-  margin-top: 14px;
+/* Real, data-backed context line. This replaces the old `.kpi-v2-footer`
+   ("↗ +0 vs. last month" — a hardcoded string) and `.kpi-sparkline` (a fixed
+   SVG squiggle). Both were fabricated decoration carrying no information. */
+.kpi-v2-detail {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 7px;
   font-size: 0.72rem;
   color: #64748b;
+  line-height: 1.35;
 }
 
-.kpi-v2-trend {
-  color: #10b981;
-  font-weight: 700;
-}
-
-.kpi-sparkline {
-  position: absolute;
-  right: 12px;
-  bottom: 8px;
-  width: 80px;
-  height: 25px;
-  opacity: 0.6;
+.kpi-v2-detail-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--kpi-accent);
+  flex: none;
 }
 
 /* 3. Strip Bar */
@@ -9400,17 +9677,21 @@ body {
   }
 }
 
-/* ---- Dashboard KPI cards: let the footer text wrap instead of colliding ----
-   `.kpi-v2-footer` is a nowrap space-between flex row; at two-cards-per-row on
-   a phone the label and the trend badge overlapped each other. */
+/* ---- Dashboard KPI cards: detail line wraps without orphaning the dot ----
+   At two-cards-per-row on a phone the detail text wraps to a second line. It
+   must wrap *inside* the text span — if the flex row itself wraps, the 6px dot
+   is left alone on line 1 with the text hanging below it. */
 @media (max-width: 900px) {
-  .kpi-v2-footer {
-    flex-wrap: wrap;
-    gap: 3px 10px;
+  .kpi-v2-detail {
+    align-items: flex-start;
     line-height: 1.35;
   }
 
-  .kpi-v2-footer > * {
+  .kpi-v2-detail-dot {
+    margin-top: 5px;
+  }
+
+  .kpi-v2-detail > span:last-child {
     min-width: 0;
   }
 }
@@ -9472,3 +9753,845 @@ body {
 html.boot-has-session .auth-portal-overlay {
   display: none;
 }
+
+/* ==========================================================================
+   THEME SWITCH — header light/dark button
+   ==========================================================================
+   The app previously had NO theme control at all: toggleTheme() and
+   #themeToggleIcon existed in app.js but nothing in the markup called them, so
+   the only way to change theme was to set it from the landing page. Base look
+   is the dark variant; the light override lives in the light-mode block below.
+   ========================================================================== */
+.header-theme-btn {
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  background: #0d1733;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #cbd5e1;
+  transition: var(--transition);
+}
+.header-theme-btn:hover {
+  border-color: #00f2fe;
+  color: #00f2fe;
+  transform: translateY(-1px);
+}
+.header-theme-btn:active { transform: translateY(0); }
+.header-theme-btn span { pointer-events: none; }
+
+/* ==========================================================================
+   LIGHT MODE — app shell and the V2 redesign components
+   ==========================================================================
+   :root already holds the light palette ("Showroom White & Platinum") and
+   [data-theme="dark"] overrides it, so every token-driven rule in this file
+   already follows the theme correctly.
+
+   The V2 redesign block further up (~line 6434) does NOT. It hardcodes the dark
+   canvas (#060b19, #070d20, #0a132a, #0d1733, #090e1f, ...) and light greys for
+   text, and its body rule carries !important — so light mode rendered dark no
+   matter what data-theme said. Everything below re-skins those hardcoded values
+   for light mode only.
+
+   Two things keep this safe:
+     - it is purely additive, so dark mode is untouched;
+     - it sits at the end of the file, and html:not([data-theme="dark"]) X outranks a
+       bare X, so !important is only needed where the original already had it.
+
+   The .auth-* sign-in portal is deliberately excluded: it is a full-screen
+   photographic hero that stays dark in both themes.
+   ========================================================================== */
+
+/* ---- Canvas and app shell ---- */
+html:not([data-theme="dark"]) body {
+  background-color: var(--bg-canvas) !important;
+  color: var(--text-primary);
+}
+html:not([data-theme="dark"]) .app-container { background: var(--bg-canvas); }
+
+html:not([data-theme="dark"]) .app-header {
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-color);
+}
+html:not([data-theme="dark"]) .app-sidebar {
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border-color);
+}
+
+html:not([data-theme="dark"]) .header-search-input {
+  background: var(--bg-muted);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+}
+html:not([data-theme="dark"]) .header-search-input:focus { border-color: var(--primary); }
+html:not([data-theme="dark"]) .header-search-input::placeholder { color: var(--text-muted); }
+html:not([data-theme="dark"]) .header-search-container svg { color: var(--text-muted); }
+
+html:not([data-theme="dark"]) .header-notif-btn {
+  background: var(--bg-muted);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+html:not([data-theme="dark"]) .header-notif-btn:hover,
+html:not([data-theme="dark"]) .header-notif-btn.active {
+  background: var(--primary-light);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+html:not([data-theme="dark"]) .header-theme-btn {
+  background: var(--bg-muted);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+html:not([data-theme="dark"]) .header-theme-btn:hover {
+  background: var(--primary-light);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+html:not([data-theme="dark"]) .auth-user-chip {
+  background: var(--bg-muted);
+  border: 1px solid var(--border-color);
+}
+html:not([data-theme="dark"]) .auth-user-name { color: var(--text-primary); }
+html:not([data-theme="dark"]) .auth-user-sub { color: var(--text-muted); }
+html:not([data-theme="dark"]) .system-status-pill {
+  background: var(--success-light);
+  border-color: var(--success-border);
+}
+
+/* ---- Sidebar ---- */
+html:not([data-theme="dark"]) .sidebar-section-label { color: var(--text-muted); }
+html:not([data-theme="dark"]) .nav-item { color: var(--text-secondary); }
+html:not([data-theme="dark"]) .nav-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+html:not([data-theme="dark"]) .nav-item-main.active {
+  background: var(--primary-gradient);
+  color: #ffffff !important;
+}
+html:not([data-theme="dark"]) .sidebar-promo-card {
+  background: var(--bg-muted);
+  border: 1px solid var(--border-color);
+}
+html:not([data-theme="dark"]) .promo-info strong { color: var(--text-primary); }
+html:not([data-theme="dark"]) .promo-info span { color: var(--primary); }
+html:not([data-theme="dark"]) .promo-info small { color: var(--text-muted); }
+html:not([data-theme="dark"]) .sidebar-banner-box {
+  background: linear-gradient(135deg, #eef4ff 0%, #e0e7ff 100%);
+  border: 1px solid var(--border-color);
+}
+html:not([data-theme="dark"]) .banner-tag-line { color: var(--text-primary); }
+
+/* ---- Notifications ---- */
+html:not([data-theme="dark"]) .notif-dropdown {
+  /* !important because the original sets background-color: #090e1f !important */
+  background: var(--bg-surface) !important;
+  border: 1px solid var(--border-color) !important;
+  box-shadow: var(--shadow-lg);
+}
+html:not([data-theme="dark"]) .notif-dropdown-header {
+  background: var(--bg-muted) !important;
+  border-bottom: 1px solid var(--border-color) !important;
+}
+html:not([data-theme="dark"]) .notif-dropdown-header h4 { color: var(--text-primary) !important; }
+html:not([data-theme="dark"]) .notif-dropdown-body { background: var(--bg-surface) !important; }
+html:not([data-theme="dark"]) .notif-dropdown-body::-webkit-scrollbar-track { background: var(--bg-muted); }
+html:not([data-theme="dark"]) .notif-item {
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-color);
+}
+html:not([data-theme="dark"]) .notif-item:hover { background: var(--bg-hover) !important; }
+html:not([data-theme="dark"]) .notif-item.unread { background: var(--primary-light) !important; }
+html:not([data-theme="dark"]) .notif-item.unread:hover { background: #e0f2fe !important; }
+html:not([data-theme="dark"]) .notif-item-title { color: var(--text-primary) !important; }
+html:not([data-theme="dark"]) .notif-item-msg { color: var(--text-secondary) !important; }
+html:not([data-theme="dark"]) .notif-item-time { color: var(--text-muted) !important; }
+html:not([data-theme="dark"]) .notif-item.unread .notif-item-time { color: var(--primary) !important; }
+html:not([data-theme="dark"]) .notif-mark-read { color: var(--primary) !important; }
+html:not([data-theme="dark"]) .notif-mark-read:hover { color: #ffffff !important; }
+html:not([data-theme="dark"]) .notif-count-badge { border-color: var(--bg-surface); }
+
+/* ---- Dashboard hero ---- */
+html:not([data-theme="dark"]) .hero-banner-card {
+  background: linear-gradient(135deg, #eef4ff 0%, #e3ecff 60%, #efe9fe 100%);
+  border: 1px solid var(--border-color);
+}
+html:not([data-theme="dark"]) .hero-greeting { color: var(--text-primary); }
+html:not([data-theme="dark"]) .hero-subtext { color: var(--text-secondary); }
+html:not([data-theme="dark"]) .hero-date-chip {
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+}
+html:not([data-theme="dark"]) .hero-accent-title { color: var(--primary); }
+html:not([data-theme="dark"]) .hero-display-frame { border: 4px solid var(--border-color); }
+html:not([data-theme="dark"]) .hero-dots .dot { background: rgba(15, 23, 42, 0.15); }
+html:not([data-theme="dark"]) .hero-dots .dot.active { background: var(--primary); }
+
+/* ---- Dashboard cards ---- */
+html:not([data-theme="dark"]) .quick-actions-card,
+html:not([data-theme="dark"]) .kpi-card-v2,
+html:not([data-theme="dark"]) .widget-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+}
+html:not([data-theme="dark"]) .quick-actions-title,
+html:not([data-theme="dark"]) .kpi-v2-value,
+html:not([data-theme="dark"]) .widget-title,
+html:not([data-theme="dark"]) .stock-alerts-title {
+  color: var(--text-primary);
+}
+html:not([data-theme="dark"]) .kpi-v2-label,
+html:not([data-theme="dark"]) .donut-legend,
+html:not([data-theme="dark"]) .activity-header,
+html:not([data-theme="dark"]) .recent-tix-header { color: var(--text-secondary); }
+html:not([data-theme="dark"]) .kpi-v2-detail,
+html:not([data-theme="dark"]) .client-type-label { color: var(--text-muted); }
+html:not([data-theme="dark"]) .widget-link,
+html:not([data-theme="dark"]) .recent-tix-header button { color: var(--primary); }
+
+/* ---- Dashboard strip bar ---- */
+html:not([data-theme="dark"]) .strip-bar-v2 {
+  background: var(--bg-muted);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+html:not([data-theme="dark"]) .strip-item strong { color: var(--text-primary); }
+html:not([data-theme="dark"]) .strip-divider { background: var(--border-color); }
+html:not([data-theme="dark"]) .strip-btn-link {
+  background: var(--bg-hover);
+  border: 1px solid var(--border-color);
+  color: var(--primary);
+}
+html:not([data-theme="dark"]) .strip-btn-link:hover { background: var(--primary-light); }
+
+/* ---- Dashboard widgets: client chips, recent tickets, branch select ---- */
+html:not([data-theme="dark"]) .client-type-box,
+html:not([data-theme="dark"]) .recent-tix-item { background: var(--bg-muted); }
+html:not([data-theme="dark"]) .client-chip {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+html:not([data-theme="dark"]) .client-chip.active {
+  background: var(--primary-light);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+html:not([data-theme="dark"]) .branch-select-v2 {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
+/* ---- Tables, forms and dialogs (V2 overrides) ---- */
+html:not([data-theme="dark"]) .form-section { background: var(--bg-muted); }
+html:not([data-theme="dark"]) .modal-content.modal-form .modal-header,
+html:not([data-theme="dark"]) .modal-footer { background: var(--bg-surface-elevated); }
+html:not([data-theme="dark"]) .form-textarea:disabled { background: var(--bg-hover); }
+html:not([data-theme="dark"]) .detail-tile { background: var(--bg-muted); }
+html:not([data-theme="dark"]) .profile-identity { background: var(--bg-muted); }
+
+/* ---- Neon cyan accent ----
+   --neon-cyan (#00f2fe) is a glow colour designed for the dark canvas. Used as
+   TEXT it is almost invisible on white — and it is referenced ~43 times across
+   the file (plus inline styles in app.js), so darkening the token fixes every
+   usage at once instead of chasing individual selectors. Borders and glows just
+   become a deeper cyan, which still reads as the same accent on a light page. */
+html:not([data-theme="dark"]) {
+  --neon-cyan: #0e7490;
+}
+
+/* The sign-in portal is a dark photographic hero, so it keeps the bright neon. */
+html:not([data-theme="dark"]) .auth-portal-overlay {
+  --neon-cyan: #00f2fe;
+}
+
+/* ---- Donut centre readout ----
+   .donut-center-text strong is #fff, which disappears inside a white card. */
+html:not([data-theme="dark"]) .donut-center-text strong { color: var(--text-primary); }
+html:not([data-theme="dark"]) .donut-center-text small { color: var(--text-muted); }
+html:not([data-theme="dark"]) .donut-ring { stroke: rgba(15, 23, 42, 0.08); }
+
+/* ---- KPI card icons ----
+   The blue variant hardcodes the neon cyan on a pale cyan tint. */
+html:not([data-theme="dark"]) .kpi-blue .kpi-v2-icon {
+  background: rgba(2, 132, 199, 0.12);
+  color: var(--primary);
+}
+html:not([data-theme="dark"]) .kpi-green .kpi-v2-icon {
+  background: rgba(5, 150, 105, 0.12);
+  color: #047857;
+}
+html:not([data-theme="dark"]) .kpi-amber .kpi-v2-icon {
+  background: rgba(217, 119, 6, 0.14);
+  color: #b45309;
+}
+html:not([data-theme="dark"]) .kpi-purple .kpi-v2-icon {
+  background: rgba(124, 58, 237, 0.12);
+  color: #6d28d9;
+}
+
+/* Light-mode accents use the darker variants so the edge bar and the detail dot
+   stay legible against a white card instead of washing out. */
+html:not([data-theme="dark"]) .kpi-card-v2.kpi-blue   { --kpi-accent: #0284c7; }
+html:not([data-theme="dark"]) .kpi-card-v2.kpi-green  { --kpi-accent: #047857; }
+html:not([data-theme="dark"]) .kpi-card-v2.kpi-amber  { --kpi-accent: #b45309; }
+html:not([data-theme="dark"]) .kpi-card-v2.kpi-purple { --kpi-accent: #6d28d9; }
+
+html:not([data-theme="dark"]) .kpi-card-v2:hover {
+  border-color: var(--border-hover);
+  box-shadow: var(--shadow-md);
+}
+
+/* ---- Brand badge next to the wordmark ---- */
+html:not([data-theme="dark"]) .smartboard-badge {
+  background: rgba(2, 132, 199, 0.1);
+  border-color: rgba(2, 132, 199, 0.32);
+  box-shadow: none;
+}
+
+/* ---- Accent TEXT tokens ----
+   The app uses bright/pastel accents (sky-400, emerald-400, amber-500,
+   purple-500, rose-500) as text on a pale tint of the same hue. That reads
+   well on the dark canvas but washes out badly on white. app.js now references
+   these tokens instead of the raw hex, so one definition per theme fixes every
+   badge, pill and link at once.
+
+   The dark values reproduce the original hexes exactly, so dark mode is
+   unchanged. */
+[data-theme="dark"] {
+  --accent-blue-text: #38bdf8;
+  --accent-green-text: #34d399;
+  --accent-amber-text: #f59e0b;
+  --accent-purple-text: #a855f7;
+  --accent-rose-text: #f43f5e;
+}
+html:not([data-theme="dark"]) {
+  --accent-blue-text: #0369a1;
+  --accent-green-text: #047857;
+  --accent-amber-text: #b45309;
+  --accent-purple-text: #6d28d9;
+  --accent-rose-text: #be123c;
+}
+
+/* ---- Cyan links and buttons that hardcode the neon hex ---- */
+html:not([data-theme="dark"]) .view-inv-link,
+html:not([data-theme="dark"]) .activity-header button { color: var(--primary); }
+
+/* ---- Remaining hardcoded light greys used as body text ---- */
+html:not([data-theme="dark"]) .act-desc,
+html:not([data-theme="dark"]) .stock-alert-item strong,
+html:not([data-theme="dark"]) .act-time { color: var(--text-secondary); }
+
+/* ---- Ticket status quadrants and stock alert pills ----
+   Bright accent text on a pale tint of the same hue: the pattern that reads
+   well on the dark canvas but washes out on white. */
+html:not([data-theme="dark"]) .quad-item.purple,
+html:not([data-theme="dark"]) .quad-item.violet { color: var(--accent-purple-text); }
+html:not([data-theme="dark"]) .quad-item.green { color: var(--accent-green-text); }
+html:not([data-theme="dark"]) .quad-item.amber { color: var(--accent-amber-text); }
+html:not([data-theme="dark"]) .alert-pill.out { color: var(--accent-rose-text); }
+html:not([data-theme="dark"]) .alert-pill.low { color: var(--accent-amber-text); }
+
+/* ---- Stock gauge ---- */
+html:not([data-theme="dark"]) .stock-gauge-circle { border-left-color: rgba(15, 23, 42, 0.1); }
+html:not([data-theme="dark"]) .stock-gauge-circle strong { color: var(--text-primary); }
+html:not([data-theme="dark"]) .stock-gauge-circle small { color: var(--text-muted); }
+
+/* ---- Mobile drawer scrim: the dark scrim reads as a shadow, keep it subtle --- */
+html:not([data-theme="dark"]) .sidebar-overlay { background: rgba(15, 23, 42, 0.35); }
+
+/* ---- Brand wordmark ----
+   The pre-existing `[data-theme="light"] .millennium-word` rule at ~line 392 is
+   DEAD CODE: light mode is expressed by REMOVING data-theme, so that selector
+   never matches. Without this, light mode would clip the bright chrome gradient
+   (meant for a dark background) onto white, washing the wordmark out. */
+html:not([data-theme="dark"]) .millennium-word {
+  background: linear-gradient(90deg,
+    #525252 0%,
+    #737373 10%,
+    #b0b0b0 22%,
+    #d4d4d4 30%,
+    #a3a3a3 38%,
+    #525252 58%,
+    #737373 67%,
+    #a3a3a3 78%,
+    #737373 89%,
+    #525252 100%
+  );
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 1px 2px rgba(15, 23, 42, 0.18));
+}
+
+/* --------------------------------------------------------------------------
+   Sidebar nav text + badges.
+
+   Appended LAST on purpose: the base `.nav-item` / `.nav-text-group` /
+   `.nav-sub` / `.sidebar-badge` rules live at ~line 6824, i.e. after every
+   earlier @media block, so an override placed earlier in this file would lose
+   at equal specificity.
+
+   The badges now carry a bare number ("2") with the full wording in the
+   tooltip. A worded badge ("2 Open") widened the pill enough that
+   .nav-text-group was squeezed and "Service & Support" wrapped onto a third
+   line inside the 250px sidebar — most visible on the Tickets page, whose
+   badge is always populated.
+   -------------------------------------------------------------------------- */
+.nav-item .nav-text-group { min-width: 0; }
+.nav-item .nav-title,
+.nav-item .nav-sub {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nav-item .sidebar-badge {
+  flex: none;
+  min-width: 20px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.nav-item .sidebar-badge[hidden] { display: none; }
+
+/* ==========================================================================
+   SEGMENTED TABS — the mode switch in the Restock Shipment dialog
+   ==========================================================================
+   The old markup flipped the two buttons between .btn-primary and
+   .btn-secondary to show which tab was active. That made an *inactive* tab
+   look like a primary action, and the row was separated by a hard-coded
+   rgba(255,255,255,0.08) rule that is invisible in the light theme.
+   This is a proper segmented control driven entirely by theme tokens.
+   ========================================================================== */
+.seg-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--radius-md);
+  background: var(--bg-muted);
+  border: 1px solid var(--border-color);
+}
+
+.seg-tab {
+  flex: 1 1 0;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.25;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: var(--transition);
+}
+
+.seg-tab:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+/* The active tab is a *tinted* pill, not a filled primary gradient.
+   Two reasons:
+     1. `--primary-gradient` is a deep blue in the light theme but a bright
+        cyan in the dark theme, so white text on it measures 1.4:1 there.
+     2. A tab that looks identical to the submit button flattens the dialog's
+        hierarchy — the old markup had exactly that problem.
+   `--primary-hover` is used for the text because `--primary` (#0284c7) only
+   reaches 3.9:1 on `--primary-light` in the light theme; #0369a1 reaches 5.3:1.
+   Both themes measure >= 6:1 with this pairing. */
+.seg-tab.is-active {
+  background: var(--primary-light);
+  color: var(--primary-hover);
+  box-shadow: inset 0 0 0 1px var(--primary), var(--shadow-xs);
+}
+
+.seg-tab:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+/* Vertical rhythm for stacked sections inside a dialog body. */
+.form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Inline validation message. Replaces the inline color:#f43f5e, which is a
+   *fill* colour and only reaches ~3.8:1 as small text on white. */
+.form-error {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--accent-rose-text);
+}
+
+/* ==========================================================================
+   ROLE DASHBOARDS — CUSTOMER & TECHNICIAN
+   Shared record-list primitives used by renderCustomerDashboardView() and
+   renderTechnicianDashboardView(). Everything here is token-driven so both
+   themes are correct without a second rule block; the few light-mode
+   adjustments live at the end.
+   ========================================================================== */
+
+/* Two record sections side by side, stacking on narrow screens. */
+.dash-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+/* ---- Section shell ---- */
+.rec-section {
+  background: #0a132a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.rec-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.rec-section-title {
+  font-size: 0.98rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+
+.rec-section-sub {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.rec-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* ---- Record row ---- */
+.rec-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--bg-muted);
+  border: 1px solid var(--border-subtle);
+  transition: var(--transition);
+  min-width: 0;
+}
+
+.rec-row[role="button"] { cursor: pointer; }
+
+.rec-row[role="button"]:hover {
+  border-color: var(--border-hover);
+  transform: translateX(2px);
+}
+
+.rec-row[role="button"]:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+.rec-row-icon {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--primary-light);
+  font-size: 1rem;
+}
+
+.rec-row-body { flex: 1 1 auto; min-width: 0; }
+
+.rec-row-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.rec-row-meta {
+  font-size: 0.73rem;
+  color: var(--text-muted);
+  margin-top: 3px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.rec-row-side { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; }
+
+.rec-row-value {
+  font-size: 0.82rem;
+  font-weight: 800;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+/* ---- Tone pills ---- */
+.rec-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-size: 0.7rem;
+  font-weight: 700;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+.rec-pill.tone-ok      { color: var(--accent-green-text);  background: rgba(16, 185, 129, 0.14);  border-color: rgba(16, 185, 129, 0.35); }
+.rec-pill.tone-warn    { color: var(--accent-amber-text);  background: rgba(245, 158, 11, 0.15);  border-color: rgba(245, 158, 11, 0.38); }
+.rec-pill.tone-danger  { color: var(--accent-rose-text);   background: rgba(244, 63, 94, 0.13);   border-color: rgba(244, 63, 94, 0.38); }
+.rec-pill.tone-info    { color: var(--accent-blue-text);   background: rgba(56, 189, 248, 0.14);  border-color: rgba(56, 189, 248, 0.34); }
+.rec-pill.tone-purple  { color: var(--accent-purple-text); background: rgba(168, 85, 247, 0.15);  border-color: rgba(168, 85, 247, 0.36); }
+.rec-pill.tone-neutral { color: var(--text-secondary);     background: var(--bg-hover);            border-color: var(--border-color); }
+
+/* ---- Empty state ---- */
+.rec-empty {
+  text-align: center;
+  padding: 26px 16px;
+  border: 1px dashed var(--border-color);
+  border-radius: 12px;
+}
+
+.rec-empty-icon { font-size: 1.9rem; margin-bottom: 8px; opacity: 0.75; }
+
+.rec-empty-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.rec-empty-hint {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  line-height: 1.55;
+  max-width: 380px;
+  margin: 0 auto;
+}
+
+/* ---- Device card ---- */
+.rec-device {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--bg-muted);
+  border: 1px solid var(--border-subtle);
+  min-width: 0;
+}
+
+.rec-device-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.rec-device-id {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.rec-device-model {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.rec-device-meta { font-size: 0.76rem; color: var(--text-secondary); }
+
+.rec-device-specs {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 0.73rem;
+  color: var(--text-muted);
+  padding: 9px 11px;
+  border-radius: 9px;
+  background: var(--bg-hover);
+  overflow-wrap: anywhere;
+}
+
+.rec-device-specs strong { color: var(--text-secondary); font-weight: 700; }
+
+.rec-device-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.rec-device-actions .btn { flex: 1 1 auto; }
+
+/* ---- Support block ---- */
+.rec-support {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 13px 14px;
+  border-radius: 12px;
+  background: var(--bg-muted);
+  border: 1px solid var(--border-subtle);
+}
+
+.rec-support-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.79rem;
+}
+
+.rec-support-row span { color: var(--text-muted); }
+.rec-support-row strong {
+  color: var(--text-primary);
+  font-weight: 700;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.rec-support-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 0.79rem;
+  color: var(--text-secondary);
+}
+
+.rec-support-lines a { color: var(--primary); text-decoration: none; font-weight: 700; }
+.rec-support-lines a:hover { text-decoration: underline; }
+
+/* ---- Hero stat cluster (customer + technician heroes) ---- */
+.hero-stat-cluster {
+  display: flex;
+  gap: 10px;
+  z-index: 2;
+  flex-wrap: wrap;
+}
+
+.hero-stat-box {
+  min-width: 82px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  text-align: center;
+}
+
+.hero-stat-value {
+  font-size: 1.35rem;
+  font-weight: 800;
+  font-family: 'JetBrains Mono', monospace;
+  color: #ffffff;
+  line-height: 1.1;
+}
+
+.hero-stat-label {
+  font-size: 0.68rem;
+  color: rgba(255, 255, 255, 0.72);
+  margin-top: 3px;
+  white-space: nowrap;
+}
+
+/* ---- Technician priority banner ---- */
+.tech-alert-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  border-radius: 14px;
+  background: var(--warning-light);
+  border: 1px solid var(--warning-border);
+  flex-wrap: wrap;
+}
+
+.tech-alert-icon { font-size: 1.3rem; flex: 0 0 auto; }
+
+.tech-alert-bar > div {
+  flex: 1 1 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tech-alert-bar strong { font-size: 0.88rem; color: var(--text-primary); }
+.tech-alert-bar span { font-size: 0.78rem; color: var(--text-secondary); }
+
+/* ---- Responsive ---- */
+@media (max-width: 1200px) {
+  .dash-2col { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 720px) {
+  .rec-section { padding: 15px; border-radius: 16px; }
+  .rec-row { align-items: flex-start; }
+  .rec-row-side { flex-direction: column; align-items: flex-end; }
+  .hero-stat-cluster { width: 100%; }
+  .hero-stat-box { flex: 1 1 0; min-width: 0; padding: 10px 8px; }
+  .hero-stat-value { font-size: 1.1rem; }
+  .hero-stat-label { font-size: 0.62rem; white-space: normal; }
+  .rec-device-actions .btn { flex: 1 1 100%; }
+}
+
+/* ---- Light theme ----
+   The section shell mirrors .widget-card, which the V2 layer already restyles
+   for light mode; the hero stat boxes need their own because the dark values
+   are white-on-translucent-white. */
+html:not([data-theme="dark"]) .rec-section {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+}
+
+html:not([data-theme="dark"]) .hero-stat-box {
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid var(--border-color);
+}
+
+html:not([data-theme="dark"]) .hero-stat-value { color: var(--text-primary); }
+html:not([data-theme="dark"]) .hero-stat-label { color: var(--text-secondary); }
+
+html:not([data-theme="dark"]) .rec-pill.tone-ok      { background: rgba(16, 185, 129, 0.12); }
+html:not([data-theme="dark"]) .rec-pill.tone-warn    { background: rgba(245, 158, 11, 0.14); }
+html:not([data-theme="dark"]) .rec-pill.tone-danger  { background: rgba(244, 63, 94, 0.11); }
+html:not([data-theme="dark"]) .rec-pill.tone-info    { background: rgba(56, 189, 248, 0.12); }
+html:not([data-theme="dark"]) .rec-pill.tone-purple  { background: rgba(168, 85, 247, 0.12); }
