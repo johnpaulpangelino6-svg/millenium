@@ -352,7 +352,17 @@ async function main() {
   await page.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
   await page.evaluate(() => applyTheme('light'));
   await page.evaluate(() => renderApp());
-  await sleep(400);
+  // Wait for the records to actually land in the DOM. renderApp() is async and
+  // resolves its record lists after a round-trip, so a fixed sleep races it:
+  // at 400ms `.dash-2col` is not yet present and the check below reads 0
+  // columns for a board that is genuinely one column once it renders (~900ms).
+  // Poll for the element instead of guessing the duration.
+  for (let i = 0; i < 40; i++) {
+    const ready = await page.evaluate(() => !!document.querySelector('.dash-2col'));
+    if (ready) break;
+    await sleep(100);
+  }
+  await sleep(200);
 
   const custMobile = await page.evaluate(() => {
     const de = document.documentElement;
@@ -371,7 +381,13 @@ async function main() {
 
   await techPage.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
   await techPage.evaluate(() => renderApp());
-  await sleep(400);
+  // Same race as the customer block above — poll for the rendered records.
+  for (let i = 0; i < 40; i++) {
+    const ready = await techPage.evaluate(() => !!document.querySelector('.dash-2col'));
+    if (ready) break;
+    await sleep(100);
+  }
+  await sleep(200);
 
   const techMobile = await techPage.evaluate(() => {
     const de = document.documentElement;

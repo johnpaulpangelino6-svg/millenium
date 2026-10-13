@@ -117,7 +117,12 @@
 
   --text-primary: #f8fafc;
   --text-secondary: #94a3b8;
-  --text-muted: #64748b;
+  /* Dark mode needs its own muted step. #64748b is the LIGHT-mode value and
+     only reaches 3.87:1 on the dark section shell (#0a132a) — below WCAG AA
+     for the small (0.73–0.76rem) metadata it is used for. #9aa8bd measures
+     7.64:1 on #0a132a and 7.48:1 on the translucent --bg-muted, keeping the
+     muted/secondary hierarchy intact (primary 17.2:1, secondary 7.2:1). */
+  --text-muted: #9aa8bd;
 
   --primary: #00f2fe;
   --primary-hover: #38bdf8;
