@@ -421,6 +421,37 @@
     }
     .chip-muted { color: var(--text-3); }
 
+    /* ---------- Booking ---------- */
+    /* Cross-reference links inside body copy. A bare `a` inherits the text
+       colour, so an inline jump link needs its own treatment or it reads as
+       emphasis instead of as a link. */
+    .sec-head p a, .step p a {
+      color: var(--brand); font-weight: 700; text-decoration: underline;
+      text-decoration-thickness: 2px; text-underline-offset: 3px;
+      text-decoration-color: color-mix(in srgb, var(--brand) 40%, transparent);
+      transition: text-decoration-color .18s var(--ease);
+    }
+    .sec-head p a:hover, .step p a:hover { text-decoration-color: var(--brand); }
+
+    /* The booking lifecycle on a single line, under the numbered steps. */
+    .book-flow {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 9px;
+      margin-top: 26px; padding: 18px 22px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); box-shadow: var(--shadow-sm);
+    }
+    .bf-label {
+      font-size: .7rem; font-weight: 800; letter-spacing: .13em;
+      text-transform: uppercase; color: var(--text-3); margin-right: 3px;
+    }
+    .bf-arrow { color: var(--text-3); font-weight: 700; }
+    .bf-sep {
+      font-size: .68rem; font-weight: 800; letter-spacing: .1em;
+      text-transform: uppercase; color: var(--text-3); padding: 0 3px;
+    }
+    /* Off-path statuses are dashed so they read as branches, not as steps. */
+    .book-flow .chip-muted { border-style: dashed; }
+
     /* ---------- User roles ---------- */
     .role-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
     .role {
@@ -802,6 +833,7 @@
     <nav class="nav-links" id="navLinks" aria-label="Page sections">
       <a href="#features">Features</a>
       <a href="#how-it-works">How it works</a>
+      <a href="#booking">Booking</a>
       <a href="#user-roles">User roles</a>
       <a href="#about">About</a>
     </nav>
@@ -824,7 +856,7 @@
       <h1>Everything you need to<br /><span class="grad">run your SmartBoards</span></h1>
       <p class="hero-lede">
         The Millennium SmartBoard Management System keeps every interactive board in your
-        fleet monitored, maintained and under warranty — from a single dashboard.
+        fleet monitored, booked, maintained and under warranty — from a single dashboard.
         This page is a quick guided tour of what the system does and how to use it.
       </p>
       <div class="hero-cta">
@@ -957,7 +989,7 @@
     <div class="sec-head reveal reveal-l">
       <span class="sec-tag">How it works</span>
       <h2>From sign-in to a resolved repair</h2>
-      <p>The normal day-to-day flow, in the order you will actually use it. Skip to whichever step you need.</p>
+      <p>The normal day-to-day flow for keeping boards running, in the order you will actually use it. Renting a board follows a different path — that is covered in <a href="#booking">Booking</a>.</p>
     </div>
 
     <div class="steps">
@@ -1009,8 +1041,118 @@
   </div>
 </section>
 
+<!-- ============================= BOOKING ============================== -->
+<section class="band" id="booking">
+  <div class="wrap">
+    <div class="sec-head reveal reveal-l">
+      <span class="sec-tag">Booking</span>
+      <h2>How booking a board works</h2>
+      <p>Renting a board runs on its own track, separate from maintenance. This is what happens between requesting a unit and getting it back on the shelf — including who can do what, and how the price is worked out.</p>
+    </div>
+
+    <div class="steps">
+      <div class="step reveal reveal-l">
+        <div class="step-num">01</div>
+        <div>
+          <h3>Request a board for a date range</h3>
+          <p>Open <b>Rentals</b> and create a booking: choose the board, the start and end date, a purpose, the delivery address and a contact. A customer can also start from their own portal with <b>Book a Device</b>.</p>
+          <div class="step-meta"><span class="chip">Rentals</span><span class="chip chip-muted">Admin · Customer</span></div>
+        </div>
+      </div>
+
+      <div class="step reveal reveal-l">
+        <div class="step-num">02</div>
+        <div>
+          <h3>The system blocks double-bookings</h3>
+          <p>Before anything is saved, the board is checked against every other booking that is still Pending, Approved or Active. If the dates overlap, the request is refused and the message names the booking that already holds the unit.</p>
+          <div class="step-meta"><span class="chip">Conflict check</span><span class="chip chip-muted">Automatic</span></div>
+        </div>
+      </div>
+
+      <div class="step reveal reveal-l">
+        <div class="step-num">03</div>
+        <div>
+          <h3>A new booking starts as Pending</h3>
+          <p>Creating a booking is a request, not a confirmed reservation. It sits in the queue until an administrator reviews it and sets the daily rate and deposit for that rental.</p>
+          <div class="step-meta"><span class="chip">Pending</span><span class="chip chip-muted">Awaiting approval</span></div>
+        </div>
+      </div>
+
+      <div class="step reveal reveal-l">
+        <div class="step-num">04</div>
+        <div>
+          <h3>Approved, then handed over</h3>
+          <p>Approving locks the agreed price in. When the board physically leaves the building an administrator activates the booking: the status becomes <b>Active</b> and the deposit is recorded as collected.</p>
+          <div class="step-meta"><span class="chip">Approved</span><span class="chip">Active</span><span class="chip chip-muted">Admin</span></div>
+        </div>
+      </div>
+
+      <div class="step reveal reveal-l">
+        <div class="step-num">05</div>
+        <div>
+          <h3>While the board is out</h3>
+          <p>The unit is shown as rented out on its device record. If the return date passes without a hand-back, the booking can be marked <b>Overdue</b> so it stands out on the dashboard and in the rentals list.</p>
+          <div class="step-meta"><span class="chip">Active</span><span class="chip">Overdue</span><span class="chip chip-muted">Admin</span></div>
+        </div>
+      </div>
+
+      <div class="step reveal reveal-l">
+        <div class="step-num">06</div>
+        <div>
+          <h3>Returned, and released again</h3>
+          <p>Marking the booking <b>Returned</b> stamps the actual return date and frees the board for the next request. A booking cancelled before it starts releases the dates straight away.</p>
+          <div class="step-meta"><span class="chip">Returned</span><span class="chip">Cancelled</span><span class="chip chip-muted">Admin</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="book-flow reveal">
+      <span class="bf-label">Status flow</span>
+      <span class="chip">Pending</span>
+      <span class="bf-arrow">→</span>
+      <span class="chip">Approved</span>
+      <span class="bf-arrow">→</span>
+      <span class="chip">Active</span>
+      <span class="bf-arrow">→</span>
+      <span class="chip">Returned</span>
+      <span class="bf-sep">off-path</span>
+      <span class="chip chip-muted">Overdue</span>
+      <span class="chip chip-muted">Cancelled</span>
+    </div>
+
+    <div class="feat-grid" style="margin-top: 30px;">
+      <article class="feat reveal reveal-up">
+        <div class="feat-ico">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </div>
+        <h3>Who can book</h3>
+        <p>Administrators can book any board on behalf of any customer. A customer can book only for their own organisation. Technicians have no booking access at all — Rentals is not in their sidebar.</p>
+        <span class="feat-tag">Admin · Customer</span>
+      </article>
+
+      <article class="feat reveal reveal-up">
+        <div class="feat-ico">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7" y2="7.01"/></svg>
+        </div>
+        <h3>How the price is worked out</h3>
+        <p>Total cost is the daily rate multiplied by the number of days, and both the start and end date count — so Monday to Friday is five days. A deposit is recorded on top, set per booking by an administrator.</p>
+        <span class="feat-tag">Admin</span>
+      </article>
+
+      <article class="feat reveal reveal-up">
+        <div class="feat-ico">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </div>
+        <h3>Bookings stay private</h3>
+        <p>A booking belongs to the account that created it, not to the company. Two logins under the same customer will not see each other's bookings, and a customer never sees another organisation's.</p>
+        <span class="feat-tag">Customer</span>
+      </article>
+    </div>
+  </div>
+</section>
+
 <!-- ============================ USER ROLES ============================ -->
-<section class="band" id="user-roles">
+<section class="band band-alt" id="user-roles">
   <div class="wrap">
     <div class="sec-head reveal reveal-l">
       <span class="sec-tag">User roles</span>
@@ -1074,7 +1216,7 @@
 </section>
 
 <!-- =============================== ABOUT =============================== -->
-<section class="band band-alt" id="about">
+<section class="band" id="about">
   <div class="wrap">
     <div class="about-grid">
       <div class="about-copy reveal reveal-l">
@@ -1153,6 +1295,7 @@
     <nav class="foot-links" aria-label="Footer">
       <a href="#features">Features</a>
       <a href="#how-it-works">How it works</a>
+      <a href="#booking">Booking</a>
       <a href="#user-roles">User roles</a>
       <a href="#about">About</a>
       <a href="/app">Sign in</a>

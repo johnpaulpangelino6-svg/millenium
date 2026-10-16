@@ -6,7 +6,7 @@
  *   - scrolling actually moves the page
  *   - NO element uses position:fixed or position:sticky
  *   - the header scrolls away with the content
- * Also checks the four guide sections, anchor navigation, the theme toggle,
+ * Also checks the guide sections, anchor navigation, the theme toggle,
  * and the link from the app's sign-in screen.
  */
 const puppeteer = require('puppeteer-core');
@@ -24,7 +24,7 @@ function check(name, ok, detail) {
   else { fail++; console.log(`  FAIL  ${name}${detail ? '  ->  ' + detail : ''}`); }
 }
 
-const SECTIONS = ['features', 'how-it-works', 'user-roles', 'about'];
+const SECTIONS = ['features', 'how-it-works', 'booking', 'user-roles', 'about'];
 
 (async () => {
   fs.mkdirSync(OUT, { recursive: true });
@@ -47,8 +47,8 @@ const SECTIONS = ['features', 'how-it-works', 'user-roles', 'about'];
   const title = await page.title();
   check('page has the guide title', /getting started/i.test(title), title);
 
-  // ------------------------------------------------------- four sections
-  console.log('\n=== THE FOUR REQUESTED SECTIONS ===');
+  // ------------------------------------------------------- guide sections
+  console.log('\n=== THE GUIDE SECTIONS ===');
   const secs = await page.evaluate((ids) => {
     return ids.map((id) => {
       const el = document.getElementById(id);
@@ -78,9 +78,9 @@ const SECTIONS = ['features', 'how-it-works', 'user-roles', 'about'];
       expected: ids,
     };
   }, SECTIONS);
-  check('nav has 4 links', nav.labels.length === 4, nav.labels.join(' | '));
-  check('nav labels are Features / How it works / User roles / About',
-    JSON.stringify(nav.labels) === JSON.stringify(['Features', 'How it works', 'User roles', 'About']),
+  check('nav has 5 links', nav.labels.length === 5, nav.labels.join(' | '));
+  check('nav labels are Features / How it works / Booking / User roles / About',
+    JSON.stringify(nav.labels) === JSON.stringify(['Features', 'How it works', 'Booking', 'User roles', 'About']),
     nav.labels.join(' | '));
   check('every nav link points at a real section', nav.allResolve);
 
