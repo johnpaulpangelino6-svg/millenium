@@ -330,7 +330,26 @@ async function main() {
 
   for (const theme of ['dark', 'light']) {
     await page.evaluate((t) => applyTheme(t), theme);
-    await sleep(250);
+    // Wait for the theme swap to actually SETTLE, don't guess a duration.
+    // The stylesheet transitions background-color/color over 0.25s, so a fixed
+    // sleep(250) measures mid-transition and reads a blend of the old and new
+    // palettes — which made these contrast checks flaky (~1 run in 3 failed on
+    // a random one of the six selectors). Reading the computed colour twice in
+    // a row and requiring them to match proves the animation has finished.
+    await page.evaluate(async () => {
+      const settled = () => {
+        const el = document.querySelector('.rec-row-title') || document.body;
+        const cs = getComputedStyle(el);
+        return cs.color + '|' + cs.backgroundColor;
+      };
+      let prev = settled();
+      for (let i = 0; i < 60; i++) {
+        await new Promise((r) => setTimeout(r, 50));
+        const now = settled();
+        if (now === prev && i > 2) return;
+        prev = now;
+      }
+    });
     await page.evaluate(HELPERS); // helpers are wiped by a full re-render? no — re-attach defensively
     const attr = await page.evaluate(() => document.documentElement.getAttribute('data-theme') || '(none)');
 

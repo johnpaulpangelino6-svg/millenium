@@ -84,7 +84,10 @@ const SCAN = (limit) => {
   const FLOOR = 2.0;
 
   const worst = [];
-  const all = document.querySelectorAll('#mainContent *, .app-header *, .app-sidebar *');
+  // The top bar is gone, so the shell surfaces to scan are the main content,
+  // the sidebar (which now owns the brand, search, settings and user chip) and
+  // the floating notification control.
+  const all = document.querySelectorAll('#mainContent *, .app-sidebar *, .notif-wrapper *');
   all.forEach((el) => {
     const text = (el.textContent || '').trim();
     if (!text) return;
@@ -118,7 +121,7 @@ const SCAN = (limit) => {
     surfaces: {
       body: getComputedStyle(document.body).backgroundColor,
       bodyColor: getComputedStyle(document.body).color,
-      header: getComputedStyle(document.querySelector('.app-header')).backgroundColor,
+      header: getComputedStyle(document.querySelector('.header-notif-btn')).backgroundColor,
       sidebar: getComputedStyle(document.querySelector('.app-sidebar')).backgroundColor,
     },
     worst: worst.slice(0, limit),
@@ -167,19 +170,19 @@ const isLight = (rgb) => {
   });
 
   const btn = await page.evaluate(() => {
-    const b = document.getElementById('themeToggleBtn');
+    const b = document.getElementById('settingsBtn');
     if (!b) return null;
     const r = b.getBoundingClientRect();
     return {
       visible: r.width > 0 && r.height > 0 && b.offsetParent !== null,
       onScreen: r.left >= 0 && r.right <= window.innerWidth,
-      icon: (document.getElementById('themeToggleIcon') || {}).textContent,
+      label: (document.getElementById('themeToggleLabel') || {}).textContent,
       hasHandler: b.getAttribute('onclick') || '',
     };
   });
-  check('theme toggle button exists in the header', !!btn, btn);
+  check('the single Settings button exists in the sidebar', !!btn, btn);
   check('it is visible and on screen', !!(btn && btn.visible && btn.onScreen), btn);
-  check('it has the click handler wired up', !!(btn && /toggleTheme/.test(btn.hasHandler)), btn && btn.hasHandler);
+  check('it opens the settings dialog', !!(btn && /openSettingsModal/.test(btn.hasHandler)), btn && btn.hasHandler);
 
   const before = await page.evaluate(() => ({
     attr: document.documentElement.getAttribute('data-theme') || '(none)',
@@ -187,27 +190,57 @@ const isLight = (rgb) => {
   }));
   check('starts in dark', before.attr === 'dark' && before.stored === 'dark', before);
 
-  await page.click('#themeToggleBtn');
+  // The light/dark control now lives INSIDE the Settings dialog, so the flow is
+  // open Settings -> pick a tile. Both modes are explicit tiles rather than a
+  // toggle switch, so the current choice is stated instead of implied.
+  await page.click('#settingsBtn');
+  await sleep(600);
+  const dialog = await page.evaluate(() => {
+    const active = document.querySelector('[data-theme-option].is-active');
+    return {
+      open: !!document.getElementById('profileModalOverlay'),
+      title: (document.getElementById('profileModalTitle') || {}).textContent,
+      tiles: document.querySelectorAll('[data-theme-option]').length,
+      active: active ? active.getAttribute('data-theme-option') : null,
+      hasProfile: !!document.getElementById('profileFullName'),
+    };
+  });
+  check('Settings opens a dialog', dialog.open === true, dialog);
+  check('the dialog is titled Settings', /Settings/.test(dialog.title || ''), dialog.title);
+  check('it offers both Light and Dark tiles', dialog.tiles === 2, dialog.tiles);
+  check('the Dark tile is selected while in dark mode', dialog.active === 'dark', dialog.active);
+  check('the same dialog carries the editable profile fields', dialog.hasProfile === true, dialog);
+
+  await page.click('[data-theme-option="light"]');
   await sleep(500);
-  const after = await page.evaluate(() => ({
-    attr: document.documentElement.getAttribute('data-theme') || '(none)',
-    stored: localStorage.getItem('millennium-theme'),
-    icon: (document.getElementById('themeToggleIcon') || {}).textContent,
-    bodyBg: getComputedStyle(document.body).backgroundColor,
-    bodyColor: getComputedStyle(document.body).color,
-  }));
-  check('clicking it switches to light', after.attr === '(none)' && after.stored === 'light', after);
-  check('the icon updates', after.icon === '🌙', after.icon);
+  const after = await page.evaluate(() => {
+    const active = document.querySelector('[data-theme-option].is-active');
+    return {
+      attr: document.documentElement.getAttribute('data-theme') || '(none)',
+      stored: localStorage.getItem('millennium-theme'),
+      label: (document.getElementById('themeToggleLabel') || {}).textContent,
+      active: active ? active.getAttribute('data-theme-option') : null,
+      bodyBg: getComputedStyle(document.body).backgroundColor,
+      bodyColor: getComputedStyle(document.body).color,
+    };
+  });
+  check('picking Light switches to light', after.attr === '(none)' && after.stored === 'light', after);
+  check('the sidebar Settings status line follows the theme', after.label === 'Light mode', after.label);
+  check('the Light tile becomes the selected one', after.active === 'light', after.active);
   check('the page actually becomes light (body background)', isLight(after.bodyBg), after.bodyBg);
   check('body text becomes dark', !isLight(after.bodyColor), after.bodyColor);
 
-  await page.click('#themeToggleBtn');
+  await page.click('[data-theme-option="dark"]');
   await sleep(500);
   const back = await page.evaluate(() => ({
     attr: document.documentElement.getAttribute('data-theme') || '(none)',
     stored: localStorage.getItem('millennium-theme'),
   }));
-  check('clicking again switches back to dark', back.attr === 'dark' && back.stored === 'dark', back);
+  check('picking Dark switches back to dark', back.attr === 'dark' && back.stored === 'dark', back);
+
+  // Close the dialog — the view-switching checks below need the shell clickable.
+  await page.evaluate(() => document.getElementById('profileModalOverlay')?.remove());
+  await sleep(300);
 
   // =============================================== 2. light mode surfaces
   console.log('\n=== 2. LIGHT MODE RE-SKINS THE APP SHELL ===');
@@ -216,12 +249,12 @@ const isLight = (rgb) => {
   const lightSurf = await page.evaluate(() => ({
     body: getComputedStyle(document.body).backgroundColor,
     container: getComputedStyle(document.querySelector('.app-container')).backgroundColor,
-    header: getComputedStyle(document.querySelector('.app-header')).backgroundColor,
+    header: getComputedStyle(document.querySelector('.header-notif-btn')).backgroundColor,
     sidebar: getComputedStyle(document.querySelector('.app-sidebar')).backgroundColor,
   }));
   check('body canvas is light', isLight(lightSurf.body), lightSurf.body);
   check('app container is light', isLight(lightSurf.container), lightSurf.container);
-  check('header is light', isLight(lightSurf.header), lightSurf.header);
+  check('the floating notification button is light', isLight(lightSurf.header), lightSurf.header);
   check('sidebar is light', isLight(lightSurf.sidebar), lightSurf.sidebar);
 
   // =============================================== 3. contrast scan, light
@@ -329,18 +362,31 @@ const isLight = (rgb) => {
     await mp.type('#loginPassword', '123123');
     await mp.click('#loginSubmitBtn');
     await sleep(2600);
-    const m = await mp.evaluate(() => {
-      const b = document.getElementById('themeToggleBtn');
+    const m = await mp.evaluate(() => ({
+      bodyBg: getComputedStyle(document.body).backgroundColor,
+      innerWidth: window.innerWidth,
+    }));
+    check('mobile light mode renders light', isLight(m.bodyBg), m.bodyBg);
+    check('no layout overflow on the phone', m.innerWidth === 390, m.innerWidth);
+
+    // Settings lives in the sidebar, which is an off-canvas drawer on a phone,
+    // so it is only reachable once the drawer is open.
+    await mp.evaluate(() => toggleMobileSidebar(true));
+    await sleep(600);
+    const m2 = await mp.evaluate(() => {
+      const b = document.getElementById('settingsBtn');
       const r = b ? b.getBoundingClientRect() : null;
       return {
-        bodyBg: getComputedStyle(document.body).backgroundColor,
-        toggleVisible: !!(r && r.width > 0 && r.right <= window.innerWidth && r.left >= 0),
-        innerWidth: window.innerWidth,
+        settingsVisible: !!(r && r.width > 0 && r.right <= window.innerWidth && r.left >= 0),
+        drawerOpen: document.querySelector('.app-sidebar').classList.contains('mobile-open'),
       };
     });
-    check('mobile light mode renders light', isLight(m.bodyBg), m.bodyBg);
-    check('the toggle is reachable on a phone', m.toggleVisible === true, m);
-    check('no layout overflow on the phone', m.innerWidth === 390, m.innerWidth);
+    check('the Settings button is reachable on a phone (inside the drawer)',
+      m2.settingsVisible === true && m2.drawerOpen === true, m2);
+
+    // Screenshot the dashboard itself, not the open drawer.
+    await mp.evaluate(() => toggleMobileSidebar(false));
+    await sleep(500);
     await mp.screenshot({ path: path.join(OUT, 'mobile-dashboard-light.png') });
     await mctx.close();
   }

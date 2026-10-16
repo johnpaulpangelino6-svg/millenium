@@ -39,7 +39,20 @@ async function login(page, u, p) {
   await page.type('#loginUsername', u);
   await page.type('#loginPassword', p);
   await page.click('#loginSubmitBtn');
-  await new Promise((r) => setTimeout(r, 6000));
+
+  // Poll for the dashboard to actually paint instead of guessing a duration.
+  // The previous fixed 6000ms wait failed intermittently when several Chrome
+  // instances were competing for the machine: the "landed on a real tab with
+  // content" probe then read #mainContent before renderApp() had written
+  // anything, and reported a healthy dashboard as empty.
+  for (let i = 0; i < 80; i++) {
+    const painted = await page.evaluate(
+      () => (document.getElementById('mainContent')?.innerHTML || '').length > 200
+    );
+    if (painted) break;
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  await new Promise((r) => setTimeout(r, 600)); // let the final render settle
 }
 
 (async () => {

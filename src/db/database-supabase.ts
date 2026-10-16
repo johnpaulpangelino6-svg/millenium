@@ -456,6 +456,32 @@ class MillenniumDatabase {
       `);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_rentals_created_by_user ON rentals(created_by_user_id);`);
 
+      // Password-reset one-time codes.
+      //
+      // Only the SHA-256 of the code is stored, so a database read cannot be
+      // replayed into a password reset. Codes are single-use (`consumed`) and
+      // time-boxed (`expires_at`); `attempts` caps brute-force guessing of a
+      // 6-digit code.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS password_reset_codes (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          email TEXT NOT NULL,
+          code_hash TEXT NOT NULL,
+          attempts INTEGER DEFAULT 0,
+          consumed BOOLEAN DEFAULT false,
+          expires_at TIMESTAMP NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+      `);
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS idx_password_reset_codes_email ON password_reset_codes(email);`
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS idx_password_reset_codes_user ON password_reset_codes(user_id);`
+      );
+
       console.log('  ✅ PostgreSQL schema initialized.');
     } finally {
       client.release();
@@ -583,6 +609,115 @@ class MillenniumDatabase {
 
   async deleteUser(id: string): Promise<boolean> {
     const result = await pool.query('DELETE FROM users WHERE id = $1', [id]);
+    return (result.rowCount || 0) > 0;
+  }
+
+  // -------------------------------------------------------------------------
+  // PASSWORD RESET (one-time codes)
+  // -------------------------------------------------------------------------
+
+  /** Look a user up by email, case-insensitively. Returns null when absent. */
+  async findUserByEmail(email: string): Promise<any | null> {
+    const result = await pool.query(
+      `SELECT id, username, email, full_name as "fullName", role, organization
+       FROM users
+       WHERE LOWER(email) = LOWER($1)
+       LIMIT 1`,
+      [String(email || '').trim()]
+    );
+    return result.rows[0] || null;
+  }
+
+  /**
+   * Store a new code, invalidating any earlier unconsumed ones for that user so
+   * only the most recent email can be redeemed.
+   *
+   * The expiry is computed in SQL (`NOW() + INTERVAL`) rather than passed in as
+   * a JS Date. The database runs in UTC while this process may not, and `pg`
+   * parses a bare `timestamp` column as *local* time — so handing over a Date
+   * would both shorten and lengthen the window by the timezone offset. Keeping
+   * the arithmetic server-side makes it exact.
+   */
+  async createPasswordResetCode(
+    userId: string,
+    email: string,
+    codeHash: string,
+    ttlMinutes = 10
+  ): Promise<void> {
+    await pool.query(
+      `UPDATE password_reset_codes SET consumed = true
+       WHERE user_id = $1 AND consumed = false`,
+      [userId]
+    );
+    await pool.query(
+      `INSERT INTO password_reset_codes (id, user_id, email, code_hash, expires_at)
+       VALUES ($1, $2, $3, $4, NOW() + make_interval(mins => $5))`,
+      [
+        `PRC-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        userId,
+        email,
+        codeHash,
+        ttlMinutes,
+      ]
+    );
+  }
+
+  /**
+   * True when a code was issued for this email within the last `seconds`.
+   * Compared in SQL for the same timezone reason as createPasswordResetCode.
+   */
+  async hasRecentPasswordResetCode(email: string, seconds: number): Promise<boolean> {
+    const result = await pool.query(
+      `SELECT 1 FROM password_reset_codes
+       WHERE LOWER(email) = LOWER($1)
+         AND created_at > NOW() - make_interval(secs => $2)
+       LIMIT 1`,
+      [String(email || '').trim(), seconds]
+    );
+    return result.rows.length > 0;
+  }
+
+  /**
+   * The newest unconsumed, unexpired code for an email. Returns null when there
+   * is nothing to redeem — which is also the answer for an unknown address, so
+   * callers cannot tell "no such user" from "no pending code".
+   */
+  async getActivePasswordResetCode(email: string): Promise<any | null> {
+    const result = await pool.query(
+      `SELECT id, user_id as "userId", email, code_hash as "codeHash",
+              attempts, expires_at as "expiresAt", created_at as "createdAt"
+       FROM password_reset_codes
+       WHERE LOWER(email) = LOWER($1)
+         AND consumed = false
+         AND expires_at > NOW()
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [String(email || '').trim()]
+    );
+    return result.rows[0] || null;
+  }
+
+  /** Count a failed guess against a code. */
+  async bumpPasswordResetAttempts(id: string): Promise<number> {
+    const result = await pool.query(
+      `UPDATE password_reset_codes SET attempts = attempts + 1
+       WHERE id = $1 RETURNING attempts`,
+      [id]
+    );
+    return result.rows[0] ? Number(result.rows[0].attempts) : 0;
+  }
+
+  /** Burn a code so it cannot be replayed. */
+  async consumePasswordResetCode(id: string): Promise<void> {
+    await pool.query(`UPDATE password_reset_codes SET consumed = true WHERE id = $1`, [id]);
+  }
+
+  /** Set a new password for a user. */
+  async setUserPassword(userId: string, plaintext: string): Promise<boolean> {
+    const result = await pool.query(
+      `UPDATE users SET password_hash = $1 WHERE id = $2`,
+      [hashPassword(plaintext), userId]
+    );
     return (result.rowCount || 0) > 0;
   }
 

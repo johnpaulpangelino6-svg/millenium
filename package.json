@@ -17,14 +17,16 @@
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.116.0",
+    "@types/nodemailer": "^8.0.2",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "express-session": "^1.18.1",
+    "nodemailer": "^10.1.1",
     "passport": "^0.7.0",
-    "passport-google-oauth20": "^2.0.0",
-    "passport-facebook": "^3.0.0",
     "passport-apple": "^2.0.2",
+    "passport-facebook": "^3.0.0",
+    "passport-google-oauth20": "^2.0.0",
     "pg": "^8.23.0"
   },
   "devDependencies": {

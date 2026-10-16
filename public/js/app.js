@@ -10,9 +10,9 @@ const API_BASE = '/api';
 // Every role gets 'dashboard' as its landing tab; renderApp() dispatches the
 // 'dashboard' case to a role-specific view (see DASHBOARD_ROLE_VIEWS below).
 const ROLE_ACCESS = {
-  admin:      ['dashboard','devices','tickets','customer-portal','warranty','inventory','data-manager','cms','predictive','analytics','rentals'],
-  technician: ['dashboard','devices','tickets','inventory'],
-  customer:   ['dashboard','devices','tickets','customer-portal','rentals'],
+  admin:      ['dashboard','devices','tickets','customer-portal','warranty','inventory','data-manager','cms','predictive','analytics','rentals','directory'],
+  technician: ['dashboard','devices','tickets','inventory','directory'],
+  customer:   ['dashboard','devices','tickets','customer-portal','rentals','directory'],
 };
 
 // Role display metadata
@@ -48,6 +48,7 @@ const state = {
   notifDropdownOpen: false,
   customers: [],
   allUsers: [],
+  directory: [],
   rentals: [],
   rentalStats: null,
   rentalFilterStatus: '',
@@ -55,6 +56,7 @@ const state = {
   rentalCalendarYear: new Date().getFullYear(),
   rentalViewMode: 'list', // 'list' | 'calendar'
   dataManagerSubTab: 'users', // 'users' | 'customers' | 'allocation'
+  clientTypeFilter: 'all', // Data Manager customers tab: 'all' | 'school' | 'corporate'
   stats: null,
   selectedDeviceForRemote: null,
   selectedDeviceForQR: null,
@@ -238,9 +240,14 @@ function updateAuthChip(user) {
   const locEl  = document.getElementById('authUserLoc');
   const avatarEl = document.getElementById('authUserAvatar');
   if (nameEl)   nameEl.textContent  = user.fullName || user.username;
-  // The trailing caret signals that the chip opens the profile dialog.
-  if (locEl)    locEl.textContent   = `${user.location || 'All Locations'} ▾`;
+  // No trailing caret: the card is clickable as a whole and opens Settings, so
+  // a dropdown arrow was promising a menu that does not exist.
+  if (locEl)    locEl.textContent   = user.location || 'All Locations';
   if (avatarEl) avatarEl.textContent = (user.fullName || user.username).charAt(0).toUpperCase();
+  // The card is only ~220px wide, so a long name or building ellipsizes; the
+  // tooltips keep the full value reachable on hover.
+  if (nameEl)   nameEl.title         = user.fullName || user.username;
+  if (locEl)    locEl.title          = user.location || 'All Locations';
 }
 
 /** Switch between login and register tabs */
@@ -269,15 +276,317 @@ function switchAuthTab(tab) {
     } else {
       loginCard.style.display = 'none';
       registerCard.style.display = 'flex';
+      // Re-sync the role-dependent fields — the Client Category selector's
+      // visibility and the organization label — with whatever the Account Type
+      // select currently holds, so reopening the tab can never show a stale
+      // form (e.g. a technician account still offering a Client Category).
+      updateRegLocationLabel(document.getElementById('regRole')?.value);
       const r = document.getElementById('regFullName');
       if (r) r.focus();
     }
   }
 }
 
-/** Handle forgot password link */
+/**
+ * Password reset by emailed one-time code.
+ *
+ * Three steps, backed by three endpoints:
+ *   1. POST /auth/forgot-password   -> emails a 6-digit code
+ *   2. POST /auth/verify-reset-code -> confirms the code
+ *   3. POST /auth/reset-password    -> sets the new password
+ *
+ * The code is never held in a variable that outlives the dialog; it is read
+ * from the input on submit and cleared when the flow closes.
+ */
 function handleForgotPassword() {
-  showToast('Password Reset: Please contact Brains Infinite Innovations admin at admin@brains.asia or call +63 975 582 6830.', 'info');
+  const existing = document.getElementById('forgotPwOverlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'forgotPwOverlay';
+  overlay.className = 'modal-backdrop';
+  overlay.innerHTML = `
+    <div class="modal-content reset-pw-modal" role="dialog" aria-modal="true"
+         aria-labelledby="resetPwTitle">
+      <div class="reset-pw-head">
+        <div class="reset-pw-icon" aria-hidden="true">🔐</div>
+        <div>
+          <h3 class="reset-pw-title" id="resetPwTitle">Reset your password</h3>
+          <p class="reset-pw-sub" id="resetPwSub">We will email you a 6-digit code.</p>
+        </div>
+      </div>
+
+      <div class="reset-pw-steps" id="resetPwSteps">
+        <span class="reset-pw-step is-active" data-step="1"><b>1</b> Email</span>
+        <span class="reset-pw-step" data-step="2"><b>2</b> Code</span>
+        <span class="reset-pw-step" data-step="3"><b>3</b> New password</span>
+      </div>
+
+      <div class="reset-pw-body" id="resetPwBody"></div>
+
+      <div class="reset-pw-alert" id="resetPwAlert" style="display:none;" role="alert"></div>
+
+      <div class="modal-footer reset-pw-foot">
+        <button type="button" class="btn btn-secondary" id="resetPwBack" style="display:none;">← Back</button>
+        <button type="button" class="btn btn-primary" id="resetPwPrimary">Send code</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add('active'));
+
+  const bodyEl   = overlay.querySelector('#resetPwBody');
+  const alertEl  = overlay.querySelector('#resetPwAlert');
+  const primary  = overlay.querySelector('#resetPwPrimary');
+  const backBtn  = overlay.querySelector('#resetPwBack');
+  const subEl    = overlay.querySelector('#resetPwSub');
+  const steps    = Array.from(overlay.querySelectorAll('.reset-pw-step'));
+
+  const draft = {
+    step: 1,
+    email: (document.getElementById('loginUsername') || {}).value || '',
+    code: '',
+  };
+
+  function setAlert(message, kind) {
+    if (!message) { alertEl.style.display = 'none'; return; }
+    alertEl.className = 'reset-pw-alert is-' + (kind || 'error');
+    alertEl.innerHTML = message;
+    alertEl.style.display = '';
+  }
+
+  function setStep(n) {
+    draft.step = n;
+    steps.forEach((s) => {
+      const v = Number(s.dataset.step);
+      s.classList.toggle('is-active', v === n);
+      s.classList.toggle('is-done', v < n);
+    });
+    backBtn.style.display = n === 1 ? 'none' : '';
+    setAlert('');
+  }
+
+  function renderStep1() {
+    setStep(1);
+    subEl.textContent = 'We will email you a 6-digit code.';
+    primary.textContent = 'Send code';
+    bodyEl.innerHTML = `
+      <label class="reset-pw-label" for="resetPwEmail">Registered email address</label>
+      <input type="email" id="resetPwEmail" class="form-input" autocomplete="email"
+        placeholder="you@example.com" value="${escapeHtml(draft.email || '')}" />
+      <p class="reset-pw-hint">Use the email address on your Millennium account. The code expires in 10 minutes.</p>
+    `;
+    const input = overlay.querySelector('#resetPwEmail');
+    if (input) {
+      input.focus();
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') primary.click(); });
+    }
+  }
+
+  function renderStep2() {
+    setStep(2);
+    subEl.textContent = 'Enter the code we sent to ' + draft.email + '.';
+    primary.textContent = 'Verify code';
+    bodyEl.innerHTML = `
+      <label class="reset-pw-label" for="resetPwCode">6-digit code</label>
+      <input type="text" id="resetPwCode" class="form-input reset-pw-code"
+        inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" />
+      <p class="reset-pw-hint">
+        Nothing in your inbox? Check spam, or
+        <button type="button" class="reset-pw-link" id="resetPwResend">send a new code</button>.
+      </p>
+    `;
+    const input = overlay.querySelector('#resetPwCode');
+    if (input) {
+      input.focus();
+      // Digits only — the field is numeric, so pasted spaces/dashes are stripped.
+      input.addEventListener('input', () => {
+        input.value = input.value.replace(/\D/g, '').slice(0, 6);
+      });
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') primary.click(); });
+    }
+    const resend = overlay.querySelector('#resetPwResend');
+    if (resend) resend.onclick = async () => { await requestCode(true); };
+  }
+
+  function renderStep3() {
+    setStep(3);
+    subEl.textContent = 'Choose a new password for ' + draft.email + '.';
+    primary.textContent = 'Set new password';
+    bodyEl.innerHTML = `
+      <label class="reset-pw-label" for="resetPwNew">New password</label>
+      <input type="password" id="resetPwNew" class="form-input" autocomplete="new-password"
+        placeholder="At least 6 characters" />
+      <label class="reset-pw-label" for="resetPwConfirm" style="margin-top:12px;">Confirm new password</label>
+      <input type="password" id="resetPwConfirm" class="form-input" autocomplete="new-password"
+        placeholder="Type it again" />
+      <p class="reset-pw-hint">Once saved, sign in with your new password. The old one stops working immediately.</p>
+    `;
+    const first = overlay.querySelector('#resetPwNew');
+    if (first) first.focus();
+    ['#resetPwNew', '#resetPwConfirm'].forEach((sel) => {
+      const el = overlay.querySelector(sel);
+      if (el) el.addEventListener('keydown', (e) => { if (e.key === 'Enter') primary.click(); });
+    });
+  }
+
+  function busy(on, label) {
+    primary.disabled = !!on;
+    primary.textContent = on ? (label || 'Working…') : primary.textContent;
+  }
+
+  async function requestCode(isResend) {
+    const input = overlay.querySelector('#resetPwEmail');
+    const email = (input ? input.value : draft.email || '').trim();
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setAlert('Enter a valid email address.');
+      return;
+    }
+    draft.email = email;
+
+    busy(true, isResend ? 'Sending…' : 'Sending code…');
+    try {
+      const resp = await fetch(`${API_BASE}/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const data = await resp.json();
+      busy(false);
+
+      if (!data.success) {
+        setAlert(data.error || 'We could not start the reset. Please try again.');
+        return;
+      }
+
+      renderStep2();
+
+      // SMTP is not configured on this server yet, so the API hands the code
+      // back instead of emailing it. Surface it rather than stranding the user.
+      if (data.devCode) {
+        setAlert(
+          'Email is not set up on this server, so here is your code: ' +
+          '<strong class="reset-pw-devcode">' + escapeHtml(data.devCode) + '</strong>' +
+          '<br><span class="reset-pw-devnote">Set SMTP_HOST / SMTP_USER / SMTP_PASS on the server to send real email.</span>',
+          'info'
+        );
+        const codeInput = overlay.querySelector('#resetPwCode');
+        if (codeInput) codeInput.value = data.devCode;
+      } else if (isResend) {
+        setAlert('A new code is on its way.', 'success');
+      } else {
+        setAlert('Code sent. It expires in 10 minutes.', 'success');
+      }
+    } catch (err) {
+      busy(false);
+      setAlert('Network error. Please check your connection.');
+    }
+  }
+
+  async function verifyCode() {
+    const input = overlay.querySelector('#resetPwCode');
+    const code = (input ? input.value : '').trim().replace(/\D/g, '');
+
+    if (code.length !== 6) {
+      setAlert('Enter the 6-digit code from your email.');
+      return;
+    }
+    draft.code = code;
+
+    busy(true, 'Verifying…');
+    try {
+      const resp = await fetch(`${API_BASE}/auth/verify-reset-code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: draft.email, code }),
+      });
+      const data = await resp.json();
+      busy(false);
+
+      if (!data.success) {
+        setAlert(data.error || 'That code is not correct.');
+        return;
+      }
+      renderStep3();
+      setAlert('Code verified. Choose your new password.', 'success');
+    } catch (err) {
+      busy(false);
+      setAlert('Network error. Please check your connection.');
+    }
+  }
+
+  async function submitNewPassword() {
+    const newEl = overlay.querySelector('#resetPwNew');
+    const conEl = overlay.querySelector('#resetPwConfirm');
+    const pw  = newEl ? newEl.value : '';
+    const con = conEl ? conEl.value : '';
+
+    if (pw.length < 6) {
+      setAlert('Your new password must be at least 6 characters.');
+      return;
+    }
+    if (pw !== con) {
+      setAlert('Those two passwords do not match.');
+      return;
+    }
+
+    busy(true, 'Saving…');
+    try {
+      const resp = await fetch(`${API_BASE}/auth/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: draft.email, code: draft.code, password: pw }),
+      });
+      const data = await resp.json();
+      busy(false);
+
+      if (!data.success) {
+        setAlert(data.error || 'We could not reset that password.');
+        return;
+      }
+
+      // Hand the user back to the sign-in form with their email filled in.
+      const userInput = document.getElementById('loginUsername');
+      const pwInput   = document.getElementById('loginPassword');
+      if (userInput) userInput.value = draft.email;
+      if (pwInput) { pwInput.value = ''; pwInput.focus(); }
+
+      draft.code = '';
+      closeOverlay();
+      showToast('✅ Password changed. Sign in with your new password.', 'success');
+    } catch (err) {
+      busy(false);
+      setAlert('Network error. Please check your connection.');
+    }
+  }
+
+  function closeOverlay() {
+    overlay.classList.remove('active');
+    setTimeout(() => overlay.remove(), 200);
+  }
+
+  primary.onclick = () => {
+    if (draft.step === 1) return requestCode(false);
+    if (draft.step === 2) return verifyCode();
+    return submitNewPassword();
+  };
+
+  backBtn.onclick = () => {
+    if (draft.step === 3) { renderStep2(); return; }
+    if (draft.step === 2) { renderStep1(); return; }
+  };
+
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeOverlay(); });
+  document.addEventListener('keydown', function esc(e) {
+    if (e.key === 'Escape' && document.body.contains(overlay)) {
+      closeOverlay();
+      document.removeEventListener('keydown', esc);
+    }
+  });
+
+  renderStep1();
 }
 
 /** Show auth form section and scroll to it */
@@ -372,25 +681,25 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Ping the server on page load to detect connection issues early
+  // Ping the server on page load so a connection problem is reported early.
+  // The banner is an ERROR indicator only: it stays hidden while everything
+  // works and appears solely when the backend is unreachable. Previously a
+  // green "Backend connected — Database online" bar slid across the top on
+  // every single load, which read as clutter rather than information.
   const banner = document.getElementById('backendStatusBanner');
   const bannerText = document.getElementById('backendStatusText');
-  if (banner) banner.style.display = 'block';
-  if (bannerText) bannerText.textContent = 'Connecting to backend server...';
 
   fetch(`${API_BASE}/stats/dashboard`, { cache: 'no-store' })
     .then(r => {
       if (!r.ok) throw new Error(`Server returned ${r.status}`);
-      if (banner) {
-        banner.style.background = 'linear-gradient(90deg,#059669,#047857)';
-        if (bannerText) bannerText.textContent = '✅ Backend connected — Database online';
-        setTimeout(() => { banner.style.display = 'none'; }, 3000);
-      }
+      // Healthy: make sure no stale error banner is left showing.
+      if (banner) banner.style.display = 'none';
       console.log('✅ Backend server is reachable');
     })
     .catch(err => {
       console.error('❌ Backend server unreachable on page load:', err.message);
       if (banner) {
+        banner.style.display = 'block';
         banner.style.background = 'linear-gradient(90deg,#dc2626,#991b1b)';
         if (bannerText) bannerText.innerHTML = '❌ Backend server not reachable. Please start the server: <code style="background:rgba(0,0,0,0.3);padding:2px 6px;border-radius:4px;">cd c:\\xampp\\htdocs\\millenium-smartboard-main && npx tsx src/server.ts</code>';
       }
@@ -504,11 +813,39 @@ function togglePasswordVisibility(inputId, btn) {
     : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
 }
 
-/** Update the org/school label based on selected role */
+/**
+ * Sync the register form with the chosen Account Type.
+ *
+ * `role` drives three things:
+ *   1. the organization field's label and placeholder,
+ *   2. whether the Client Category (School vs Corporate) selector is shown —
+ *      a field technician is internal staff, not a client, so the question
+ *      does not apply and the organization field spans the full row instead,
+ *   3. the field's `required` state, so a technician form cannot be blocked by
+ *      a hidden-but-mandatory select.
+ */
 function updateRegLocationLabel(role) {
-  const label = document.getElementById('regOrgLabel');
-  if (!label) return;
-  label.textContent = role === 'customer' ? 'School / Organization Name' : 'Company / Department';
+  const label       = document.getElementById('regOrgLabel');
+  const orgInput    = document.getElementById('regOrganization');
+  const orgGroup    = document.getElementById('regOrgGroup');
+  const clientGroup = document.getElementById('regClientTypeGroup');
+  const clientSel   = document.getElementById('regClientType');
+  const isCustomer  = role === 'customer';
+
+  if (label) {
+    label.textContent = isCustomer ? 'School / Organization Name' : 'Company / Department';
+  }
+  if (orgInput) {
+    orgInput.placeholder = isCustomer
+      ? 'e.g. Ateneo de Manila University'
+      : 'e.g. Brains Infinite Innovations';
+  }
+
+  if (clientGroup) clientGroup.style.display = isCustomer ? '' : 'none';
+  if (clientSel)   clientSel.required = isCustomer;
+  // With the selector hidden the organization field would be stranded in the
+  // left half of a 2-column row, so let it take the whole width.
+  if (orgGroup) orgGroup.classList.toggle('auth-field-group--span-2', !isCustomer);
 }
 
 /** Handle login form submit */
@@ -580,6 +917,8 @@ async function handleRegister(event) {
   const role      = document.getElementById('regRole')?.value;
   const location  = document.getElementById('regLocation')?.value;
   const organization = document.getElementById('regOrganization')?.value?.trim();
+  // Only collected for customer accounts; the server validates it too.
+  const clientType = document.getElementById('regClientType')?.value;
   const password  = document.getElementById('regPassword')?.value;
   const confirm   = document.getElementById('regConfirmPassword')?.value;
 
@@ -607,6 +946,14 @@ async function handleRegister(event) {
     showAuthError(errorEl, 'Username must be at least 3 characters.');
     return;
   }
+  if (role === 'customer' && !['school', 'corporate'].includes(clientType)) {
+    showAuthError(errorEl, 'Please choose whether you are a School or a Corporate client.');
+    return;
+  }
+  if (role === 'customer' && !organization) {
+    showAuthError(errorEl, 'Please enter your School / Organization name.');
+    return;
+  }
 
   btn.disabled = true;
   const txtSpan = btn.querySelector('.auth-btn-text') || btn.querySelector('span');
@@ -616,7 +963,7 @@ async function handleRegister(event) {
     const resp = await fetch(`${API_BASE}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, email, password, fullName, role, location, organization }),
+      body: JSON.stringify({ username, email, password, fullName, role, location, organization, clientType }),
     });
     const data = await resp.json();
 
@@ -774,104 +1121,155 @@ async function openProfileModal() {
     year: 'numeric', month: 'long', day: 'numeric',
   }) : '—';
 
+  // Which tile in the Appearance section should read as selected right now.
+  const liveTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+
   const overlay = document.createElement('div');
   overlay.id = 'profileModalOverlay';
   overlay.className = 'modal-backdrop';
 
   overlay.innerHTML = `
-    <div class="modal-content modal-form modal-wide" role="dialog" aria-modal="true" aria-labelledby="profileModalTitle">
+    <div class="modal-content modal-form modal-wide settings-modal" role="dialog" aria-modal="true" aria-labelledby="profileModalTitle">
       <div class="modal-header">
-        <h3 class="modal-title" id="profileModalTitle">👤 My Profile</h3>
+        <h3 class="modal-title" id="profileModalTitle">⚙️ Settings</h3>
         <button type="button" class="modal-close" aria-label="Close"
           onclick="document.getElementById('profileModalOverlay').remove()">×</button>
       </div>
 
       <form id="profileForm" onsubmit="saveProfile(event)">
-        <div class="form-body">
+        <div class="settings-shell">
 
-          <div class="profile-identity">
-            <div class="profile-avatar-lg">${esc(initial)}</div>
-            <div>
-              <div class="profile-identity-name">${esc(me.fullName || me.username)}</div>
-              <div class="profile-identity-sub">@${esc(me.username)} · ${esc(me.email || 'no email')}</div>
-              <span class="profile-role-pill">${esc(roleMeta.name)}</span>
+          <!-- Section rail. Each entry jumps to its section in the pane on the
+               right — that split is what makes this read as a settings screen
+               instead of one long form you have to scroll to find things in. -->
+          <nav class="settings-rail" aria-label="Settings sections">
+            <button type="button" class="settings-rail-item is-active" data-settings-jump="setSecProfile">
+              <span class="settings-rail-ico" aria-hidden="true">👤</span>
+              <span class="settings-rail-text"><strong>Profile</strong><span>Name, email, location</span></span>
+            </button>
+            <button type="button" class="settings-rail-item" data-settings-jump="setSecAppearance">
+              <span class="settings-rail-ico" aria-hidden="true">🎨</span>
+              <span class="settings-rail-text"><strong>Appearance</strong><span>Light or dark mode</span></span>
+            </button>
+            <button type="button" class="settings-rail-item" data-settings-jump="setSecAccount">
+              <span class="settings-rail-ico" aria-hidden="true">🔒</span>
+              <span class="settings-rail-text"><strong>Account</strong><span>Role and organization</span></span>
+            </button>
+            <button type="button" class="settings-rail-item" data-settings-jump="setSecSecurity">
+              <span class="settings-rail-ico" aria-hidden="true">🔑</span>
+              <span class="settings-rail-text"><strong>Security</strong><span>Change password</span></span>
+            </button>
+          </nav>
+
+          <div class="form-body settings-pane" id="settingsPane">
+
+            <div class="profile-identity">
+              <div class="profile-avatar-lg">${esc(initial)}</div>
+              <div>
+                <div class="profile-identity-name">${esc(me.fullName || me.username)}</div>
+                <div class="profile-identity-sub">@${esc(me.username)} · ${esc(me.email || 'no email')}</div>
+                <span class="profile-role-pill">${esc(roleMeta.name)}</span>
+              </div>
             </div>
+
+            <section class="form-section settings-sec" id="setSecProfile">
+              <div class="form-section-title">👤 Profile</div>
+              <p class="settings-sec-desc">How your name and location appear to everyone else on the system.</p>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label" for="profileFullName">Full Name</label>
+                  <input class="form-input" id="profileFullName" type="text" name="fullName"
+                    value="${esc(me.fullName || '')}" required minlength="2" placeholder="Your full name" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="profileLocation">Location</label>
+                  <input class="form-input" id="profileLocation" type="text" name="location"
+                    value="${esc(me.location || '')}" placeholder="e.g. Quezon City" />
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="profileEmail">Email Address</label>
+                <input class="form-input" id="profileEmail" type="email" name="email"
+                  value="${esc(me.email || '')}" required placeholder="you@company.com" />
+                <div class="form-hint">Used to sign in and to receive booking updates.</div>
+              </div>
+            </section>
+
+            <section class="form-section settings-sec" id="setSecAppearance">
+              <div class="form-section-title">🎨 Appearance</div>
+              <p class="settings-sec-desc">Applies straight away and is remembered on this device.</p>
+              <div class="theme-option-grid">
+                <button type="button" class="theme-option${liveTheme === 'light' ? ' is-active' : ''}"
+                  data-theme-option="light" onclick="setThemeFromSettings('light')"
+                  aria-pressed="${liveTheme === 'light'}">
+                  <span class="theme-option-ico" aria-hidden="true">☀️</span>
+                  <span class="theme-option-text">
+                    <strong>Light mode</strong>
+                    <span>Bright surfaces for daytime</span>
+                  </span>
+                </button>
+                <button type="button" class="theme-option${liveTheme === 'dark' ? ' is-active' : ''}"
+                  data-theme-option="dark" onclick="setThemeFromSettings('dark')"
+                  aria-pressed="${liveTheme === 'dark'}">
+                  <span class="theme-option-ico" aria-hidden="true">🌙</span>
+                  <span class="theme-option-text">
+                    <strong>Dark mode</strong>
+                    <span>Low glare for dim rooms</span>
+                  </span>
+                </button>
+              </div>
+            </section>
+
+            <section class="form-section settings-sec" id="setSecAccount">
+              <div class="form-section-title">🔒 Account</div>
+              <p class="settings-sec-desc">Read-only. An administrator manages these values for you.</p>
+              <div class="profile-grid">
+                <div class="profile-field">
+                  <span class="profile-field-label">Username</span>
+                  <span class="profile-field-value">${esc(me.username)}</span>
+                </div>
+                <div class="profile-field">
+                  <span class="profile-field-label">Role</span>
+                  <span class="profile-field-value">${esc(roleMeta.name)}</span>
+                </div>
+                <div class="profile-field">
+                  <span class="profile-field-label">Organization</span>
+                  <span class="profile-field-value">${esc(me.organization || '—')}</span>
+                </div>
+                <div class="profile-field">
+                  <span class="profile-field-label">Member Since</span>
+                  <span class="profile-field-value">${esc(memberSince)}</span>
+                </div>
+              </div>
+            </section>
+
+            <section class="form-section settings-sec" id="setSecSecurity">
+              <div class="form-section-title">🔑 Security</div>
+              <p class="settings-sec-desc">Leave the password fields blank to keep your current password.</p>
+              <div class="form-group">
+                <label class="form-label" for="profileCurrentPassword">Current Password</label>
+                <input class="form-input" id="profileCurrentPassword" type="password" name="currentPassword"
+                  autocomplete="current-password" placeholder="Required only to change your password" />
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label" for="profileNewPassword">New Password</label>
+                  <input class="form-input" id="profileNewPassword" type="password" name="newPassword"
+                    autocomplete="new-password" minlength="6" placeholder="At least 6 characters" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="profileConfirmPassword">Confirm New Password</label>
+                  <input class="form-input" id="profileConfirmPassword" type="password" name="confirmPassword"
+                    autocomplete="new-password" minlength="6" placeholder="Repeat the new password" />
+                </div>
+              </div>
+            </section>
+
           </div>
-
-          <section class="form-section">
-            <div class="form-section-title">🔒 Account</div>
-            <div class="profile-grid">
-              <div class="profile-field">
-                <span class="profile-field-label">Username</span>
-                <span class="profile-field-value">${esc(me.username)}</span>
-              </div>
-              <div class="profile-field">
-                <span class="profile-field-label">Role</span>
-                <span class="profile-field-value">${esc(roleMeta.name)}</span>
-              </div>
-              <div class="profile-field">
-                <span class="profile-field-label">Organization</span>
-                <span class="profile-field-value">${esc(me.organization || '—')}</span>
-              </div>
-              <div class="profile-field">
-                <span class="profile-field-label">Member Since</span>
-                <span class="profile-field-value">${esc(memberSince)}</span>
-              </div>
-            </div>
-            <div class="form-hint">
-              Your username, role and organization are managed by an administrator.
-            </div>
-          </section>
-
-          <section class="form-section">
-            <div class="form-section-title">✏️ Editable Details</div>
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label" for="profileFullName">Full Name</label>
-                <input class="form-input" id="profileFullName" type="text" name="fullName"
-                  value="${esc(me.fullName || '')}" required minlength="2" placeholder="Your full name" />
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="profileLocation">Location</label>
-                <input class="form-input" id="profileLocation" type="text" name="location"
-                  value="${esc(me.location || '')}" placeholder="e.g. Quezon City" />
-              </div>
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="profileEmail">Email Address</label>
-              <input class="form-input" id="profileEmail" type="email" name="email"
-                value="${esc(me.email || '')}" required placeholder="you@company.com" />
-              <div class="form-hint">Used to sign in and to receive booking updates.</div>
-            </div>
-          </section>
-
-          <section class="form-section">
-            <div class="form-section-title">🔑 Change Password</div>
-            <div class="form-hint" style="margin-top:0;margin-bottom:12px;">
-              Leave these blank to keep your current password.
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="profileCurrentPassword">Current Password</label>
-              <input class="form-input" id="profileCurrentPassword" type="password" name="currentPassword"
-                autocomplete="current-password" placeholder="Required only to change your password" />
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label" for="profileNewPassword">New Password</label>
-                <input class="form-input" id="profileNewPassword" type="password" name="newPassword"
-                  autocomplete="new-password" minlength="6" placeholder="At least 6 characters" />
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="profileConfirmPassword">Confirm New Password</label>
-                <input class="form-input" id="profileConfirmPassword" type="password" name="confirmPassword"
-                  autocomplete="new-password" minlength="6" placeholder="Repeat the new password" />
-              </div>
-            </div>
-          </section>
-
         </div>
 
         <div class="modal-footer">
+          <span class="settings-footer-hint">Profile changes apply as soon as you save.</span>
           <button type="button" class="btn btn-secondary"
             onclick="document.getElementById('profileModalOverlay').remove()">Cancel</button>
           <button type="submit" class="btn btn-primary" id="profileSaveBtn">💾 Save Changes</button>
@@ -885,6 +1283,44 @@ async function openProfileModal() {
 
   overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 
+  // Wire the section rail: click to jump, and highlight whichever section the
+  // pane is currently showing so the rail doubles as a "you are here" marker.
+  const pane = overlay.querySelector('.settings-pane');
+  const railItems = Array.from(overlay.querySelectorAll('.settings-rail-item'));
+  const sections = Array.from(overlay.querySelectorAll('.settings-sec'));
+  const markActive = (id) => {
+    railItems.forEach((b) => b.classList.toggle('is-active', b.dataset.settingsJump === id));
+  };
+
+  // The spy compares `scrollTop` against each section's offset within the pane
+  // (the pane is `position: relative` in the stylesheet, so it is the
+  // offsetParent) rather than against viewport rects. A rect-based version
+  // races the smooth scroll: the first scroll event fires while scrollTop is
+  // still 0, so it re-highlights the FIRST section and undoes the click that
+  // started the animation.
+  if (pane) {
+    pane.addEventListener('scroll', () => {
+      const atBottom = pane.scrollTop + pane.clientHeight >= pane.scrollHeight - 4;
+      let current = sections[0] ? sections[0].id : null;
+      for (const sec of sections) {
+        if (sec.offsetTop <= pane.scrollTop + 12) current = sec.id;
+      }
+      // A short last section can never reach the top of the pane, so scrolling
+      // all the way down has to count as "you are on the last one".
+      if (atBottom && sections.length) current = sections[sections.length - 1].id;
+      if (current) markActive(current);
+    }, { passive: true });
+  }
+
+  railItems.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const target = overlay.querySelector('#' + btn.dataset.settingsJump);
+      if (!target || !pane) return;
+      pane.scrollTo({ top: Math.max(0, target.offsetTop - 12), behavior: 'smooth' });
+      markActive(btn.dataset.settingsJump);
+    });
+  });
+
   const onKey = (e) => {
     if (e.key === 'Escape') {
       overlay.remove();
@@ -892,6 +1328,19 @@ async function openProfileModal() {
     }
   };
   document.addEventListener('keydown', onKey);
+}
+
+/**
+ * The single Settings entry point.
+ *
+ * The sidebar used to expose Appearance and Profile as two separate rows, which
+ * meant "where do I change X?" had two possible answers. Everything now lives
+ * behind one button and one dialog: appearance first, then the profile details,
+ * then the password. openProfileModal() stays as the implementation so the
+ * existing auth-chip and keyboard shortcuts keep working.
+ */
+function openSettingsModal() {
+  return openProfileModal();
 }
 
 /** Save the profile form to PATCH /api/auth/me. */
@@ -1116,10 +1565,22 @@ function dataSignature() {
   // and the server reshuffles it on every poll. Including it made the
   // signature differ every single time, so the "nothing changed" short-circuit
   // never fired. The bell is still updated on every poll.
+
+  // The directory gets the same treatment, for the same reason: `online` and
+  // `lastSeenAt` are derived from live presence and the auth middleware
+  // re-stamps the caller on every authenticated request, so those two fields
+  // change on every poll even when nobody has actually joined or left. Only
+  // the identity fields take part in the signature, so a new colleague still
+  // triggers a rebuild while presence churn does not.
+  const directoryKey = (state.directory || [])
+    .map((u) => `${u.id}:${u.fullName}:${u.role}:${u.location}:${u.organization}`)
+    .join(',');
+
   return [
     state.stats, state.devices, state.tickets, state.warranties,
     state.inventory, state.cms, state.predictiveAlerts, state.auditLogs,
     state.customers, state.rentals, state.rentalStats, state.allUsers,
+    directoryKey,
   ].map((v) => (v === null || v === undefined ? '' : JSON.stringify(v))).join('|');
 }
 
@@ -1164,6 +1625,9 @@ async function fetchAllData(options) {
       { name: 'notifications',  url: `${API_BASE}/notifications`,      stateKey: 'notifications' },
       { name: 'rentals',        url: rentalsUrl,                       stateKey: 'rentals' },
       { name: 'rentals/stats',  url: rentalStatsUrl,                   stateKey: 'rentalStats' },
+      // Open to every role — this is the people directory, not the admin user
+      // table, and it deliberately carries no contact details.
+      { name: 'directory',      url: `${API_BASE}/directory`,          stateKey: 'directory' },
     ];
 
     // Admin-only feeds. The audit log names other customers' rental numbers and
@@ -1199,9 +1663,31 @@ async function fetchAllData(options) {
       console.error('All API endpoints failed. Server may be down.');
       showToast('Failed to connect to backend server at http://localhost:3000', 'error');
     } else if (failures.length > 0) {
-      // Some endpoints failed — partial load
-      console.warn(`${succeeded.length}/${fetchEntries.length} endpoints OK, ${failures.length} failed`);
-      showToast(`Loaded ${succeeded.length}/${fetchEntries.length} data sources. Some data may be incomplete.`, 'warning');
+      // Some endpoints failed — partial load.
+      //
+      // Stay SILENT unless a failure is unexpected. A customer/technician
+      // account legitimately cannot read admin-only collections such as
+      // /audit-logs and /auth/users, so those 401/403s are the normal state and
+      // fired a "Some data may be incomplete" warning on every single load.
+      // Only surface a toast for failures that are NOT an expected auth denial.
+      const expected = (reason) => {
+        const status = reason && (reason.status || reason.statusCode);
+        const msg = String((reason && reason.message) || '');
+        return status === 401 || status === 403 || /401|403|Unauthorized|Forbidden/i.test(msg);
+      };
+      const unexpected = failures.filter(f => !expected(f.reason));
+
+      console.warn(
+        `${succeeded.length}/${fetchEntries.length} endpoints OK, ` +
+        `${failures.length} failed (${failures.length - unexpected.length} expected auth denials)`
+      );
+
+      if (unexpected.length > 0) {
+        showToast(
+          `${unexpected.length} data source${unexpected.length === 1 ? '' : 's'} could not be loaded.`,
+          'warning'
+        );
+      }
     }
 
     // Background poll with no new data: leave the DOM completely untouched.
@@ -1301,6 +1787,9 @@ function renderApp(options) {
       break;
     case 'rentals':
       html = renderRentalsView();
+      break;
+    case 'directory':
+      html = renderDirectoryView();
       break;
     default:
       html = renderDashboardForRole(role);
@@ -1554,7 +2043,31 @@ function renderDashboardView() {
   const schoolDevices   = state.devices.filter(d => d.clientType === 'school').length;
   const corpDevices     = state.devices.filter(d => d.clientType === 'corporate').length;
 
+  // Registered client ORGANISATIONS — the School/Corporate choice made at
+  // sign-up, held in the `customers` table. Counted separately from devices:
+  // a client has to appear here the moment they register, before any board is
+  // assigned to them, otherwise a new school or corporate sign-up is invisible
+  // on the admin dashboard.
+  const clientOrgs    = state.customers || [];
+  const schoolClients = clientOrgs.filter(c => c.clientType === 'school').length;
+  const corpClients   = clientOrgs.filter(c => c.clientType === 'corporate').length;
+  const newestClient  = [...clientOrgs].sort(
+    (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+  )[0];
+
   const healthPct = total > 0 ? Math.round((online / total) * 100) : 0;
+
+  // Shares used by the fleet chart. Computed once and guarded against an empty
+  // fleet, so the bars read 0 instead of NaN. The previous legend hard-coded
+  // "100% / 0% / 0% / 0%" next to live counts, which was simply wrong.
+  const sharePct = (n) => (total > 0 ? Math.round((n / total) * 100) : 0);
+  const fleetBreakdown = [
+    { key: 'online',      label: 'Online',        count: online,  pct: sharePct(online),  hint: 'Reporting normally' },
+    { key: 'warning',     label: 'Needs a look',  count: warning, pct: sharePct(warning), hint: 'Flagged by monitoring' },
+    { key: 'maintenance', label: 'In service',    count: maint,   pct: sharePct(maint),   hint: 'With a technician' },
+    { key: 'offline',     label: 'Offline',       count: offline, pct: sharePct(offline), hint: 'Not reporting' },
+  ];
+
   const userName  = (state.currentUser && (state.currentUser.fullName || state.currentUser.username)) || 'System Administrator';
 
   // Recent tickets
@@ -1694,13 +2207,22 @@ function renderDashboardView() {
 
       <!-- 3. Horizontal Metadata Strip Bar -->
       <div class="strip-bar-v2">
-        <div class="strip-item">🏫 Schools: <strong>${schoolDevices}</strong></div>
+        <button type="button" class="strip-item strip-item--clickable"
+          title="Show every school client account" onclick="showClientsByType('school')">
+          🏫 School Clients: <strong>${schoolClients}</strong>
+        </button>
         <div class="strip-divider"></div>
-        <div class="strip-item">🏢 Corporates: <strong>${corpDevices}</strong></div>
+        <button type="button" class="strip-item strip-item--clickable"
+          title="Show every corporate client account" onclick="showClientsByType('corporate')">
+          🏢 Corporate Clients: <strong>${corpClients}</strong>
+        </button>
         <div class="strip-divider"></div>
-        <div class="strip-item">📦 Inventory: <strong class="text-amber">${lowStockParts.length > 0 ? lowStockParts.length + ' Low' : '2 Low'}</strong></div>
+        <button type="button" class="strip-item strip-item--clickable"
+          title="Open the spare-parts inventory" onclick="navigateTo('inventory')">
+          📦 Inventory: <strong class="text-amber">${lowStockParts.length} Low</strong>
+        </button>
         <div class="strip-divider"></div>
-        <div class="strip-item">💚 Health Score: <strong class="text-emerald">${healthPct}% (Optimal)</strong></div>
+        <div class="strip-item" title="Share of the fleet reporting normally">💚 Health Score: <strong class="text-emerald">${healthPct}%</strong></div>
         <button class="strip-btn-link" onclick="navigateTo('devices')">View All →</button>
       </div>
 
@@ -1712,30 +2234,79 @@ function renderDashboardView() {
             <div class="widget-title">🖥️ Device Fleet Status</div>
             <button class="widget-link" onclick="navigateTo('devices')">View All →</button>
           </div>
+
+          <!-- Donut = share of the fleet that is healthy right now. -->
           <div class="donut-chart-row">
             <div class="donut-container">
-              <svg viewBox="0 0 36 36" class="donut-svg">
+              <svg viewBox="0 0 36 36" class="donut-svg" role="img"
+                   aria-label="${healthPct}% of ${total} devices are online">
                 <path class="donut-ring" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="3.8"/>
-                <path class="donut-segment" stroke-dasharray="${healthPct > 0 ? healthPct : 100}, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#00f2fe" stroke-width="3.8"/>
+                <path class="donut-segment" stroke-dasharray="${healthPct}, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#00f2fe" stroke-width="3.8"/>
               </svg>
               <div class="donut-center-text">
                 <strong>${total}</strong>
                 <small>Total Devices</small>
               </div>
             </div>
-            <div class="donut-legend">
-              <div class="legend-item"><span class="legend-dot online"></span> Online <strong>${online}</strong> <small>100%</small></div>
-              <div class="legend-item"><span class="legend-dot warning"></span> Warning <strong>${warning}</strong> <small>0%</small></div>
-              <div class="legend-item"><span class="legend-dot service"></span> In Service <strong>${maint}</strong> <small>0%</small></div>
-              <div class="legend-item"><span class="legend-dot offline"></span> Offline <strong>${offline}</strong> <small>0%</small></div>
+
+            <!-- Bar chart: one bar per status, width = share of the fleet. -->
+            <div class="fleet-chart">
+              <div class="fleet-share-bar" role="img"
+                   aria-label="Fleet status breakdown">
+                ${fleetBreakdown.filter(b => b.count > 0).map(b => `
+                  <span class="fleet-share-seg is-${b.key}" style="width:${b.pct}%"
+                        title="${b.label}: ${b.count} (${b.pct}%)"></span>
+                `).join('') || '<span class="fleet-share-seg is-empty" style="width:100%"></span>'}
+              </div>
+
+              ${fleetBreakdown.map(b => `
+                <div class="fleet-bar-row" title="${b.hint}">
+                  <span class="fleet-bar-label">
+                    <span class="legend-dot ${b.key === 'maintenance' ? 'service' : b.key}"></span>${b.label}
+                  </span>
+                  <span class="fleet-bar-track">
+                    <span class="fleet-bar-fill is-${b.key}" style="width:${b.pct}%"></span>
+                  </span>
+                  <span class="fleet-bar-count">
+                    <strong>${b.count}</strong><small>${b.pct}%</small>
+                  </span>
+                </div>
+              `).join('')}
             </div>
           </div>
+
           <div class="client-type-box">
-            <div class="client-type-label">By Client Type</div>
-            <div class="client-type-chips">
-              <div class="client-chip active">🏫 Schools <strong>${schoolDevices}</strong></div>
-              <div class="client-chip">🏢 Corporate <strong>${corpDevices}</strong></div>
+            <div class="client-type-label">
+              Registered Clients by Type
+              <button class="widget-link" style="margin-left:auto;"
+                onclick="navigateTo('dataManager'); setClientTypeFilter('all');">Manage →</button>
             </div>
+            <!-- Real buttons: each opens the Data Manager filtered to that type. -->
+            <div class="client-type-chips">
+              <button type="button"
+                class="client-chip${state.clientTypeFilter === 'school' ? ' active' : ''}"
+                onclick="showClientsByType('school')"
+                title="Show every school client account">
+                🏫 Schools <strong>${schoolClients}</strong>
+              </button>
+              <button type="button"
+                class="client-chip${state.clientTypeFilter === 'corporate' ? ' active' : ''}"
+                onclick="showClientsByType('corporate')"
+                title="Show every corporate client account">
+                🏢 Corporate <strong>${corpClients}</strong>
+              </button>
+            </div>
+            ${newestClient ? `
+              <button type="button" class="client-type-newest client-type-newest--clickable"
+                onclick="showClientsByType('${newestClient.clientType === 'school' ? 'school' : 'corporate'}')"
+                title="Show all ${newestClient.clientType} clients">
+                Latest sign-up:
+                <strong>${escapeHtml(newestClient.organizationName)}</strong>
+                <span class="client-type-tag ${newestClient.clientType === 'school' ? 'is-school' : 'is-corporate'}">
+                  ${newestClient.clientType === 'school' ? '🏫 School' : '🏢 Corporate'}
+                </span>
+              </button>` : `
+              <div class="client-type-newest">No client organizations have registered yet.</div>`}
           </div>
         </div>
 
@@ -1968,6 +2539,179 @@ function recordSection(title, subtitle, actionHtml, bodyHtml) {
 }
 
 // --------------------------------------------------------------------------
+// CHARTS (dashboard visualisations)
+//
+// Pure CSS/SVG — no charting library, matching the donut the admin dashboard
+// already ships. Everything is theme-aware: colours come from CSS custom
+// properties defined in style.css, never from hard-coded hex, so light and dark
+// mode both stay correct (the older admin donut hard-codes #fff and breaks in
+// light mode — these deliberately do not repeat that).
+// --------------------------------------------------------------------------
+
+/** The 8 category colours, referenced by CSS class so themes can retune them. */
+const CHART_PALETTE = ['c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8'];
+
+/** Circumference of the r=15.9155 circle used by the donut, in user units. */
+const DONUT_CIRCUMFERENCE = 100;
+
+/**
+ * A multi-segment donut.
+ *
+ * `segments` is `[{ label, value, tone }]`; `tone` is a palette class (`c1`…).
+ * Values are normalised, so callers can pass raw counts.
+ *
+ * Segment geometry: each arc is drawn with an explicit `stroke-dasharray` of
+ * `len, 100-len` and `stroke-dashoffset` positioned from the running total, so
+ * adjacent segments butt up exactly instead of accumulating rounding gaps.
+ * A zero-value slice is skipped — a 0-length dash still paints a dot cap.
+ */
+function donutChart(segments, centerValue, centerLabel, options) {
+  const opts = options || {};
+  const all = segments || [];
+  // Zero-valued categories stay in the legend (a reader wants to see that
+  // "Offline 0" was considered) but draw no arc.
+  const items = all.filter(s => Number(s.value) > 0);
+  const total = items.reduce((sum, s) => sum + Number(s.value), 0);
+
+  let offset = 0;
+  const arcs = items.map(s => {
+    const pct = (Number(s.value) / total) * 100;
+    const len = (pct / 100) * DONUT_CIRCUMFERENCE;
+    // Negative offset walks the stroke clockwise from 12 o'clock.
+    const arc = `<circle class="donut-arc" cx="18" cy="18" r="15.9155"
+        stroke-dasharray="${len.toFixed(3)} ${(DONUT_CIRCUMFERENCE - len).toFixed(3)}"
+        stroke-dashoffset="${(-offset).toFixed(3)}"
+        data-tone="${s.tone || 'c1'}"></circle>`;
+    offset += len;
+    return arc;
+  }).join('');
+
+  const legend = all.map(s => {
+    const v = Number(s.value) || 0;
+    return `
+    <div class="donut-legend-item${v === 0 ? ' is-zero' : ''}">
+      <span class="donut-swatch" data-tone="${s.tone || 'c1'}"></span>
+      <span class="donut-legend-label">${escapeHtml(s.label)}</span>
+      <span class="donut-legend-value">${v}</span>
+    </div>
+  `;
+  }).join('');
+
+  // When every value is zero, an empty ring plus a lone "0%" reads as a broken
+  // chart rather than an empty one. Draw the ring in the muted track colour and
+  // say so explicitly instead.
+  const allZero = total === 0;
+  const ringClass = allZero ? ' donut-graphic--empty' : '';
+  const hint = allZero
+    ? `<div class="donut-empty-note">${escapeHtml(opts.emptyNote || 'Nothing to chart yet')}</div>`
+    : legend;
+
+  return `
+    <div class="donut-chart">
+      <div class="donut-graphic${ringClass}">
+        <svg viewBox="0 0 36 36" class="donut-svg" role="img"
+             aria-label="${escapeHtml(centerLabel || 'Chart')}">
+          <circle class="donut-track" cx="18" cy="18" r="15.9155"></circle>
+          ${arcs}
+        </svg>
+        <div class="donut-center">
+          <strong>${escapeHtml(String(centerValue))}</strong>
+          <small>${escapeHtml(centerLabel || '')}</small>
+        </div>
+      </div>
+      <div class="donut-legend">${allZero ? hint : legend}</div>
+    </div>
+  `;
+}
+
+/**
+ * A horizontal bar breakdown — better than a donut when the categories are
+ * ordered/sequential or the labels are long.
+ *
+ * Bars are scaled against the LARGEST value rather than the total, so a single
+ * dominant category does not flatten every other bar to an invisible sliver.
+ * The trade-off is that two equal values both render full-width, which can read
+ * as "both are at maximum". Pass `{ showShare: true }` to append each row's
+ * share of the total, so equal-length bars are still interpretable.
+ *
+ * Zero-valued rows are dropped by default: a bar chart with several permanent
+ * empty tracks wastes vertical space and makes a sparse dataset look broken.
+ * Pass `{ keepEmpty: true }` to render every category regardless.
+ */
+function barChart(rows, options) {
+  const opts = options || {};
+  const all = (rows || []).filter(r => r && r.value !== undefined);
+  const items = opts.keepEmpty ? all : all.filter(r => (Number(r.value) || 0) > 0);
+  const max = Math.max(1, ...items.map(r => Number(r.value) || 0));
+  const total = items.reduce((sum, r) => sum + (Number(r.value) || 0), 0);
+
+  const bars = items.map(r => {
+    const v = Number(r.value) || 0;
+    const pct = (v / max) * 100;
+    let label = r.display != null ? String(r.display) : String(v);
+    if (opts.showShare && total > 0) {
+      label += ` · ${Math.round((v / total) * 100)}%`;
+    }
+    return `
+      <div class="bar-row">
+        <div class="bar-row-head">
+          <span class="bar-row-label">${escapeHtml(r.label)}</span>
+          <span class="bar-row-value">${escapeHtml(label)}</span>
+        </div>
+        <div class="bar-track">
+          <span class="bar-fill" data-tone="${r.tone || 'c1'}" style="width:${pct.toFixed(2)}%"></span>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  return `<div class="bar-chart">${items.length === 0 ? '<div class="donut-empty-note">No data yet</div>' : bars}</div>`;
+}
+
+/**
+ * A stacked proportion strip — use when you want the mix in one compact line
+ * (e.g. fleet health at a glance). Renders flex-basis percentages.
+ */
+function proportionStrip(segments) {
+  const items = (segments || []).filter(s => Number(s.value) > 0);
+  const total = items.reduce((sum, s) => sum + Number(s.value), 0);
+  if (items.length === 0) return '<div class="donut-empty-note">No data yet</div>';
+
+  const parts = items.map(s => {
+    const pct = (Number(s.value) / total) * 100;
+    return `<span class="prop-seg" data-tone="${s.tone || 'c1'}" style="flex:${pct.toFixed(3)}" title="${escapeHtml(s.label)}: ${Number(s.value)}"></span>`;
+  }).join('');
+
+  const key = items.map(s => `
+    <span class="prop-key">
+      <span class="donut-swatch" data-tone="${s.tone || 'c1'}"></span>
+      ${escapeHtml(s.label)} <strong>${Number(s.value)}</strong>
+    </span>
+  `).join('');
+
+  return `<div class="prop-strip">${parts}</div><div class="prop-key-row">${key}</div>`;
+}
+
+/**
+ * A titled chart panel, so charts sit in the same card language as the record
+ * sections. `actionHtml` mirrors recordSection()'s optional view-all button.
+ */
+function chartPanel(title, subtitle, bodyHtml, actionHtml) {
+  return `
+    <section class="chart-card">
+      <div class="chart-card-head">
+        <div>
+          <div class="chart-card-title">${title}</div>
+          ${subtitle ? `<div class="chart-card-sub">${subtitle}</div>` : ''}
+        </div>
+        ${actionHtml || ''}
+      </div>
+      <div class="chart-card-body">${bodyHtml}</div>
+    </section>
+  `;
+}
+
+// --------------------------------------------------------------------------
 // CUSTOMER DASHBOARD
 // --------------------------------------------------------------------------
 function renderCustomerDashboardView() {
@@ -2087,6 +2831,38 @@ function renderCustomerDashboardView() {
         ${kpiCard('amber', '🛡️', 'Warranty Coverage', activeWarranties.length,
           expiringSoon.length > 0 ? `${expiringSoon.length} expiring within 90 days` : 'All contracts in good standing')}
       </div>
+
+      <!-- Charts: fleet health + ticket mix + warranty runway -->
+      <div class="chart-row-2">
+        ${chartPanel('🖥️ Device Health', `${myDevices.length} registered device${myDevices.length === 1 ? '' : 's'}`,
+          donutChart([
+            { label: 'Online',       value: onlineCount,                                        tone: 'c3' },
+            { label: 'In Service',   value: myDevices.filter(d => d.status === 'maintenance').length, tone: 'c1' },
+            { label: 'Warning',      value: myDevices.filter(d => d.status === 'warning').length,     tone: 'c4' },
+            { label: 'Offline',      value: myDevices.filter(d => d.status === 'offline').length,     tone: 'c5' },
+          ], `${fleetPct}%`, 'Online'),
+          `<button class="btn btn-secondary btn-sm" onclick="navigateTo('devices')">View All →</button>`)}
+
+        ${chartPanel('🎫 Ticket Status', 'Every service ticket on this account',
+          barChart([
+            { label: 'Open',       value: myTickets.filter(t => t.status === 'Open').length,        tone: 'c1' },
+            { label: 'Diagnosing', value: myTickets.filter(t => t.status === 'Diagnosing').length,  tone: 'c6' },
+            { label: 'Repairing',  value: myTickets.filter(t => t.status === 'Repairing').length,   tone: 'c4' },
+            { label: 'Received',   value: myTickets.filter(t => t.status === 'Received').length,    tone: 'c7' },
+            { label: 'Resolved',   value: resolvedCount,                                            tone: 'c3' },
+          ]),
+          `<button class="btn btn-secondary btn-sm" onclick="navigateTo('tickets')">View All →</button>`)}
+      </div>
+
+      <!-- Warranty runway: how much cover is left across the fleet -->
+      ${myWarranties.length > 0 ? chartPanel('🛡️ Warranty Runway', 'Remaining cover per registered device',
+        proportionStrip([
+          { label: 'Protected (>90d)', value: activeWarranties.length - expiringSoon.length, tone: 'c3' },
+          { label: 'Expiring soon',    value: expiringSoon.length,                          tone: 'c4' },
+          { label: 'Expired / Other',  value: myWarranties.length - activeWarranties.length, tone: 'c8' },
+        ]),
+        `<button class="btn btn-secondary btn-sm" onclick="navigateTo('warranties')">View All →</button>`
+      ) : ''}
 
       <!-- Records: tickets + orders/bookings -->
       <div class="dash-2col">
@@ -2332,12 +3108,43 @@ function renderTechnicianDashboardView() {
           servicedDevices.length === 1 ? '1 device in your ticket history' : `${servicedDevices.length} devices in your ticket history`)}
       </div>
 
+      <!-- Charts: job mix + parts consumed -->
+      <div class="chart-row-2">
+        ${chartPanel('🎫 Job Status Mix', `${myTickets.length} ticket${myTickets.length === 1 ? '' : 's'} assigned to you`,
+          donutChart([
+            { label: 'Awaiting first response', value: received.length,           tone: 'c7' },
+            { label: 'Diagnosing',              value: myTickets.filter(t => t.status === 'Diagnosing').length, tone: 'c6' },
+            { label: 'Repairing',               value: myTickets.filter(t => t.status === 'Repairing').length,  tone: 'c4' },
+            { label: 'Resolved',                value: resolved.length,           tone: 'c3' },
+          ], `${resolveRate}%`, 'Resolved'),
+          `<button class="btn btn-secondary btn-sm" onclick="navigateTo('tickets')">Open Queue →</button>`)}
+
+        ${chartPanel('🔩 Parts Consumed', 'Units logged against your tickets',
+          barChart(partsUsed.length === 0
+            ? []
+            : partsUsed.map((p, i) => ({ label: p.name, value: p.qty, tone: CHART_PALETTE[i % CHART_PALETTE.length] }))),
+          `<button class="btn btn-secondary btn-sm" onclick="navigateTo('inventory')">Inventory →</button>`)}
+      </div>
+
+      <!-- Workload by priority: shows where the pressure actually is -->
+      ${myTickets.length > 0 ? chartPanel('⚖️ Open Workload by Priority', 'Open jobs only — resolved work is excluded',
+        proportionStrip([
+          { label: 'Critical', value: critical.length,                                             tone: 'c5' },
+          { label: 'High',     value: high.length,                                                 tone: 'c4' },
+          { label: 'Medium',   value: myTickets.filter(t => t.priority === 'Medium' && openTickets.includes(t)).length, tone: 'c1' },
+          { label: 'Low',      value: myTickets.filter(t => t.priority === 'Low' && openTickets.includes(t)).length,    tone: 'c8' },
+        ])
+      ) : ''}
+
       ${(critical.length > 0 || high.length > 0) ? `
         <div class="tech-alert-bar">
           <span class="tech-alert-icon">⚠️</span>
           <div>
             <strong>Priority work waiting</strong>
-            <span>${critical.length} critical and ${high.length} high-priority job${(critical.length + high.length) === 1 ? '' : 's'} need attention.</span>
+            <span>${[
+              critical.length > 0 ? `${critical.length} critical` : '',
+              high.length > 0 ? `${high.length} high-priority` : '',
+            ].filter(Boolean).join(' and ')} job${(critical.length + high.length) === 1 ? '' : 's'} need attention.</span>
           </div>
           <button class="btn btn-secondary btn-sm" onclick="navigateTo('tickets')">Open Queue →</button>
         </div>
@@ -2477,12 +3284,12 @@ function renderDevicesView() {
   return `
     <div class="page-header-row">
       <div>
-        <h1 class="page-title">🖥️ Millennium Device Fleet</h1>
-        <p class="page-description">Total ${state.devices.length} displays registered in active management.</p>
+        <h1 class="page-title">🖥️ SmartBoards</h1>
+        <p class="page-description">All ${state.devices.length} SmartBoards we look after, and how each one is doing right now.</p>
       </div>
       <div class="page-actions">
-        ${isAdmin ? `<button class="btn btn-primary" onclick="openRegisterModal()">➕ Register Millennium Board</button>` : ''}
-        ${isTech  ? `<span style="font-size:0.82rem;color:var(--text-muted);">🔍 Read-only view. Contact admin to register boards.</span>` : ''}
+        ${isAdmin ? `<button class="btn btn-primary" onclick="openRegisterModal()">➕ Register a SmartBoard</button>` : ''}
+        ${isTech  ? `<span style="font-size:0.82rem;color:var(--text-muted);">🔍 View only. Ask an administrator to register new boards.</span>` : ''}
       </div>
     </div>
 
@@ -2491,42 +3298,42 @@ function renderDevicesView() {
       <div class="filter-bar" style="margin-bottom: 0;">
         <div class="search-input-box">
           <span class="search-icon">🔍</span>
-          <input type="text" class="search-input" placeholder="Search by Device ID, Client, Serial, Location..." value="${state.searchQuery}" oninput="handleSearch(this.value)" />
+          <input type="text" class="search-input" placeholder="Search by device ID, customer, serial number or location..." value="${state.searchQuery}" oninput="handleSearch(this.value)" />
         </div>
         <select class="filter-select" onchange="handleModelFilter(this.value)">
-          <option value="">All Screen Sizes</option>
+          <option value="">All screen sizes</option>
           <option value="86" ${state.filterModel === '86' ? 'selected' : ''}>Millennium 86" (Flagship)</option>
           <option value="75" ${state.filterModel === '75' ? 'selected' : ''}>Millennium 75"</option>
           <option value="65" ${state.filterModel === '65' ? 'selected' : ''}>Millennium 65"</option>
         </select>
         <select class="filter-select" onchange="handleStatusFilter(this.value)">
-          <option value="">All Statuses</option>
+          <option value="">Any status</option>
           <option value="online" ${state.filterStatus === 'online' ? 'selected' : ''}>🟢 Online</option>
           <option value="offline" ${state.filterStatus === 'offline' ? 'selected' : ''}>🔴 Offline</option>
-          <option value="warning" ${state.filterStatus === 'warning' ? 'selected' : ''}>⚠️ Problem / Warning</option>
-          <option value="maintenance" ${state.filterStatus === 'maintenance' ? 'selected' : ''}>🔧 In Maintenance</option>
+          <option value="warning" ${state.filterStatus === 'warning' ? 'selected' : ''}>⚠️ Needs attention</option>
+          <option value="maintenance" ${state.filterStatus === 'maintenance' ? 'selected' : ''}>🔧 Being repaired</option>
         </select>
-        ${state.searchQuery || state.filterModel || state.filterStatus ? `<button class="btn btn-secondary btn-sm" onclick="clearFilters()">Reset</button>` : ''}
+        ${state.searchQuery || state.filterModel || state.filterStatus ? `<button class="btn btn-secondary btn-sm" onclick="clearFilters()">Clear filters</button>` : ''}
       </div>
     </div>
 
     <!-- Device Fleet Table -->
     <div class="glass-panel" style="padding: 0; overflow: hidden;">
       <div class="data-table-wrapper">
-        <table class="data-table">
+        <table class="data-table devices-table">
           <thead>
             <tr>
-              <th>Device ID / QR</th>
-              <th>Display Model</th>
-              <th>Customer & Location</th>
+              <th>Device ID</th>
+              <th>Model</th>
+              <th>Customer &amp; site</th>
               <th>Status</th>
-              <th>OS & OPS Module</th>
-              <th>Last Ping</th>
-              <th>Central Remote Controls</th>
+              <th>System &amp; hardware</th>
+              <th>Last seen</th>
+              <th class="col-actions">Actions</th>
             </tr>
           </thead>
           <tbody>
-            ${filtered.length === 0 ? `<tr><td colspan="7" style="text-align: center; padding: 40px; color: var(--text-muted);">No devices matching current criteria.</td></tr>` : ''}
+            ${filtered.length === 0 ? `<tr><td colspan="7" style="text-align: center; padding: 40px; color: var(--text-muted);">No SmartBoards match your search. Try clearing the filters.</td></tr>` : ''}
             ${filtered
               .map((dev) => {
                 const statusClass =
@@ -2573,19 +3380,12 @@ function renderDevicesView() {
                     <div style="font-size: 0.78rem;">${timeAgo(new Date(dev.lastPing))}</div>
                     <div style="font-size: 0.72rem; color: var(--text-muted);">${dev.ipAddress}</div>
                   </td>
-                  <td>
-                    <div class="action-buttons-group">
-                      ${isAdmin ? `
-                        <button class="btn btn-secondary btn-sm" onclick="openRemoteControlModal('${dev.id}')" title="Open Remote Console">
-                          🎮 Console
-                        </button>
-                        <button class="action-btn" title="Fast Reboot" onclick="triggerRemoteAction('${dev.id}', 'restart')">🔄</button>
-                        <button class="action-btn" title="${dev.screenLocked ? 'Unlock Screen' : 'Lock Screen'}" onclick="triggerRemoteAction('${dev.id}', '${dev.screenLocked ? 'unlock' : 'lock'}')">
-                          ${dev.screenLocked ? '🔓' : '🔒'}
-                        </button>
-                        <button class="action-btn" title="Delete Device" onclick="event.stopPropagation();deleteDevice('${dev.id}')" style="color:#f43f5e;border-color:#f43f5e44;">🗑️</button>
-                      ` : `<button class="btn btn-secondary btn-sm" onclick="openQRModal('${dev.id}')">📱 View ID</button>`}
-                    </div>
+                  <td class="col-actions">
+                    ${isAdmin
+                      ? `<button class="action-btn action-btn-danger" title="Remove this device"
+                           aria-label="Remove ${dev.id}"
+                           onclick="event.stopPropagation();deleteDevice('${dev.id}')">🗑️</button>`
+                      : `<span class="action-none" title="Only an administrator can remove a device">—</span>`}
                   </td>
                 </tr>
               `;
@@ -2656,6 +3456,21 @@ function renderTicketCardCustomer(t) {
       </div>
     </article>
   `;
+}
+
+// Human-readable names for the ticket pipeline stages.
+// The DB keeps the original Received/Diagnosing/Repairing/Resolved values, but
+// the UI now speaks the language the team actually uses when triaging: a ticket
+// is new, then it needs a diagnosis, then it is being repaired, then resolved.
+function ticketStatusLabel(status) {
+  switch (status) {
+    case 'Received':   return 'New Ticket';
+    case 'Diagnosing': return 'Needs Diagnosis';
+    case 'Repairing':  return 'Repairing';
+    case 'Resolved':   return 'Resolved';
+    case 'Closed':     return 'Closed';
+    default:           return status || '—';
+  }
 }
 
 // 3. Maintenance & Service Ticket View
@@ -2856,14 +3671,14 @@ function renderTicketsView() {
         <span>You don't have any assigned service tickets at the moment. Check back later or contact your admin.</span>
       </div>
     ` : `
-      <!-- 1. Received -->
+      <!-- 1. New Tickets -->
       <div class="kanban-column stage-received${received.length === 0 ? ' is-empty' : ''}">
         <div class="kanban-header">
-          <span class="kanban-header-label">📥 Received</span>
+          <span class="kanban-header-label">📥 New Tickets</span>
           <span class="kanban-count">${received.length}</span>
         </div>
         ${received.length === 0
-          ? renderKanbanEmpty('📥', 'Nothing received', 'New service requests land here.')
+          ? renderKanbanEmpty('📥', 'No new tickets', 'Freshly submitted requests land here.')
           : received.map(renderTicketCard).join('')}
       </div>
 
@@ -3113,6 +3928,21 @@ function renderCustomerBookings(user) {
   `;
 }
 
+// Resolves "who has this device" for the Reports table.
+// The column used to show a Coverage Tier ("Standard Warranty"), which told an
+// admin nothing they could act on. It now names the holder instead: the
+// customer record's contact person when one is on file, otherwise the
+// organisation. The lookup runs through the device so a contract that predates
+// a customer rename still resolves to the current holder.
+function resolveDeviceHolder(w) {
+  const device   = (state.devices   || []).find(d => d.id === w.deviceId);
+  const customer = device && (state.customers || []).find(c => c.id === device.customerId);
+  const person   = String((customer && customer.contactPerson) || '').trim();
+  const org      = String((customer && customer.organizationName) || w.customerName || '').trim();
+  if (person) return { person, org };
+  return { person: org || '—', org: '' };
+}
+
 // 5. Warranty Management View
 function renderWarrantyView() {
   const isCustomer = state.currentRole === 'customer';
@@ -3170,15 +4000,16 @@ function renderWarrantyView() {
               <th>Purchase Date</th>
               <th>Expiry Date</th>
               <th>Status</th>
-              <th>Coverage Tier</th>
+              <th>Device Holder</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             ${filteredWarranties.length === 0 ? `<tr><td colspan="${isCustomer ? '8' : '9'}" style="text-align:center;padding:40px;color:var(--text-muted);">No warranty records found.</td></tr>` : ''}
             ${filteredWarranties
-              .map(
-                (w) => `
+              .map((w) => {
+                const holder = resolveDeviceHolder(w);
+                return `
               <tr>
                 <td><strong style="font-family: 'JetBrains Mono';">${w.id}</strong></td>
                 <td><strong style="color: var(--accent-blue);">${w.deviceId}</strong></td>
@@ -3191,7 +4022,10 @@ function renderWarrantyView() {
                     ${w.status === 'Under Warranty' ? '🟢 Active' : '⚠️ Expired'}
                   </span>
                 </td>
-                <td style="font-size: 0.8rem; color: var(--text-secondary);">${w.coverageType}</td>
+                <td>
+                  <strong style="font-size: 0.85rem;">${escapeHtml(holder.person)}</strong>
+                  ${holder.org ? `<div style="font-size: 0.72rem; color: var(--text-muted);">${escapeHtml(holder.org)}</div>` : ''}
+                </td>
                 <td>
                   <button 
                     class="btn btn-sm btn-secondary" 
@@ -3203,14 +4037,323 @@ function renderWarrantyView() {
                   </button>
                 </td>
               </tr>
-            `
-              )
+            `;
+              })
               .join('')}
           </tbody>
         </table>
       </div>
     </div>
   `;
+}
+
+// 5b. People Directory — who else uses this system.
+// Open to every role. It shows only the fields that help someone find a
+// colleague or a counterpart: name, role, location, organization and live
+// presence. Email and username stay admin-only (they live behind
+// /auth/users), so this view cannot become a contact-harvesting surface for a
+// customer account.
+function renderDirectoryView() {
+  const people = Array.isArray(state.directory) ? state.directory : [];
+  const me = state.currentUser || {};
+
+  const q = String(state.searchQuery || '').trim().toLowerCase();
+  const visible = q
+    ? people.filter((p) =>
+        String(p.fullName || '').toLowerCase().includes(q) ||
+        String(p.role || '').toLowerCase().includes(q) ||
+        String(p.location || '').toLowerCase().includes(q) ||
+        String(p.organization || '').toLowerCase().includes(q))
+    : people;
+
+  const onlineCount = visible.filter((p) => p.online).length;
+
+  // Online people float to the top, then alphabetical — so "who is around"
+  // is answered by the first screenful rather than by scanning every card.
+  const sorted = [...visible].sort((a, b) => {
+    if (!!b.online !== !!a.online) return b.online ? 1 : -1;
+    return String(a.fullName || '').localeCompare(String(b.fullName || ''));
+  });
+
+  return `
+    <div class="page-header-row">
+      <div>
+        <h1 class="page-title">👥 Directory</h1>
+        <p class="page-description">Everyone with an account on this system. Click any person to see their full profile and the devices they hold.</p>
+      </div>
+      <div class="page-actions">
+        <button class="btn btn-secondary btn-sm" onclick="fetchAllData()">🔄 Refresh</button>
+      </div>
+    </div>
+
+    <div class="glass-panel" style="padding: 16px 20px; margin-bottom: 20px;">
+      <div class="search-input-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" class="search-input"
+          placeholder="Search by name, role, location or organization..."
+          value="${escapeHtml(state.searchQuery || '')}" oninput="handleSearch(this.value)" />
+      </div>
+    </div>
+
+    <div class="directory-stats">
+      <span class="directory-stat"><strong>${people.length}</strong> ${people.length === 1 ? 'person' : 'people'}</span>
+      <span class="directory-stat"><span class="presence-dot is-online"></span><strong>${onlineCount}</strong> online now</span>
+    </div>
+
+    ${sorted.length === 0
+      ? `<div class="glass-panel" style="text-align:center;padding:40px;color:var(--text-muted);">No people match your search.</div>`
+      : `<div class="directory-grid">
+          ${sorted.map((p) => {
+            const meta = ROLE_META[p.role] || { icon: '👤', name: p.role || 'User' };
+            const isMe = p.id === me.id;
+            const initials = String(p.fullName || '?').trim().charAt(0).toUpperCase();
+            const held = countDevicesForPerson(p);
+            return `
+              <article class="directory-card directory-card--clickable${isMe ? ' is-me' : ''}"
+                role="button" tabindex="0"
+                title="Open ${escapeHtml(p.fullName)}'s profile"
+                aria-label="Open profile for ${escapeHtml(p.fullName)}"
+                onclick="openDirectoryProfile('${p.id}')"
+                onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openDirectoryProfile('${p.id}');}">
+                <div class="directory-avatar directory-avatar--${escapeHtml(p.role || 'user')}" aria-hidden="true">${escapeHtml(initials)}</div>
+                <div class="directory-body">
+                  <div class="directory-name">
+                    ${escapeHtml(p.fullName)}
+                    ${isMe ? '<span class="directory-you">You</span>' : ''}
+                  </div>
+                  <div class="directory-role">${meta.icon} ${escapeHtml(meta.name)}</div>
+                  <div class="directory-meta">
+                    <span title="Location">📍 ${escapeHtml(p.location || '—')}</span>
+                    ${p.organization ? `<span title="Organization">🏢 ${escapeHtml(p.organization)}</span>` : ''}
+                    ${held > 0 ? `<span title="Devices held">🖥️ ${held} device${held === 1 ? '' : 's'}</span>` : ''}
+                  </div>
+                </div>
+                <span class="presence-pill ${p.online ? 'is-online' : 'is-offline'}"
+                  title="${p.online ? 'Active within the last 5 minutes' : 'Not active right now'}">
+                  <span class="presence-dot ${p.online ? 'is-online' : 'is-offline'}"></span>${p.online ? 'Online' : 'Offline'}
+                </span>
+              </article>`;
+          }).join('')}
+        </div>`}
+  `;
+}
+
+/**
+ * Devices held by a person, resolved through their organization.
+ *
+ * A person row carries an organization name, and devices carry a customer id —
+ * so the link is organization name -> customers row -> devices. An admin or a
+ * technician has no organization and therefore no held devices; that is a real
+ * answer, not a lookup failure, and the profile says so.
+ */
+function devicesForPerson(person) {
+  const org = String((person && person.organization) || '').trim().toLowerCase();
+  if (!org) return [];
+  const cust = (state.customers || []).find(
+    (c) => String(c.organizationName || '').trim().toLowerCase() === org
+  );
+  if (!cust) return [];
+  return (state.devices || []).filter(
+    (d) => String(d.customerId || '').toLowerCase() === String(cust.id || '').toLowerCase()
+  );
+}
+
+function countDevicesForPerson(person) {
+  return devicesForPerson(person).length;
+}
+
+function roleDisplay(role) {
+  const meta = ROLE_META[role] || { icon: '👤', name: role || 'User' };
+  return `${meta.icon} ${meta.name}`;
+}
+
+function formatJoined(value) {
+  if (!value) return 'Not recorded';
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return 'Not recorded';
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+/**
+ * Full profile for one directory entry: who they are, how to reach them, where
+ * they work, and which devices they hold. Read-only — editing a user lives in
+ * the Data Manager (admins) or Settings (yourself).
+ */
+function openDirectoryProfile(personId) {
+  const people = Array.isArray(state.directory) ? state.directory : [];
+  const p = people.find((x) => x.id === personId);
+  if (!p) {
+    showToast('That person is no longer in the directory.', 'error');
+    return;
+  }
+
+  const existing = document.getElementById('directoryProfileOverlay');
+  if (existing) existing.remove();
+
+  const me = state.currentUser || {};
+  const isMe = p.id === me.id;
+  const held = devicesForPerson(p);
+  const initials = String(p.fullName || '?').trim().charAt(0).toUpperCase();
+
+  // Tickets raised against any device this person's organization holds.
+  const heldIds = new Set(held.map((d) => String(d.id)));
+  const theirTickets = (state.tickets || []).filter((t) => heldIds.has(String(t.deviceId)));
+  const openTickets = theirTickets.filter((t) => t.status !== 'Resolved' && t.status !== 'Closed');
+  const onlineDevices = held.filter((d) => d.status === 'online').length;
+
+  const statusPill = (s) => {
+    const map = {
+      online: ['status-online', '🟢 Online'],
+      offline: ['status-offline', '🔴 Offline'],
+      warning: ['status-warning', '⚠️ Needs attention'],
+      maintenance: ['status-maintenance', '🔧 In service'],
+    };
+    const [cls, label] = map[s] || ['status-offline', s || 'Unknown'];
+    return `<span class="status-pill ${cls}" style="font-size:0.7rem;">${label}</span>`;
+  };
+
+  const overlay = document.createElement('div');
+  overlay.id = 'directoryProfileOverlay';
+  overlay.className = 'modal-backdrop';
+  overlay.innerHTML = `
+    <div class="modal-content dir-profile" role="dialog" aria-modal="true"
+         aria-label="Profile for ${escapeHtml(p.fullName)}">
+
+      <button type="button" class="dir-profile-close" id="dirProfileClose"
+        aria-label="Close profile">✕</button>
+
+      <div class="dir-profile-head">
+        <div class="dir-profile-avatar directory-avatar--${escapeHtml(p.role || 'user')}" aria-hidden="true">
+          ${escapeHtml(initials)}
+        </div>
+        <div class="dir-profile-id">
+          <h3 class="dir-profile-name">
+            ${escapeHtml(p.fullName)}
+            ${isMe ? '<span class="directory-you">You</span>' : ''}
+          </h3>
+          <div class="dir-profile-role">${escapeHtml(roleDisplay(p.role))}</div>
+          <span class="presence-pill ${p.online ? 'is-online' : 'is-offline'}">
+            <span class="presence-dot ${p.online ? 'is-online' : 'is-offline'}"></span>${p.online ? 'Online now' : 'Offline'}
+          </span>
+        </div>
+      </div>
+
+      <div class="dir-profile-stats">
+        <div class="dir-profile-stat">
+          <strong>${held.length}</strong>
+          <span>${held.length === 1 ? 'Device' : 'Devices'} held</span>
+        </div>
+        <div class="dir-profile-stat">
+          <strong>${onlineDevices}</strong>
+          <span>Online now</span>
+        </div>
+        <div class="dir-profile-stat">
+          <strong>${openTickets.length}</strong>
+          <span>Open tickets</span>
+        </div>
+      </div>
+
+      <div class="dir-profile-section">
+        <div class="dir-profile-section-title">📇 Contact</div>
+        <div class="dir-profile-rows">
+          <div class="dir-profile-row">
+            <span class="dir-profile-key">Email</span>
+            <span class="dir-profile-val">
+              ${p.email
+                ? `<a href="mailto:${escapeHtml(p.email)}" class="dir-profile-link">${escapeHtml(p.email)}</a>`
+                : '<span class="dir-profile-none">Not on file</span>'}
+            </span>
+          </div>
+          <div class="dir-profile-row">
+            <span class="dir-profile-key">Username</span>
+            <span class="dir-profile-val">
+              ${p.username ? `@${escapeHtml(p.username)}` : '<span class="dir-profile-none">Not on file</span>'}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="dir-profile-section">
+        <div class="dir-profile-section-title">🏢 Work</div>
+        <div class="dir-profile-rows">
+          <div class="dir-profile-row">
+            <span class="dir-profile-key">Organization</span>
+            <span class="dir-profile-val">
+              ${p.organization ? escapeHtml(p.organization) : '<span class="dir-profile-none">No organization (internal staff)</span>'}
+            </span>
+          </div>
+          <div class="dir-profile-row">
+            <span class="dir-profile-key">Primary location</span>
+            <span class="dir-profile-val">${escapeHtml(p.location || '—')}</span>
+          </div>
+          ${Array.isArray(p.allowedLocations) && p.allowedLocations.length > 1 ? `
+            <div class="dir-profile-row">
+              <span class="dir-profile-key">Also covers</span>
+              <span class="dir-profile-val">${p.allowedLocations.filter((l) => l !== p.location).map((l) => escapeHtml(l)).join(', ')}</span>
+            </div>` : ''}
+          <div class="dir-profile-row">
+            <span class="dir-profile-key">Member since</span>
+            <span class="dir-profile-val">${escapeHtml(formatJoined(p.createdAt))}</span>
+          </div>
+          <div class="dir-profile-row">
+            <span class="dir-profile-key">Last active</span>
+            <span class="dir-profile-val">
+              ${p.lastSeenAt ? escapeHtml(timeAgo(new Date(p.lastSeenAt))) : '<span class="dir-profile-none">No activity recorded</span>'}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="dir-profile-section">
+        <div class="dir-profile-section-title">
+          🖥️ Devices held
+          ${held.length > 0 ? `<span class="dir-profile-count">${held.length}</span>` : ''}
+        </div>
+        ${held.length === 0
+          ? `<div class="dir-profile-empty">
+               ${p.organization
+                 ? 'No devices are assigned to this organization yet.'
+                 : 'Internal staff — this person is not linked to a client organization, so no devices are held in their name.'}
+             </div>`
+          : `<div class="dir-profile-devices">
+               ${held.map((d) => `
+                 <div class="dir-profile-device">
+                   <div class="dir-profile-device-main">
+                     <strong>${escapeHtml(d.id)}</strong>
+                     <span class="dir-profile-device-model">${escapeHtml(d.model || '')}</span>
+                   </div>
+                   <div class="dir-profile-device-meta">
+                     ${statusPill(d.status)}
+                     <span class="dir-profile-device-loc">📍 ${escapeHtml(d.location || '—')}</span>
+                   </div>
+                 </div>
+               `).join('')}
+             </div>`}
+      </div>
+
+      <div class="modal-footer dir-profile-foot">
+        ${p.email ? `<a class="btn btn-secondary" href="mailto:${escapeHtml(p.email)}">✉️ Send email</a>` : ''}
+        <button type="button" class="btn btn-primary" id="dirProfileDone">Close</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add('active'));
+
+  const close = () => {
+    overlay.classList.remove('active');
+    setTimeout(() => overlay.remove(), 200);
+  };
+  overlay.querySelector('#dirProfileClose').onclick = close;
+  overlay.querySelector('#dirProfileDone').onclick = close;
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  document.addEventListener('keydown', function esc(e) {
+    if (e.key === 'Escape' && document.body.contains(overlay)) {
+      close();
+      document.removeEventListener('keydown', esc);
+    }
+  });
 }
 
 // 6. Inventory & Spare Parts Management View
@@ -3561,10 +4704,42 @@ function switchDataManagerTab(tab) {
   renderApp();
 }
 
+/**
+ * Set the client-type filter on the Data Manager customers tab.
+ * Passing 'all' (or anything unknown) clears it.
+ */
+function setClientTypeFilter(type) {
+  state.clientTypeFilter = ['school', 'corporate'].includes(type) ? type : 'all';
+  // The filter only lives on the customers tab, so make sure that is showing.
+  state.dataManagerSubTab = 'customers';
+  renderApp();
+}
+
+/**
+ * Dashboard drill-down: jump straight from a School / Corporate chip to the
+ * matching list of client accounts. This is what makes those chips real
+ * buttons rather than decoration.
+ */
+function showClientsByType(type) {
+  const wanted = type === 'school' ? 'school' : 'corporate';
+  const count = (state.customers || []).filter(c => c.clientType === wanted).length;
+
+  setClientTypeFilter(wanted);
+
+  if (count === 0) {
+    showToast(`No ${wanted} clients have registered yet.`, 'info');
+  } else {
+    showToast(`Showing ${count} ${wanted} client${count === 1 ? '' : 's'}.`, 'success');
+  }
+}
+
 // --- Data Manager: Users Sub-tab ---
 function renderDMUsersTab() {
   const users = state.allUsers || [];
-  const roleColors = { admin: 'var(--accent-purple-text)', technician: 'var(--accent-blue-text)', customer: 'var(--accent-green-text)' };
+  // Role → class. The old version interpolated `${var(--accent-purple-text)}22`
+  // to fake an alpha tint, which is not valid CSS — `var()` cannot take a
+  // suffix — so every badge silently rendered with no background at all.
+  const roleClass = { admin: 'dm-role--admin', technician: 'dm-role--tech', customer: 'dm-role--customer' };
 
   return `
     <div class="glass-panel">
@@ -3574,49 +4749,43 @@ function renderDMUsersTab() {
       </div>
 
       <div class="data-table-wrapper">
-        <table class="data-table">
+        <table class="data-table dm-table">
           <thead>
             <tr>
               <th>User</th>
-              <th>Username</th>
               <th>Role</th>
               <th>Email</th>
               <th>Organization</th>
-              <th>Location</th>
-              <th>Actions</th>
+              <th class="col-actions">Actions</th>
             </tr>
           </thead>
           <tbody>
-            ${users.length === 0 ? `<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted);">No users found.</td></tr>` : ''}
+            ${users.length === 0 ? `<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-muted);">No users found.</td></tr>` : ''}
             ${users.map(u => `
               <tr>
                 <td>
-                  <div style="display:flex;align-items:center;gap:10px;">
-                    <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#667eea,#764ba2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1rem;color:#fff;flex-shrink:0;">
-                      ${(u.fullName||u.username).charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                      <strong>${u.fullName || u.username}</strong>
-                      <div style="font-size:0.72rem;color:var(--text-muted);">ID: ${u.id}</div>
+                  <div class="dm-user">
+                    <div class="dm-avatar">${(u.fullName||u.username).charAt(0).toUpperCase()}</div>
+                    <div class="dm-user-text">
+                      <strong class="dm-name" title="User ID: ${u.id}">${u.fullName || u.username}</strong>
+                      <span class="dm-handle">@${u.username}</span>
                     </div>
                   </div>
                 </td>
-                <td><span style="font-family:var(--font-mono);color:var(--neon-cyan);">@${u.username}</span></td>
                 <td>
-                  <span style="font-size:0.8rem;font-weight:700;padding:3px 10px;border-radius:999px;
-                    background:${(roleColors[u.role]||'#888')}22;
-                    color:${roleColors[u.role]||'#888'};
-                    border:1px solid ${(roleColors[u.role]||'#888')}44;">
-                    ${u.role.toUpperCase()}
-                  </span>
+                  <span class="dm-role ${roleClass[u.role] || ''}">${u.role.toUpperCase()}</span>
                 </td>
-                <td style="font-size:0.82rem;">${u.email || '—'}</td>
-                <td style="font-size:0.82rem;">${u.organization || '—'}</td>
-                <td style="font-size:0.82rem;">${u.location || '—'}</td>
+                <td><div class="dm-ellipsis" title="${u.email || ''}">${u.email || '—'}</div></td>
                 <td>
-                  <div style="display:flex;gap:6px;">
-                    <button class="btn btn-secondary btn-sm" onclick="openEditUserModal('${u.id}')">✏️ Edit</button>
-                    <button class="action-btn" style="color:#f43f5e;border-color:#f43f5e44;" onclick="deleteUser('${u.id}','${(u.fullName||u.username).replace(/'/g,"\\'")}')">🗑️</button>
+                  <div class="dm-ellipsis" title="${u.organization || ''}">${u.organization || '—'}</div>
+                  <div class="dm-sub">📍 ${u.location || '—'}</div>
+                </td>
+                <td class="col-actions">
+                  <div class="dm-actions">
+                    <button class="action-btn" title="Edit user" aria-label="Edit ${u.username}"
+                      onclick="openEditUserModal('${u.id}')">✏️</button>
+                    <button class="action-btn action-btn-danger" title="Delete user" aria-label="Delete ${u.username}"
+                      onclick="deleteUser('${u.id}','${(u.fullName||u.username).replace(/'/g,"\\'")}')">🗑️</button>
                   </div>
                 </td>
               </tr>
@@ -3637,7 +4806,7 @@ function renderDMCustomersTab() {
   const registeredCustomers = (state.allUsers || []).filter(u => u.role === 'customer');
 
   // Resolve each account to its customer organization (by organization name).
-  const rows = registeredCustomers.map(u => {
+  const allRows = registeredCustomers.map(u => {
     const orgName = (u.organization || '').trim();
     const org = customers.find(
       c => c.organizationName.trim().toLowerCase() === orgName.toLowerCase()
@@ -3649,62 +4818,84 @@ function renderDMCustomersTab() {
     };
   });
 
+  // Client-type filter. 'school' / 'corporate' are set by the dashboard chips
+  // via showClientsByType(); accounts with no matching customer record fall
+  // outside both groups and are therefore only visible under "All".
+  const filter = state.clientTypeFilter || 'all';
+  const rows = filter === 'all'
+    ? allRows
+    : allRows.filter(r => r.org && r.org.clientType === filter);
+
+  const schoolCount = allRows.filter(r => r.org && r.org.clientType === 'school').length;
+  const corpCount   = allRows.filter(r => r.org && r.org.clientType === 'corporate').length;
+
+  const filterChip = (id, label, count) => {
+    const active = filter === id;
+    return `<button type="button" class="dm-filter-chip${active ? ' is-active' : ''}"
+      onclick="setClientTypeFilter('${id}')"
+      aria-pressed="${active}">${label} <strong>${count}</strong></button>`;
+  };
+
   return `
     <div class="glass-panel">
       <div class="panel-header" style="margin-bottom: 16px;">
         <div class="panel-title">👤 Registered Customers</div>
         <span style="font-size:0.82rem;color:var(--text-muted);">
-          ${registeredCustomers.length} account${registeredCustomers.length !== 1 ? 's' : ''}
+          ${rows.length} of ${registeredCustomers.length} account${registeredCustomers.length !== 1 ? 's' : ''}
         </span>
       </div>
-      <p style="font-size:0.82rem;color:var(--text-muted);margin:-8px 0 16px;">
-        Every customer account registered on the platform.
+
+      <div class="dm-filter-bar">
+        ${filterChip('all', '👥 All clients', allRows.length)}
+        ${filterChip('school', '🏫 Schools', schoolCount)}
+        ${filterChip('corporate', '🏢 Corporate', corpCount)}
+      </div>
+
+      <p style="font-size:0.82rem;color:var(--text-muted);margin:0 0 16px;">
+        ${filter === 'all'
+          ? 'Every customer account registered on the platform.'
+          : `Showing only ${filter === 'school' ? 'school' : 'corporate'} accounts.`}
       </p>
 
       <div class="data-table-wrapper">
-        <table class="data-table">
+        <table class="data-table dm-table">
           <thead>
             <tr>
               <th>Customer</th>
-              <th>Username</th>
               <th>Email</th>
               <th>Organization</th>
-              <th>Location</th>
-              <th>Devices</th>
+              <th class="col-actions">Devices</th>
             </tr>
           </thead>
           <tbody>
-            ${rows.length === 0 ? `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted);">No registered customers found.</td></tr>` : ''}
+            ${rows.length === 0 ? `<tr><td colspan="4" style="text-align:center;padding:40px;color:var(--text-muted);">${filter === 'all' ? 'No registered customers found.' : `No ${filter} accounts found.`}</td></tr>` : ''}
             ${rows.map(({ user: u, org, deviceCount }) => `
               <tr>
                 <td>
-                  <div style="display:flex;align-items:center;gap:10px;">
-                    <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#667eea,#764ba2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1rem;color:#fff;flex-shrink:0;">
-                      ${(u.fullName || u.username).charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                      <strong>${u.fullName || u.username}</strong>
-                      <div style="font-size:0.72rem;color:var(--text-muted);">ID: ${u.id}</div>
+                  <div class="dm-user">
+                    <div class="dm-avatar dm-avatar--customer">${(u.fullName || u.username).charAt(0).toUpperCase()}</div>
+                    <div class="dm-user-text">
+                      <strong class="dm-name" title="User ID: ${u.id}">${u.fullName || u.username}</strong>
+                      <span class="dm-handle">@${u.username}</span>
                     </div>
                   </div>
                 </td>
-                <td><span style="font-family:var(--font-mono);color:var(--neon-cyan);">@${u.username}</span></td>
-                <td style="font-size:0.82rem;">${u.email || '—'}</td>
-                <td style="font-size:0.82rem;">
-                  ${org
-                    ? `<strong>${org.organizationName}</strong>
-                       <span class="status-pill ${org.clientType === 'school' ? 'status-online' : 'status-maintenance'}" style="font-size:0.72rem;margin-left:6px;">
-                         ${org.clientType === 'school' ? '🏫 School' : '🏢 Corporate'}
-                       </span>`
-                    : `<span style="color:#f59e0b;">${orgName || 'Not linked'}</span>
-                       <div style="font-size:0.72rem;color:var(--text-muted);">No customer record</div>`}
-                </td>
-                <td style="font-size:0.82rem;">${u.location || '—'}</td>
+                <td><div class="dm-ellipsis" title="${u.email || ''}">${u.email || '—'}</div></td>
                 <td>
-                  <span style="font-size:0.9rem;font-weight:800;color:${deviceCount > 0 ? 'var(--neon-cyan)' : 'var(--text-muted)'};">
-                    ${deviceCount}
-                  </span>
-                  <span style="font-size:0.72rem;color:var(--text-muted);"> unit${deviceCount !== 1 ? 's' : ''}</span>
+                  ${org
+                    ? `<div class="dm-org-line">
+                         <span class="dm-ellipsis" title="${org.organizationName}">${org.organizationName}</span>
+                         <span class="status-pill ${org.clientType === 'school' ? 'status-online' : 'status-maintenance'}" style="font-size:0.7rem;">
+                           ${org.clientType === 'school' ? '🏫 School' : '🏢 Corporate'}
+                         </span>
+                       </div>
+                       <div class="dm-sub">📍 ${u.location || '—'}</div>`
+                    : `<div class="dm-ellipsis" style="color:#f59e0b;">${orgName || 'Not linked'}</div>
+                       <div class="dm-sub">No customer record</div>`}
+                </td>
+                <td class="col-actions">
+                  <span class="dm-count ${deviceCount > 0 ? 'is-set' : ''}">${deviceCount}</span>
+                  <span class="dm-sub">unit${deviceCount !== 1 ? 's' : ''}</span>
                 </td>
               </tr>
             `).join('')}
@@ -4546,7 +5737,7 @@ function openTicketDetailModal(ticketId) {
           <div><strong>Priority:</strong> <span style="font-weight:700;">${tck.priority}</span></div>
           <div><strong>Warranty Covered:</strong> <span class="${tck.warrantyCovered ? 'warranty-badge-active' : 'warranty-badge-expired'}">${tck.warrantyCovered ? 'Yes ✅' : 'No ⚠️'}</span></div>
           <div><strong>Assigned Tech:</strong> ${escapeHtml(tck.assignedTechnician||'Pending')}</div>
-          <div><strong>Status:</strong> <span class="status-pill status-online">${tck.status}</span></div>
+          <div><strong>Status:</strong> <span class="status-pill status-online">${escapeHtml(ticketStatusLabel(tck.status))}</span></div>
         </div>
 
         ${isAdmin ? `
@@ -4569,13 +5760,28 @@ function openTicketDetailModal(ticketId) {
         ${chatSectionHtml}
 
         ${(isAdmin||isTechnician) ? `
-        <div class="form-group">
-          <label class="form-label">Update Ticket Status</label>
-          <div style="display:flex; gap:8px; flex-wrap:wrap;">
-            <button class="btn btn-secondary btn-sm" onclick="advanceTicketStatus('${tck.id}','Received')">Received</button>
-            <button class="btn btn-secondary btn-sm" onclick="advanceTicketStatus('${tck.id}','Diagnosing')">Diagnosing</button>
-            <button class="btn btn-secondary btn-sm" onclick="advanceTicketStatus('${tck.id}','Repairing')">Repairing</button>
-            <button class="btn btn-primary btn-sm" onclick="advanceTicketStatus('${tck.id}','Resolved')">Mark Resolved ✅</button>
+        <div class="ticket-status-panel">
+          <h4 class="ticket-status-title">🏷️ Mark Ticket Status</h4>
+          <p class="ticket-status-hint">
+            New tickets land in <strong>New Tickets</strong>. Open one, then mark it as it moves
+            through the pipeline — the lane updates the moment you save.
+          </p>
+          <div class="ticket-status-actions">
+            <button type="button" class="ticket-status-btn${tck.status === 'Diagnosing' ? ' is-current' : ''}"
+              onclick="advanceTicketStatus('${tck.id}','Diagnosing')">
+              <span class="ticket-status-ico" aria-hidden="true">🔍</span>
+              <span class="ticket-status-text"><strong>Needs Diagnosis</strong><span>Investigate the fault</span></span>
+            </button>
+            <button type="button" class="ticket-status-btn${tck.status === 'Repairing' ? ' is-current' : ''}"
+              onclick="advanceTicketStatus('${tck.id}','Repairing')">
+              <span class="ticket-status-ico" aria-hidden="true">⚙️</span>
+              <span class="ticket-status-text"><strong>Repair</strong><span>Work in progress</span></span>
+            </button>
+            <button type="button" class="ticket-status-btn ticket-status-btn--resolve${tck.status === 'Resolved' || tck.status === 'Closed' ? ' is-current' : ''}"
+              onclick="advanceTicketStatus('${tck.id}','Resolved')">
+              <span class="ticket-status-ico" aria-hidden="true">✅</span>
+              <span class="ticket-status-text"><strong>Resolved</strong><span>Close the ticket</span></span>
+            </button>
           </div>
         </div>
 
@@ -6949,15 +8155,18 @@ function renderRentalsView() {
       </div>
     </div>
 
-    <!-- Rental Stats Cards -->
-    <div class="stat-cards-grid">
+    <!-- Rental Stats Cards.
+         .rentals-stats overrides the generic auto-fit track: there are five
+         KPIs, and a 220px minimum only fits four per row at desktop width,
+         which stranded the Revenue card alone on a second row. -->
+    <div class="stat-cards-grid rentals-stats">
       <div class="stat-card card-online">
         <div class="stat-header">
           <span class="ticket-id">Active Rentals</span>
           <span class="status-pill status-online">Active</span>
         </div>
-        <div style="font-size:2rem;font-weight:800;font-family:'JetBrains Mono';">${activeCount}</div>
-        <div style="font-size:0.8rem;color:var(--text-muted);">Devices currently rented out</div>
+        <div class="rental-kpi-value">${activeCount}</div>
+        <div class="rental-kpi-label">Devices currently rented out</div>
       </div>
 
       <div class="stat-card card-warning">
@@ -6965,8 +8174,8 @@ function renderRentalsView() {
           <span class="ticket-id">Pending</span>
           <span class="status-pill status-warning">Pending</span>
         </div>
-        <div style="font-size:2rem;font-weight:800;font-family:'JetBrains Mono';">${pendingCount}</div>
-        <div style="font-size:0.8rem;color:var(--text-muted);">Awaiting approval</div>
+        <div class="rental-kpi-value">${pendingCount}</div>
+        <div class="rental-kpi-label">Awaiting approval</div>
       </div>
 
       <div class="stat-card ${overdueCount > 0 ? 'card-offline' : 'card-online'}">
@@ -6974,8 +8183,8 @@ function renderRentalsView() {
           <span class="ticket-id">Overdue</span>
           <span class="status-pill ${overdueCount > 0 ? 'status-offline' : 'status-online'}">${overdueCount > 0 ? 'Overdue' : 'OK'}</span>
         </div>
-        <div style="font-size:2rem;font-weight:800;font-family:'JetBrains Mono';">${overdueCount}</div>
-        <div style="font-size:0.8rem;color:var(--text-muted);">Past return date</div>
+        <div class="rental-kpi-value">${overdueCount}</div>
+        <div class="rental-kpi-label">Past return date</div>
       </div>
 
       <div class="stat-card card-online">
@@ -6983,8 +8192,8 @@ function renderRentalsView() {
           <span class="ticket-id">Upcoming</span>
           <span class="status-pill status-online">Soon</span>
         </div>
-        <div style="font-size:2rem;font-weight:800;font-family:'JetBrains Mono';">${upcomingCount}</div>
-        <div style="font-size:0.8rem;color:var(--text-muted);">Scheduled deliveries</div>
+        <div class="rental-kpi-value">${upcomingCount}</div>
+        <div class="rental-kpi-label">Scheduled deliveries</div>
       </div>
 
       ${isAdmin ? `
@@ -6993,8 +8202,8 @@ function renderRentalsView() {
           <span class="ticket-id">Revenue</span>
           <span class="status-pill status-online">Total</span>
         </div>
-        <div style="font-size:2rem;font-weight:800;font-family:'JetBrains Mono';">₱${(stats.revenue || 0).toLocaleString()}</div>
-        <div style="font-size:0.8rem;color:var(--text-muted);">From active & returned rentals</div>
+        <div class="rental-kpi-value">₱${(stats.revenue || 0).toLocaleString()}</div>
+        <div class="rental-kpi-label">From active &amp; returned rentals</div>
       </div>
       ` : ''}
     </div>
@@ -7079,11 +8288,13 @@ function renderRentalList(rentals, isAdmin) {
                     ">${r.priority}</span>
                   </td>
                   ${isAdmin ? `
-                  <td onclick="event.stopPropagation();">
-                    ${r.status === 'Pending' ? `<button class="btn btn-success btn-sm" onclick="approveRental('${r.id}')" style="font-size:0.74rem;padding:4px 10px;">✓ Approve</button>` : ''}
-                    ${r.status === 'Approved' ? `<button class="btn btn-primary btn-sm" onclick="activateRental('${r.id}')" style="font-size:0.74rem;padding:4px 10px;">▶ Activate</button>` : ''}
-                    ${r.status === 'Active' ? `<button class="btn btn-secondary btn-sm" onclick="returnRental('${r.id}')" style="font-size:0.74rem;padding:4px 10px;">↩ Return</button>` : ''}
-                    <button class="btn btn-secondary btn-sm" onclick="editRental('${r.id}')" style="font-size:0.74rem;padding:4px 10px;">✏️</button>
+                  <td class="col-actions" onclick="event.stopPropagation();">
+                    <div class="dm-actions">
+                      ${r.status === 'Pending' ? `<button class="action-btn action-btn-ok" title="Approve this booking" aria-label="Approve booking" onclick="approveRental('${r.id}')">✓</button>` : ''}
+                      ${r.status === 'Approved' ? `<button class="action-btn action-btn-go" title="Activate — mark as rented out" aria-label="Activate booking" onclick="activateRental('${r.id}')">▶</button>` : ''}
+                      ${r.status === 'Active' ? `<button class="action-btn" title="Mark as returned" aria-label="Return device" onclick="returnRental('${r.id}')">↩</button>` : ''}
+                      <button class="action-btn" title="Edit booking" aria-label="Edit booking" onclick="editRental('${r.id}')">✏️</button>
+                    </div>
                   </td>
                   ` : ''}
                 </tr>
@@ -7876,10 +9087,29 @@ function applyTheme(theme) {
     document.documentElement.removeAttribute('data-theme');
   }
   localStorage.setItem('millennium-theme', theme);
-  const icon = document.getElementById('themeToggleIcon');
-  if (icon) {
-    icon.textContent = theme === 'dark' ? '☀️' : '🌙';
+
+  // The sidebar Settings row shows the active mode as its status line, so it is
+  // synced here rather than at every call site (boot, tile click, landing page).
+  const label = document.getElementById('themeToggleLabel');
+  if (label) {
+    label.textContent = theme === 'dark' ? 'Dark mode' : 'Light mode';
   }
+
+  // The Settings dialog carries its own Light/Dark tiles, so they are synced
+  // here too — that keeps the dialog, the sidebar row and the document in step
+  // no matter which of them triggered the change.
+  document.querySelectorAll('[data-theme-option]').forEach((el) => {
+    const on = el.getAttribute('data-theme-option') === theme;
+    el.classList.toggle('is-active', on);
+    el.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+}
+
+/** Apply a specific theme from the Settings dialog's Light/Dark tiles. */
+function setThemeFromSettings(theme) {
+  if (theme !== 'light' && theme !== 'dark') return;
+  applyTheme(theme);
+  showToast(`Switched to ${theme === 'dark' ? '🌙 Dark Mode' : '☀️ Light Mode'}`, 'info');
 }
 
 function toggleTheme() {
@@ -7932,6 +9162,11 @@ window.addEventListener('DOMContentLoaded', async () => {
     // Show login overlay, don't load data yet
     showAuthOverlay();
   }
+
+  // Sync the register form with its default Account Type so the organization
+  // label and the Client Category selector start out consistent with the
+  // pre-selected role instead of showing the markup's static defaults.
+  updateRegLocationLabel(document.getElementById('regRole')?.value);
 
   // Navigation Links — guard against disallowed tabs
   document.querySelectorAll('.nav-item').forEach((item) => {

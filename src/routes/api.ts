@@ -2,6 +2,11 @@ import { Router, Request, Response, NextFunction } from 'express';
 import passport from '../config/passport.js';
 import { db } from '../db/database-supabase.js';
 import { signToken, verifyToken, extractBearerToken, TOKEN_TTL_SECONDS } from '../auth/token.js';
+import {
+  issuePasswordResetCode,
+  verifyPasswordResetCode,
+  resetPasswordWithCode,
+} from '../auth/password-reset.js';
 
 export const apiRouter = Router();
 
@@ -25,6 +30,13 @@ type RequesterScope = { role: string; scope: CustomerScope | null };
 interface AuthedRequest extends Request {
   auth?: { userId: string; role: string; scope: CustomerScope | null };
 }
+
+// Lightweight in-process presence, written on every authenticated request and
+// read by GET /directory. Deliberately in-memory rather than a DB column: it
+// avoids a write on every request, and "who is around right now" is only
+// meaningful for the life of the process anyway.
+const lastSeenAt = new Map<string, number>();
+const PRESENCE_WINDOW_MS = 5 * 60 * 1000;
 
 /**
  * Resolve who is asking. The role is read from the database rather than trusted
@@ -87,6 +99,7 @@ async function requireAuth(req: AuthedRequest, res: Response, next: NextFunction
     }
 
     req.auth = { userId: payload.userId, role: requester.role, scope: requester.scope };
+    lastSeenAt.set(payload.userId, Date.now());
     next();
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
@@ -189,10 +202,83 @@ apiRouter.get('/auth/me', requireAuth, async (req: AuthedRequest, res: Response)
   }
 });
 
+// ============================================================
+// PASSWORD RESET BY EMAIL CODE
+//
+// Three steps: request a code, check it, then redeem it for a new password.
+// See src/auth/password-reset.ts for why there is no "reset token".
+// ============================================================
+
+// POST /api/auth/forgot-password  { email }
+apiRouter.post('/auth/forgot-password', async (req: Request, res: Response) => {
+  try {
+    const email = String(req.body?.email || '').trim();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ success: false, error: 'Enter a valid email address.' });
+    }
+
+    const result = await issuePasswordResetCode(email);
+
+    // Identical wording whether or not the address exists, so this cannot be
+    // used to discover which emails have accounts.
+    res.json({
+      success: true,
+      message:
+        'If that email is registered, we have sent a 6-digit reset code. ' +
+        'Check your inbox and spam folder — the code expires in 10 minutes.',
+      emailed: result.emailed,
+      // Only populated when SMTP is unconfigured and NODE_ENV !== production.
+      ...(result.devCode ? { devCode: result.devCode, devNote: 'SMTP not configured — code shown here instead of emailed.' } : {}),
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/auth/verify-reset-code  { email, code }
+apiRouter.post('/auth/verify-reset-code', async (req: Request, res: Response) => {
+  try {
+    const email = String(req.body?.email || '').trim();
+    const code = String(req.body?.code || '').trim();
+    if (!email || !code) {
+      return res.status(400).json({ success: false, error: 'Email and code are required.' });
+    }
+
+    const result = await verifyPasswordResetCode(email, code);
+    if (!result.ok) {
+      return res.status(400).json({ success: false, error: result.error });
+    }
+    res.json({ success: true, message: 'Code verified. Choose your new password.' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/auth/reset-password  { email, code, password }
+apiRouter.post('/auth/reset-password', async (req: Request, res: Response) => {
+  try {
+    const email = String(req.body?.email || '').trim();
+    const code = String(req.body?.code || '').trim();
+    const password = req.body?.password;
+
+    if (!email || !code || !password) {
+      return res.status(400).json({ success: false, error: 'Email, code and new password are required.' });
+    }
+
+    const result = await resetPasswordWithCode(email, code, String(password));
+    if (!result.ok) {
+      return res.status(400).json({ success: false, error: result.error });
+    }
+    res.json({ success: true, message: 'Your password has been changed. You can sign in now.' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // POST /api/auth/register
 apiRouter.post('/auth/register', async (req: Request, res: Response) => {
   try {
-    let { username, email, password, fullName, role, location, organization } = req.body;
+    let { username, email, password, fullName, role, location, organization, clientType } = req.body;
     if (!username || !email || !password || !fullName || !role) {
       return res.status(400).json({ success: false, error: 'All required fields must be filled.' });
     }
@@ -217,6 +303,20 @@ apiRouter.post('/auth/register', async (req: Request, res: Response) => {
       orgName = 'Brains Infinite Innovations';
     }
 
+    // Client category (school vs corporate) is chosen by the registrant.
+    //
+    // It used to be inferred from keywords in the organization name
+    // (`inc`/`corp`/`bank`), which silently misfiled every corporate client
+    // whose name lacked one of those tokens — "Globe Telecom" was stored as a
+    // school. The explicit value is now authoritative; the old heuristic is
+    // kept only as a fallback for older clients that omit the field.
+    let resolvedClientType = String(clientType || '').trim().toLowerCase();
+    if (!['school', 'corporate'].includes(resolvedClientType)) {
+      const looksCorporate = /(inc\b|corp|bank|company|holdings|enterprise|technolog|telecom|group|ltd|llc|plc|industries|solutions|systems)/i
+        .test(orgName);
+      resolvedClientType = looksCorporate ? 'corporate' : 'school';
+    }
+
     const result = await db.registerUser({
       username,
       email,
@@ -238,13 +338,23 @@ apiRouter.post('/auth/register', async (req: Request, res: Response) => {
         (c) => c.organizationName.toLowerCase() === orgName.toLowerCase()
       );
       if (!match) {
+        // Store the category the registrant picked, so the admin dashboard
+        // reports schools and corporate clients correctly from day one.
         await db.addCustomer({
           organizationName: orgName,
-          clientType: orgName.toLowerCase().includes('inc') || orgName.toLowerCase().includes('corp') || orgName.toLowerCase().includes('bank') ? 'corporate' : 'school',
+          clientType: resolvedClientType,
           contactPerson: fullName,
           email: email,
           city: location && location !== 'All Locations' ? location : 'Metro Manila',
         });
+      } else if (match.clientType !== resolvedClientType) {
+        // The organization is already on file. Do not silently reclassify an
+        // established client from a self-registration — just leave a trace so
+        // an admin can review it in the audit log.
+        console.log(
+          `  ℹ️  ${orgName} already exists as "${match.clientType}"; ` +
+          `registration requested "${resolvedClientType}" — left unchanged.`
+        );
       }
     }
 
@@ -252,7 +362,9 @@ apiRouter.post('/auth/register', async (req: Request, res: Response) => {
     await db.logAudit({
       userName: fullName,
       action: 'User Self-Registered',
-      details: `New ${role} account created for ${fullName} (${email}) - Organization: ${orgName}`
+      details: role === 'customer'
+        ? `New customer account created for ${fullName} (${email}) - Organization: ${orgName} - Client type: ${resolvedClientType}`
+        : `New ${role} account created for ${fullName} (${email}) - Organization: ${orgName}`
     });
 
     console.log(`  ✅ Registered new ${role}: ${username} (${email}) -> Automatically stored to database.`);
@@ -279,6 +391,42 @@ apiRouter.get(
     }
   }
 );
+
+// GET /api/directory — the people directory (any signed-in user)
+//
+// Every signed-in user may see WHO uses the system — name, role, location,
+// organization, contact details and whether they are around right now — so a
+// technician can reach a counterpart and a customer can reach their account
+// manager without an admin in the loop.
+//
+// Contact details (email, username) ARE included, deliberately: the directory
+// is meant to be usable as a company phone book. Password hashes and any
+// credential material never are. If this ever needs to be locked down, gate it
+// by role here rather than trimming the fields, so the client keeps one shape.
+apiRouter.get('/directory', requireAuth, async (_req: AuthedRequest, res: Response) => {
+  try {
+    const now = Date.now();
+    const users = (await db.getUsers()).map((u: any) => {
+      const seen = lastSeenAt.get(u.id);
+      return {
+        id: u.id,
+        fullName: u.fullName || u.username || 'Unnamed user',
+        username: u.username || '',
+        email: u.email || '',
+        role: u.role,
+        location: u.location || 'All Locations',
+        allowedLocations: Array.isArray(u.allowedLocations) ? u.allowedLocations : [],
+        organization: u.organization || '',
+        createdAt: u.createdAt || null,
+        online: typeof seen === 'number' && now - seen < PRESENCE_WINDOW_MS,
+        lastSeenAt: typeof seen === 'number' ? new Date(seen).toISOString() : null,
+      };
+    });
+    res.json({ success: true, data: users });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 
 // PATCH /api/auth/me — self-service profile update (any signed-in user)
 //

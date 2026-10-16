@@ -61,7 +61,8 @@ const PREFIX = THEME === 'dark' ? '' : 'light-';
     return {
       body: pick('body'),
       appContainer: pick('.app-container'),
-      header: pick('.app-header'),
+      header: pick('.header-notif-btn'),
+      sidebarBrand: pick('.sidebar-brand'),
       sidebar: pick('.app-sidebar'),
       mainContent: pick('#mainContent'),
       firstCard: pick('#mainContent .card, #mainContent .dash-v2-container > *, #mainContent [class*="card"]'),
