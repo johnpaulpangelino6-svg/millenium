@@ -316,6 +316,38 @@
     .shot-bar i:nth-child(3) { background: #34d399; }
     .shot-bar span { margin-left: 8px; font-size: .74rem; color: var(--text-3); font-weight: 600; letter-spacing: .04em; }
 
+    /* ---------- Hero video facade ---------- */
+    /* Why the player is not embedded directly: see the comment in the markup. */
+    .shot-video { position: relative; }
+    .shot-play { position: relative; display: block; }
+    /* Scrim, so the play button and label stay legible over any poster. */
+    .shot-play::after {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(to top, rgba(2, 6, 23, .58), rgba(2, 6, 23, .12) 55%, rgba(2, 6, 23, .32));
+      transition: opacity .2s var(--ease);
+    }
+    .shot-play:hover::after { opacity: .78; }
+    .shot-play-btn {
+      position: absolute; inset: 0; margin: auto; z-index: 2;
+      width: 68px; height: 68px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      /* The triangle's visual centre sits left of its bounding box. */
+      padding-left: 4px;
+      background: rgba(255, 255, 255, .95); color: #0f172a;
+      box-shadow: 0 10px 30px rgba(2, 6, 23, .45);
+      transition: transform .22s var(--ease), background .22s var(--ease);
+    }
+    .shot-play:hover .shot-play-btn { transform: scale(1.08); background: #fff; }
+    .shot-play:focus-visible { outline: none; }
+    .shot-play:focus-visible .shot-play-btn { outline: 3px solid var(--brand); outline-offset: 3px; }
+    .shot-play-label {
+      position: absolute; left: 0; right: 0; bottom: 15px; z-index: 2;
+      text-align: center; font-size: .8rem; font-weight: 700; color: #fff;
+      letter-spacing: .02em; text-shadow: 0 1px 8px rgba(2, 6, 23, .75);
+    }
+    /* The swapped-in player keeps a true 16:9 box so nothing is letterboxed. */
+    .shot-frame { display: block; width: 100%; aspect-ratio: 16 / 9; border: 0; background: #000; }
+
     .stat-strip {
       display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 28px;
     }
@@ -878,7 +910,27 @@
     <div class="hero-visual">
       <div class="shot">
         <div class="shot-bar"><i></i><i></i><i></i><span>millennium-smartboard / dashboard</span></div>
-        <img src="/images/smartboard-boardroom.jpg" alt="A Millennium SmartBoard in a conference room" />
+
+        <!-- Hero video, as a click-to-play facade.
+             The YouTube player is deliberately NOT loaded on page load: the
+             iframe pulls in a large amount of third-party script and sets
+             cookies before the visitor has asked for anything. Instead the
+             boardroom still acts as the poster, and the real player is swapped
+             in on click (see the script at the bottom of this file).
+             The poster is a real <a> pointing at YouTube, so if that script
+             never runs the click still opens the video rather than doing
+             nothing. -->
+        <div class="shot-video" id="heroVideo">
+          <a class="shot-play" href="https://www.youtube.com/watch?v=FwzdLd3bSx8&amp;t=9s"
+             target="_blank" rel="noopener"
+             aria-label="Play the Millennium SmartBoard video">
+            <img src="/images/smartboard-boardroom.jpg" alt="A Millennium SmartBoard in a conference room" />
+            <span class="shot-play-btn" aria-hidden="true">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+            </span>
+            <span class="shot-play-label">Watch the video</span>
+          </a>
+        </div>
       </div>
       <div class="stat-strip" id="statStrip">
         <div class="stat"><b data-count="11">11</b><span>Modules</span></div>
@@ -1529,6 +1581,34 @@
       });
     });
   }
+
+  /* ---------- Hero video: swap the poster for the real player on click ----
+       Progressive enhancement only. The anchor already points at YouTube, so
+       if anything here fails the visitor still gets a working link instead of
+       a play button that does nothing. */
+  (function () {
+    var holder = document.getElementById('heroVideo');
+    var link = holder && holder.querySelector('.shot-play');
+    if (!link) return;
+
+    link.addEventListener('click', function (e) {
+      // Leave cmd/ctrl/shift/middle clicks alone — those mean "open in a new
+      // tab", which is exactly what the anchor already does.
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+      e.preventDefault();
+
+      var frame = document.createElement('iframe');
+      // youtube-nocookie: no tracking cookies until playback is actually
+      // requested. start=9 matches the ?t=9s in the poster link.
+      frame.src = 'https://www.youtube-nocookie.com/embed/FwzdLd3bSx8?start=9&autoplay=1&rel=0';
+      frame.title = 'Millennium SmartBoard video';
+      frame.className = 'shot-frame';
+      frame.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share');
+      frame.setAttribute('allowfullscreen', '');
+      frame.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+      holder.replaceChildren(frame);
+    });
+  })();
 })();
 </script>
 </body>

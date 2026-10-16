@@ -26,6 +26,34 @@ services:
         sync: false
       - key: SESSION_SECRET
         sync: false
+      # Outbound mail for the password-reset flow.
+      # REQUIRED for "forgot password" to work on the deployed site: without a
+      # transport, NODE_ENV=production refuses to expose the reset code and the
+      # user is told to check an inbox that will never receive anything.
+      #
+      # Auto-detected; first fully-configured option wins:
+      #     BREVO_API_KEY  ->  RESEND_API_KEY  ->  SMTP_*
+      #
+      # Easiest is Brevo: an API key needs no App Password and no 2-Step
+      # Verification. Verify a sender address, then paste the key here.
+      - key: BREVO_API_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+      # Gmail SMTP alternative. SMTP_PASS must be a 16-character App Password
+      # (2-Step Verification required) — a normal Gmail password will NOT work.
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
+        sync: false
 
 # Database Notes:
 # By setting DATABASE_URL and DATABASE_AUTH_TOKEN in Render's Environment Variables,

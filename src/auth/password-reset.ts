@@ -1,9 +1,6 @@
 import crypto from 'node:crypto';
 import { db } from '../db/database-supabase.js';
-import {
-  sendPasswordResetCode,
-  mayExposeCodeToClient,
-} from './mailer.js';
+import { sendPasswordResetCode } from './mailer.js';
 
 /**
  * Password reset by one-time code.
@@ -16,6 +13,11 @@ import {
  *
  * Design notes
  * ------------
+ * - The code is a bearer credential and travels ONLY to the mailbox. Step 1
+ *   never returns it, in any environment — no dev fallback, no debug flag. If
+ *   it were returned, anyone able to type an email address on the sign-in
+ *   screen could reset that account. With SMTP unconfigured the code goes to
+ *   the server console for an administrator to relay.
  * - Only the SHA-256 of the code is stored, so read access to the table cannot
  *   be replayed into a reset.
  * - The reply to step 1 is IDENTICAL whether or not the address exists. Telling
@@ -55,8 +57,32 @@ export interface IssueResult {
   /** Always true for a well-formed address — never reveals whether it exists. */
   ok: boolean;
   emailed: boolean;
-  /** Present only when mail is unconfigured and we are not in production. */
-  devCode?: string;
+  /**
+   * True only when a send was actually attempted, i.e. the address exists AND
+   * was not inside the resend cooldown.
+   *
+   * Needed because `emailed: false` is otherwise ambiguous — it means "unknown
+   * address", "too soon to resend", or "the provider rejected the send". Those
+   * need very different responses, and conflating them is how a broken mail
+   * setup ends up telling users to check an inbox that will never receive
+   * anything.
+   *
+   * NOT for the client: `attempted` differs between existing and non-existing
+   * accounts, so exposing it would be an account-enumeration oracle. It is used
+   * server-side, and only in development, to report a real delivery failure.
+   */
+  attempted: boolean;
+  /** Provider/transport error, when a send was attempted and failed. */
+  deliveryError?: string;
+  /**
+   * Deliberately absent: the code is NEVER returned to the caller.
+   *
+   * Handing it back would let anyone who can type an email address into the
+   * sign-in screen reset that account's password — the reset code is a bearer
+   * credential, so it may only travel to the mailbox. When SMTP is
+   * unconfigured the code goes to the server console instead, for an
+   * administrator to relay by hand.
+   */
 }
 
 export async function issuePasswordResetCode(rawEmail: string): Promise<IssueResult> {
@@ -66,14 +92,14 @@ export async function issuePasswordResetCode(rawEmail: string): Promise<IssueRes
   // Unknown address: report success and stop. No code, no email, no signal.
   if (!user) {
     console.log(`  ℹ️  Password reset requested for unknown address: ${email}`);
-    return { ok: true, emailed: false };
+    return { ok: true, emailed: false, attempted: false };
   }
 
   // Respect a short cooldown so the endpoint cannot be used to spam a mailbox.
   // The comparison happens in SQL — see createPasswordResetCode for why.
   if (await db.hasRecentPasswordResetCode(email, RESEND_COOLDOWN_MS / 1000)) {
     console.log(`  ℹ️  Reset code for ${email} re-requested within cooldown; not resending.`);
-    return { ok: true, emailed: false };
+    return { ok: true, emailed: false, attempted: false };
   }
 
   const code = generateCode();
@@ -86,9 +112,12 @@ export async function issuePasswordResetCode(rawEmail: string): Promise<IssueRes
 
   const result = await sendPasswordResetCode(email, code, user.fullName || user.username || '');
 
-  const out: IssueResult = { ok: true, emailed: result.delivered };
-  if (mayExposeCodeToClient()) out.devCode = code;
-  return out;
+  return {
+    ok: true,
+    emailed: result.delivered,
+    attempted: true,
+    ...(result.error ? { deliveryError: result.error } : {}),
+  };
 }
 
 export interface VerifyResult {

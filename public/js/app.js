@@ -304,7 +304,10 @@ function handleForgotPassword() {
 
   const overlay = document.createElement('div');
   overlay.id = 'forgotPwOverlay';
-  overlay.className = 'modal-backdrop';
+  // --above-auth is required: this dialog is opened from the sign-in screen,
+  // which is itself a fixed overlay at z-index 9999. A plain .modal-backdrop
+  // (1000) renders behind it, so the dialog opened invisibly.
+  overlay.className = 'modal-backdrop modal-backdrop--above-auth';
   overlay.innerHTML = `
     <div class="modal-content reset-pw-modal" role="dialog" aria-modal="true"
          aria-labelledby="resetPwTitle">
@@ -349,6 +352,42 @@ function handleForgotPassword() {
     code: '',
   };
 
+  // The primary button's idle label for the current step. `busy(false)` restores
+  // it — the previous implementation assigned primary.textContent to itself,
+  // which is a no-op, so the button stayed frozen on "Sending code…" after the
+  // first request and the dialog looked hung. Every step must go through
+  // setPrimaryLabel so this stays in sync.
+  let restingLabel = 'Send code';
+
+  // Mirrors the server's 60s resend cooldown.
+  //
+  // The server deliberately sends NOTHING inside that window, yet still answers
+  // "success" — it has to, because a different answer would reveal which email
+  // addresses have accounts. Without a matching client-side cooldown the dialog
+  // would cheerfully report "A new code is on its way." for a send that was
+  // never even attempted, which is exactly the silent dead end this flow keeps
+  // producing.
+  const RESEND_COOLDOWN_MS = 60000;
+  let lastCodeRequestAt = 0;
+  let lastCodeEmail = '';
+
+  /**
+   * Milliseconds the user must still wait before a resend to `email` would
+   * actually send anything; 0 when a resend is allowed.
+   *
+   * Kept as a small pure function (state in, number out) so the cooldown rule
+   * can be regression-tested without a DOM — see tests/reset-dialog-cooldown.
+   */
+  function resendWaitMs(email, now) {
+    if (!email || lastCodeEmail !== email) return 0;
+    return Math.max(0, RESEND_COOLDOWN_MS - (now - lastCodeRequestAt));
+  }
+
+  function setPrimaryLabel(text) {
+    restingLabel = text;
+    primary.textContent = text;
+  }
+
   function setAlert(message, kind) {
     if (!message) { alertEl.style.display = 'none'; return; }
     alertEl.className = 'reset-pw-alert is-' + (kind || 'error');
@@ -370,7 +409,7 @@ function handleForgotPassword() {
   function renderStep1() {
     setStep(1);
     subEl.textContent = 'We will email you a 6-digit code.';
-    primary.textContent = 'Send code';
+    setPrimaryLabel('Send code');
     bodyEl.innerHTML = `
       <label class="reset-pw-label" for="resetPwEmail">Registered email address</label>
       <input type="email" id="resetPwEmail" class="form-input" autocomplete="email"
@@ -387,14 +426,14 @@ function handleForgotPassword() {
   function renderStep2() {
     setStep(2);
     subEl.textContent = 'Enter the code we sent to ' + draft.email + '.';
-    primary.textContent = 'Verify code';
+    setPrimaryLabel('Verify code');
     bodyEl.innerHTML = `
       <label class="reset-pw-label" for="resetPwCode">6-digit code</label>
       <input type="text" id="resetPwCode" class="form-input reset-pw-code"
         inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" />
       <p class="reset-pw-hint">
         Nothing in your inbox? Check spam, or
-        <button type="button" class="reset-pw-link" id="resetPwResend">send a new code</button>.
+        <button type="button" class="reset-pw-link" id="resetPwResend">send a new code</button><span id="resetPwCooldown"></span>.
       </p>
     `;
     const input = overlay.querySelector('#resetPwCode');
@@ -407,13 +446,31 @@ function handleForgotPassword() {
       input.addEventListener('keydown', (e) => { if (e.key === 'Enter') primary.click(); });
     }
     const resend = overlay.querySelector('#resetPwResend');
-    if (resend) resend.onclick = async () => { await requestCode(true); };
+    const cooldownEl = overlay.querySelector('#resetPwCooldown');
+    if (resend) {
+      resend.onclick = async () => { await requestCode(true); };
+      // Show the wait instead of letting the user click into it and be told a
+      // code is on its way when none was sent.
+      const tick = () => {
+        const left = Math.ceil(resendWaitMs(draft.email, Date.now()) / 1000);
+        if (left <= 0) {
+          clearInterval(timer);
+          resend.disabled = false;
+          if (cooldownEl) cooldownEl.textContent = '';
+          return;
+        }
+        resend.disabled = true;
+        if (cooldownEl) cooldownEl.textContent = ' (available in ' + left + 's)';
+      };
+      const timer = setInterval(tick, 250);
+      tick();
+    }
   }
 
   function renderStep3() {
     setStep(3);
     subEl.textContent = 'Choose a new password for ' + draft.email + '.';
-    primary.textContent = 'Set new password';
+    setPrimaryLabel('Set new password');
     bodyEl.innerHTML = `
       <label class="reset-pw-label" for="resetPwNew">New password</label>
       <input type="password" id="resetPwNew" class="form-input" autocomplete="new-password"
@@ -433,7 +490,10 @@ function handleForgotPassword() {
 
   function busy(on, label) {
     primary.disabled = !!on;
-    primary.textContent = on ? (label || 'Working…') : primary.textContent;
+    // Restore the step's idle label rather than leaving the in-flight text
+    // behind: the old code did `primary.textContent = primary.textContent` on
+    // the way out, so "Sending code…" / "Verifying…" / "Saving…" stuck forever.
+    primary.textContent = on ? (label || 'Working…') : restingLabel;
   }
 
   async function requestCode(isResend) {
@@ -445,6 +505,19 @@ function handleForgotPassword() {
       return;
     }
     draft.email = email;
+
+    // Refuse locally rather than firing a request the server will silently
+    // ignore and answer "success" to. Reaching the server here would produce a
+    // success message for a send that never happens.
+    const waitMs = resendWaitMs(email, Date.now());
+    if (waitMs > 0) {
+      setAlert(
+        'A code was already sent to that address. Please wait ' +
+        Math.ceil(waitMs / 1000) + ' seconds before requesting another.',
+        'info'
+      );
+      return;
+    }
 
     busy(true, isResend ? 'Sending…' : 'Sending code…');
     try {
@@ -461,20 +534,46 @@ function handleForgotPassword() {
         return;
       }
 
-      renderStep2();
-
-      // SMTP is not configured on this server yet, so the API hands the code
-      // back instead of emailing it. Surface it rather than stranding the user.
-      if (data.devCode) {
+      // No mail transport, so nothing was sent and the code is NOT available
+      // here — the server never returns it (it goes to the server console for
+      // an admin to relay). Do not advance to step 2 and do not claim a code is
+      // on its way: that is the silent dead end this flag exists to prevent.
+      if (data.mailUnavailable) {
+        // mailSetupHint is only sent outside production, where the person
+        // reading this is also the person who can fix it.
+        const hint = data.mailSetupHint
+          ? '<br /><br /><span class="reset-pw-hint-inline">' + escapeHtml(data.mailSetupHint) + '</span>'
+          : '';
         setAlert(
-          'Email is not set up on this server, so here is your code: ' +
-          '<strong class="reset-pw-devcode">' + escapeHtml(data.devCode) + '</strong>' +
-          '<br><span class="reset-pw-devnote">Set SMTP_HOST / SMTP_USER / SMTP_PASS on the server to send real email.</span>',
-          'info'
+          'This server has no email delivery configured, so no reset code could be sent. ' +
+          'Please ask an administrator to reset your password for you.' + hint,
+          'error'
         );
-        const codeInput = overlay.querySelector('#resetPwCode');
-        if (codeInput) codeInput.value = data.devCode;
-      } else if (isResend) {
+        return;
+      }
+
+      // Mail IS configured but the provider rejected the send, so nothing went
+      // out. Same reasoning as above: do not advance and do not claim a code is
+      // on its way. Without this branch the dialog would say "Code sent" while
+      // the mailbox stays empty — the exact dead end this flow keeps hitting.
+      if (data.mailFailed) {
+        const hint = data.mailErrorHint
+          ? '<br /><br /><span class="reset-pw-hint-inline">' + escapeHtml(data.mailErrorHint) + '</span>'
+          : '';
+        setAlert(
+          'Email delivery is failing on this server, so no reset code could be sent. ' +
+          'Please ask an administrator to reset your password for you.' + hint,
+          'error'
+        );
+        return;
+      }
+
+      // Only now do we know a send was actually attempted and accepted, so
+      // start the local cooldown to match the server's.
+      lastCodeRequestAt = Date.now();
+      lastCodeEmail = email;
+      renderStep2();
+      if (isResend) {
         setAlert('A new code is on its way.', 'success');
       } else {
         setAlert('Code sent. It expires in 10 minutes.', 'success');

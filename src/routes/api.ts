@@ -7,6 +7,7 @@ import {
   verifyPasswordResetCode,
   resetPasswordWithCode,
 } from '../auth/password-reset.js';
+import { isMailConfigured } from '../auth/mailer.js';
 
 export const apiRouter = Router();
 
@@ -221,14 +222,56 @@ apiRouter.post('/auth/forgot-password', async (req: Request, res: Response) => {
 
     // Identical wording whether or not the address exists, so this cannot be
     // used to discover which emails have accounts.
+    //
+    // The reset code is deliberately NOT part of this response — see
+    // src/auth/password-reset.ts. It only ever travels to the mailbox, or to
+    // the server console when SMTP is unconfigured.
     res.json({
       success: true,
       message:
         'If that email is registered, we have sent a 6-digit reset code. ' +
         'Check your inbox and spam folder — the code expires in 10 minutes.',
       emailed: result.emailed,
-      // Only populated when SMTP is unconfigured and NODE_ENV !== production.
-      ...(result.devCode ? { devCode: result.devCode, devNote: 'SMTP not configured — code shown here instead of emailed.' } : {}),
+      // Mail IS configured but the send failed — the provider rejected it (bad
+      // key, blocked IP, quota, unverified sender). Without this the user is
+      // told "check your inbox" while nothing was sent, which is the same
+      // silent dead end `mailUnavailable` exists to prevent.
+      //
+      // Development only, and deliberately so: `attempted` is true only for
+      // addresses that exist, so exposing it in production would be an
+      // account-enumeration oracle. Locally the only reader is the operator,
+      // who already knows their own accounts. In production the failure is
+      // logged to the server console instead.
+      ...(process.env.NODE_ENV !== 'production' && result.attempted && !result.emailed
+        ? {
+            mailFailed: true,
+            mailErrorHint:
+              'Mail is configured, but the provider rejected the send, so no code went out. ' +
+              `Reason: ${result.deliveryError || 'unknown'}. ` +
+              'Check it with:  npm run mail:test you@gmail.com',
+          }
+        : {}),
+      // Server-wide state, not per-account: this is derived purely from the
+      // mail configuration, so it is identical for every address and therefore
+      // leaks nothing about whether an account exists.
+      //
+      // Without it, a production deploy with no SMTP tells the user "check your
+      // inbox" while nothing was ever sent — a silent dead end. The client uses
+      // this flag to say so out loud instead.
+      ...(isMailConfigured() ? {} : {
+        mailUnavailable: true,
+        // Operator hint, development only. The person running this locally is
+        // the person who can fix it, so telling them how is the difference
+        // between a dead end and a fix. Kept out of production so a public
+        // deploy does not advertise its own misconfiguration to strangers.
+        ...(process.env.NODE_ENV === 'production' ? {} : {
+          mailSetupHint:
+            'No mail transport is configured, so nothing can be sent. ' +
+            'Set BREVO_API_KEY (easiest — no App Password or 2-Step Verification) ' +
+            'or SMTP_HOST / SMTP_USER / SMTP_PASS in .env. ' +
+            'Check it with:  npm run mail:test you@gmail.com',
+        }),
+      }),
     });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });

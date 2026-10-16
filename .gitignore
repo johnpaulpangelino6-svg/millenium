@@ -3,6 +3,15 @@ dist/
 .env
 *.log
 
+# Environment files and their copies.
+# `.env.md` is a human-readable mirror of .env and carries the SAME live
+# secrets (AUTH_SECRET, DATABASE_URL), so it must never be committed.
+# The backup pattern covers the safety copies made before editing .env.
+.env.*
+.env.md
+*.env
+!.env.example
+
 # Vim swap files
 *.swp
 *.swo

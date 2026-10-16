@@ -2551,6 +2551,17 @@ body::before {
   pointer-events: auto;
 }
 
+/* Modals opened FROM the sign-in screen must stack above it.
+   `.auth-portal-overlay` (the full-screen sign-in screen) is a fixed overlay at
+   z-index 9999, so a plain .modal-backdrop at 1000 renders *behind* it: the
+   dialog opens, is fully interactive, and is completely invisible. That is what
+   made "Forgot Password?" look like a dead button.
+   Modals opened from inside the app are unaffected — the portal is
+   `display: none` once signed in (.auth-portal-overlay.auth-hidden). */
+.modal-backdrop--above-auth {
+  z-index: 10000;
+}
+
 .modal-content {
   background: var(--bg-surface);
   border: 1px solid var(--border-color);
@@ -2664,7 +2675,11 @@ body::before {
   display: flex;
   align-items: center;
   gap: 10px;
-  z-index: 2000;
+  /* Above .auth-portal-overlay (9999): the reset flow finishes while the
+     sign-in screen is still up, so at 2000 the "Password changed" toast
+     confirmed the reset from behind it. Still below the notification panel
+     (100000). */
+  z-index: 10001;
   transform: translateY(100px);
   opacity: 0;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -12184,6 +12199,15 @@ html:not([data-theme="dark"]) .floating-menu-btn:hover {
   color: var(--primary-hover);
 }
 
+/* While the resend cooldown runs. The link stays visible so the user can see
+   that resending is coming back, rather than wondering where it went. */
+.reset-pw-link:disabled {
+  color: var(--text-secondary);
+  cursor: default;
+  text-decoration: none;
+  opacity: 0.75;
+}
+
 /* --- alert --- */
 .reset-pw-alert {
   margin-top: 14px;
@@ -12212,16 +12236,13 @@ html:not([data-theme="dark"]) .floating-menu-btn:hover {
   border-color: var(--border-color);
 }
 
-.reset-pw-devcode {
-  font-family: 'JetBrains Mono', 'Courier New', monospace;
-  font-size: 1.05rem;
-  letter-spacing: 0.22em;
-  color: var(--text-primary);
-}
-
-.reset-pw-devnote {
-  font-size: 0.72rem;
-  color: var(--text-muted);
+/* Operator-only setup hint appended to the "no mail configured" alert in
+   development. De-emphasised so it reads as a footnote to the error, not a
+   second error, and monospaced where it names commands. */
+.reset-pw-hint-inline {
+  display: inline-block;
+  font-size: 0.74rem;
+  opacity: 0.85;
 }
 
 /* --- footer --- */

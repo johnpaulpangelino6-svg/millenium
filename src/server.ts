@@ -6,6 +6,7 @@ import session from 'express-session';
 import passport from './config/passport.js';
 import { apiRouter } from './routes/api.js';
 import { db } from './db/database-supabase.js';
+import { isMailConfigured, describeMailConfig } from './auth/mailer.js';
 
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
@@ -147,6 +148,26 @@ db.testConnection()
       console.log(`  👥 Multi-User:         ✅ All users share same database`);
       console.log(`  💾 Data Persistence:   ✅ Saved permanently`);
       console.log('  * Local URL:          http://localhost:3000');
+      console.log('================================================================');
+
+      // Password-reset mail is easy to leave unconfigured and impossible to
+      // notice: the endpoint still answers "check your inbox". Say it out loud
+      // at boot so a broken reset flow is never a silent surprise.
+      if (isMailConfigured()) {
+        console.log(`  📧 Password reset mail: ✅ ${describeMailConfig()}`);
+      } else {
+        console.warn('  📧 Password reset mail: ❌ NOT configured');
+        console.warn('     POST /auth/forgot-password cannot email a reset code.');
+        console.warn('     Easiest fix — no App Password, no 2-Step Verification:');
+        console.warn('       BREVO_API_KEY=xkeysib-...   +   MAIL_FROM=you@gmail.com');
+        console.warn('     Or Gmail SMTP (needs a 16-char App Password, not the account password:');
+        console.warn('       https://myaccount.google.com/apppasswords )');
+        console.warn('     Diagnose with:  npm run mail:test you@gmail.com');
+        if (process.env.NODE_ENV === 'production') {
+          console.warn('     NODE_ENV=production, so the code is NOT exposed to the caller either —');
+          console.warn('     "forgot password" is BROKEN for users until this is set.');
+        }
+      }
       console.log('================================================================');
     });
   })
