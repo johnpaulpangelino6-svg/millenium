@@ -1,0 +1,167 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" width="320" height="200" role="img" aria-label="Millennium 86-inch interactive flat panel with zero-gap IR touch frame">
+  <defs>
+    <!-- ================= MATERIALS =================
+         The previous artwork was flat vector: one fill per shape, one highlight
+         per edge. It read as an icon. Realism here comes from three things a
+         flat fill cannot do — a multi-stop falloff across every surface, a
+         consistent light direction (upper left), and occlusion where parts meet.
+         Every gradient below is authored around that single light source. -->
+    <linearGradient id="tfBezel" x1="0.08" y1="0" x2="0.92" y2="1">
+      <stop offset="0" stop-color="#5a636e"/>
+      <stop offset="0.05" stop-color="#39414b"/>
+      <stop offset="0.28" stop-color="#1b2027"/>
+      <stop offset="0.62" stop-color="#12161c"/>
+      <stop offset="0.9" stop-color="#0a0d11"/>
+      <stop offset="1" stop-color="#242a32"/>
+    </linearGradient>
+    <linearGradient id="tfRailTop" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8a949f"/>
+      <stop offset="0.4" stop-color="#4b535d"/>
+      <stop offset="1" stop-color="#22282f"/>
+    </linearGradient>
+    <linearGradient id="tfRailBottom" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2b323a"/>
+      <stop offset="0.55" stop-color="#161a20"/>
+      <stop offset="1" stop-color="#090b0f"/>
+    </linearGradient>
+    <linearGradient id="tfGlass" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.20"/>
+      <stop offset="0.18" stop-color="#ffffff" stop-opacity="0.05"/>
+      <stop offset="0.46" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="0.86" stop-color="#ffffff" stop-opacity="0.02"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0.09"/>
+    </linearGradient>
+    <linearGradient id="tfNeck" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#1b2027"/>
+      <stop offset="0.35" stop-color="#5c6570"/>
+      <stop offset="0.55" stop-color="#79838f"/>
+      <stop offset="0.78" stop-color="#39414a"/>
+      <stop offset="1" stop-color="#14181d"/>
+    </linearGradient>
+    <linearGradient id="tfFoot" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6e7884"/>
+      <stop offset="0.35" stop-color="#39424c"/>
+      <stop offset="1" stop-color="#12161b"/>
+    </linearGradient>
+    <linearGradient id="tfCamBar" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4d555f"/>
+      <stop offset="0.3" stop-color="#22282f"/>
+      <stop offset="1" stop-color="#070a0d"/>
+    </linearGradient>
+
+    <!-- Screen content: the amber fluid artwork from the product film. -->
+    <radialGradient id="tfAmber" cx="0.5" cy="0.5" r="0.62">
+      <stop offset="0" stop-color="#ffd166"/>
+      <stop offset="0.35" stop-color="#f59e0b"/>
+      <stop offset="0.72" stop-color="#b45309"/>
+      <stop offset="1" stop-color="#4a1d05"/>
+    </radialGradient>
+    <radialGradient id="tfVignette" cx="0.5" cy="0.48" r="0.72">
+      <stop offset="0.55" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0.55"/>
+    </radialGradient>
+
+    <filter id="tfSoft" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="10"/>
+    </filter>
+    <filter id="tfSoftM" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="5"/>
+    </filter>
+    <filter id="tfSoftS" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="2.2"/>
+    </filter>
+
+    <clipPath id="tfScreenClip">
+      <rect x="30" y="27" width="260" height="146" rx="1.6"/>
+    </clipPath>
+    <clipPath id="tfPanelClip">
+      <rect x="24" y="21" width="272" height="158" rx="3.4"/>
+    </clipPath>
+  </defs>
+
+  <!-- Wall-mounted: a stand under a 268px-wide panel left the wordmark and the
+       foot fighting for the same few pixels, so the unit hangs like it does in
+       the product film. The shadow sits tight under the bottom rail. -->
+  <ellipse cx="160" cy="186" rx="118" ry="8" fill="#050a14" opacity="0.34" filter="url(#tfSoftM)"/>
+  <ellipse cx="160" cy="183" rx="96" ry="4" fill="#050a14" opacity="0.30" filter="url(#tfSoftS)"/>
+
+  <!-- Camera bar, clipped by the top rail like the real unit -->
+  <g>
+    <rect x="126" y="4" width="68" height="18" rx="4.5" fill="url(#tfCamBar)"/>
+    <rect x="126" y="4" width="68" height="1.6" rx="0.8" fill="#ffffff" opacity="0.28"/>
+    <circle cx="148" cy="13" r="4.6" fill="#04060a"/>
+    <circle cx="148" cy="13" r="3.1" fill="#0d1520"/>
+    <circle cx="148" cy="13" r="1.5" fill="#1e3a5f"/>
+    <ellipse cx="146.6" cy="11.6" rx="1.1" ry="0.75" fill="#ffffff" opacity="0.55"/>
+    <rect x="160" y="10.4" width="24" height="5.2" rx="2.6" fill="#0a0e13"/>
+    <circle cx="190" cy="13" r="1.3" fill="#22d3ee" opacity="0.85"/>
+    <circle cx="190" cy="13" r="2.6" fill="#22d3ee" opacity="0.20" filter="url(#tfSoftS)"/>
+  </g>
+
+  <!-- Panel body -->
+  <g clip-path="url(#tfPanelClip)">
+    <rect x="24" y="21" width="272" height="158" fill="url(#tfBezel)"/>
+    <!-- top rail catches the light, bottom rail falls into shadow -->
+    <rect x="24" y="21" width="272" height="6" fill="url(#tfRailTop)" opacity="0.85"/>
+    <rect x="24" y="21.6" width="272" height="1" fill="#ffffff" opacity="0.42"/>
+    <rect x="24" y="172" width="272" height="7" fill="url(#tfRailBottom)"/>
+    <rect x="24" y="172" width="272" height="0.9" fill="#ffffff" opacity="0.10"/>
+    <!-- side rails: thin, bright on the left, dark on the right -->
+    <rect x="24" y="21" width="3.4" height="158" fill="#ffffff" opacity="0.10"/>
+    <rect x="292.6" y="21" width="3.4" height="158" fill="#000000" opacity="0.45"/>
+  </g>
+
+  <!-- Screen -->
+  <g clip-path="url(#tfScreenClip)">
+    <rect x="30" y="27" width="260" height="146" fill="#6b3a06"/>
+
+    <!-- volumetric amber field -->
+    <g filter="url(#tfSoft)">
+      <ellipse cx="66" cy="168" rx="92" ry="58" fill="#4a1d05"/>
+      <ellipse cx="256" cy="34" rx="86" ry="56" fill="#5b2109"/>
+      <ellipse cx="158" cy="86" rx="86" ry="72" fill="url(#tfAmber)"/>
+      <ellipse cx="24" cy="112" rx="26" ry="64" fill="#3b0f52" opacity="0.85"/>
+      <ellipse cx="298" cy="96" rx="24" ry="60" fill="#45116b" opacity="0.8"/>
+    </g>
+    <g filter="url(#tfSoftM)">
+      <ellipse cx="146" cy="98" rx="52" ry="46" fill="#fbbf24" opacity="0.85"/>
+      <ellipse cx="116" cy="72" rx="30" ry="38" fill="#fde68a" opacity="0.55"/>
+    </g>
+
+    <!-- smoke: light strands, then dark ones for the contrast the film has -->
+    <g filter="url(#tfSoftS)" fill="none" stroke-linecap="round">
+      <path d="M56 176 C 88 132, 60 104, 96 72" stroke="#fde68a" stroke-width="7" opacity="0.5"/>
+      <path d="M110 182 C 134 130, 106 100, 146 74" stroke="#fef3c7" stroke-width="5" opacity="0.4"/>
+      <path d="M198 178 C 216 132, 190 106, 222 80" stroke="#fbbf24" stroke-width="8" opacity="0.45"/>
+      <path d="M252 172 C 268 136, 246 112, 270 92" stroke="#f59e0b" stroke-width="6" opacity="0.4"/>
+    </g>
+    <g filter="url(#tfSoftS)" fill="none" stroke-linecap="round">
+      <path d="M82 180 C 108 140, 86 112, 118 84" stroke="#7c2d12" stroke-width="9" opacity="0.45"/>
+      <path d="M170 184 C 188 142, 166 116, 194 92" stroke="#651a0a" stroke-width="10" opacity="0.4"/>
+      <path d="M234 176 C 246 148, 228 126, 248 106" stroke="#8a3a0b" stroke-width="7" opacity="0.4"/>
+    </g>
+    <!-- crisp specular edges -->
+    <g filter="url(#tfSoftS)" fill="none" stroke-linecap="round">
+      <path d="M100 170 C 118 134, 100 112, 122 88" stroke="#fffbeb" stroke-width="2.2" opacity="0.55"/>
+      <path d="M208 168 C 218 138, 204 120, 218 100" stroke="#fffbeb" stroke-width="1.8" opacity="0.45"/>
+    </g>
+
+    <!-- screen vignette + glass -->
+    <rect x="30" y="27" width="260" height="146" fill="url(#tfVignette)"/>
+    <path d="M30 173 L128 27 L166 27 L30 190 Z" fill="url(#tfGlass)"/>
+    <rect x="30" y="27" width="260" height="146" fill="none" stroke="#000000" stroke-opacity="0.6"/>
+    <rect x="30.5" y="27.5" width="259" height="145" fill="none" stroke="#ffffff" stroke-opacity="0.07"/>
+  </g>
+
+  <!-- Bottom bezel furniture -->
+  <g>
+    <rect x="32" y="177.4" width="4.4" height="3" rx="0.8" fill="#7f1d1d"/>
+    <rect x="37.6" y="177.4" width="4.4" height="3" rx="0.8" fill="#d7dde4" opacity="0.7"/>
+    <rect x="43.4" y="177.8" width="7.6" height="2.2" rx="1.1" fill="#0b1016"/>
+    <circle cx="55.4" cy="178.9" r="1.4" fill="#22d3ee" opacity="0.85"/>
+    <circle cx="55.4" cy="178.9" r="3" fill="#22d3ee" opacity="0.22" filter="url(#tfSoftS)"/>
+  </g>
+
+  <text x="160" y="178.4" text-anchor="middle" font-family="'Segoe UI', Arial, Helvetica, sans-serif"
+    font-size="5.4" font-weight="600" letter-spacing="1.9" fill="#b9c3ce" opacity="0.85">MILLENNIUM</text>
+</svg>

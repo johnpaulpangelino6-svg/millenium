@@ -1,0 +1,35 @@
+const puppeteer = require('puppeteer-core');
+const path = require('path');
+const CHROME = require('./_chrome-path.cjs');
+const OUT = path.resolve(__dirname, '..', 'screenshots', 'audit');
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+(async () => {
+  const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox','--disable-dev-shm-usage'] });
+  const ctx = await browser.createBrowserContext();
+  const page = await ctx.newPage();
+  await page.setViewport({ width: 1440, height: 1000 });
+  await page.setCacheEnabled(false);
+  await page.evaluateOnNewDocument(() => localStorage.setItem('millennium-theme', 'dark'));
+  page.on('console', m => { if (m.type() === 'error') console.log('PAGE ERROR:', m.text()); });
+  await page.goto('http://localhost:3000/app', { waitUntil: 'networkidle0' });
+  await page.type('#loginUsername', 'admin');
+  await page.type('#loginPassword', '123123');
+  await page.click('#loginSubmitBtn');
+  await sleep(3200);
+  await page.addStyleTag({ content: '*,*::before,*::after{transition:none !important}' });
+  const wid = await page.evaluate(() => state.warranties[0].id);
+  await page.evaluate((i) => openWarrantyBarcodeModal(i), wid);
+  await sleep(1200);
+  await page.screenshot({ path: path.join(OUT, 'bc-dark.png') });
+  const box = await page.evaluate(() => {
+    const svg = document.getElementById('warrantyBarcode');
+    const r = svg.getBoundingClientRect();
+    const host = svg.parentElement.getBoundingClientRect();
+    return { vb: svg.getAttribute('viewBox'), w: Math.round(r.width), h: Math.round(r.height), hostW: Math.round(host.width) };
+  });
+  console.log('barcode:', JSON.stringify(box));
+  await page.evaluate(() => document.documentElement.removeAttribute('data-theme'));
+  await sleep(500);
+  await page.screenshot({ path: path.join(OUT, 'bc-light.png') });
+  await ctx.close(); await browser.close(); console.log('ok');
+})().catch(e => { console.error('FATAL', e); process.exit(1); });

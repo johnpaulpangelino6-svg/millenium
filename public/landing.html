@@ -164,12 +164,14 @@
       padding: 18px 0 14px;
     }
     .brand { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+    /* The emblem is a transparent multi-colour SVG, so it is drawn bare — no
+       tile, no border, no shadow. This is the reference the in-app sidebar
+       brand copies (see .brains-emblem-box in public/css/style.css). */
     .brand-logo {
-      width: 42px; height: 42px; border-radius: 11px; flex-shrink: 0;
-      background: var(--surface); border: 1px solid var(--border);
-      display: grid; place-items: center; box-shadow: var(--shadow-sm);
+      width: 38px; height: 38px; flex-shrink: 0;
+      display: grid; place-items: center;
     }
-    .brand-logo img { width: 26px; height: 26px; object-fit: contain; }
+    .brand-logo img { width: 100%; height: 100%; object-fit: contain; }
     .brand-text { display: flex; flex-direction: column; line-height: 1.1; }
     /* ------------------------------------------------------------------
        "MILLENNIUM" — mirrors .millennium-word in public/css/style.css so the
@@ -665,8 +667,8 @@
     @media (max-width: 720px) {
       .head-inner { flex-wrap: wrap; gap: 12px; padding: 14px 0 12px; }
       /* Trim the brand so the theme button and CTA stay on the same row */
-      .brand-logo { width: 38px; height: 38px; border-radius: 10px; }
-      .brand-logo img { width: 23px; height: 23px; }
+      .brand-logo { width: 32px; height: 32px; }
+      .brand-logo img { width: 100%; height: 100%; }
       .brand-name { font-size: .96rem; }
       .brand-sub { display: none; }
       .btn-head { margin-left: auto; padding: 10px 17px; font-size: .84rem; }

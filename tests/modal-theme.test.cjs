@@ -182,6 +182,14 @@ const MEASURE = (openFn, dark) => {
       check(`${theme}: the dialog rendered`, !g.missing, 'no .modal-content found');
       if (g.missing) { await ctx.close(); continue; }
 
+      // `.active` is added inside a requestAnimationFrame so the opacity
+      // transition has a from-state to animate out of — which means it is NOT
+      // set synchronously after openRestockModal() returns. A CDP round-trip
+      // does not guarantee the compositor produced a frame in between, so wait
+      // for one explicitly. Without this the assertion measures Chrome's frame
+      // scheduler rather than the dialog.
+      await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => r(null))));
+
       check(`${theme}: the backdrop finished fading in`, await page.evaluate(() =>
         getComputedStyle(document.getElementById('restockModalOverlay')).opacity === '1'),
         'the backdrop was still mid-fade');

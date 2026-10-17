@@ -1399,6 +1399,67 @@ apiRouter.patch('/inventory/:id/stock', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * Add stock to a part. Defaults to a single unit — the inventory card's Restock
+ * button is a one-tap "+1", not a bulk shipment (that is the Restock Shipment
+ * dialog). The increment happens in SQL so two concurrent clicks both land.
+ */
+apiRouter.post(
+  '/inventory/:id/restock',
+  requireAuth,
+  requireRole('admin'),
+  async (req: AuthedRequest, res: Response) => {
+    try {
+      const id = getParam(req.params.id);
+      const raw = req.body?.amount === undefined ? 1 : Number(req.body.amount);
+      if (!Number.isInteger(raw) || raw < 1 || raw > 10000) {
+        return res.status(400).json({
+          success: false,
+          error: 'amount must be a whole number between 1 and 10000.',
+        });
+      }
+      const updated = await db.restockInventoryPart(id, raw);
+      if (!updated) {
+        return res.status(404).json({ success: false, error: 'Part not found.' });
+      }
+      res.json({ success: true, data: updated });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+);
+
+/** Set a part's unit cost. Prices are money, so they are validated and rounded. */
+apiRouter.patch(
+  '/inventory/:id/price',
+  requireAuth,
+  requireRole('admin'),
+  async (req: AuthedRequest, res: Response) => {
+    try {
+      const id = getParam(req.params.id);
+      const raw = req.body?.unitCost;
+      if (raw === undefined || raw === null || raw === '') {
+        return res.status(400).json({ success: false, error: 'unitCost is required.' });
+      }
+      const value = Number(raw);
+      if (!Number.isFinite(value) || value < 0) {
+        return res.status(400).json({ success: false, error: 'unitCost must be 0 or more.' });
+      }
+      if (value > 100000000) {
+        return res.status(400).json({ success: false, error: 'unitCost is unrealistically large.' });
+      }
+      const rounded = Math.round(value * 100) / 100;
+      const updated = await db.updateInventoryPart(id, { unitCost: rounded });
+      if (!updated) {
+        return res.status(404).json({ success: false, error: 'Part not found.' });
+      }
+      res.json({ success: true, data: updated });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+);
+
 apiRouter.delete('/inventory/:id', async (req: Request, res: Response) => {
   try {
     const id = getParam(req.params.id);
@@ -1498,31 +1559,78 @@ apiRouter.post('/predictive/simulate-telemetry', async (req: Request, res: Respo
 });
 
 // --- Notifications ---
-apiRouter.get('/notifications', async (req: Request, res: Response) => {
+// Private and role-scoped: each account only sees notifications that belong to
+// them. Admins see the full operational feed; technicians see their assigned
+// tickets and staff-channel messages on those tickets; customers see tickets
+// tied to their organization/devices and customer-channel messages on those
+// tickets.
+apiRouter.get('/notifications', requireAuth, async (req: AuthedRequest, res: Response) => {
   try {
+    const { userId, role } = req.auth!;
     const notifications: any[] = [];
     const now = new Date();
     const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-    // 1. Low Stock Notifications
-    const inventory = await db.getInventory();
-    inventory.forEach(part => {
-      if (part.stockQuantity <= part.minThreshold) {
-        notifications.push({
-          id: `notif-stock-${part.id}`,
-          type: 'low_stock',
-          title: 'Low Stock Alert',
-          message: `Part "${part.name}" is running low (${part.stockQuantity} remaining).`,
-          timestamp: new Date().toISOString(),
-          linkId: part.id,
-          read: false
-        });
+    // Resolve customer scope once for customer users.
+    let customerScope: { customerId?: string; organization?: string } | null = null;
+    if (role === 'customer') {
+      const users = await db.getUsers();
+      const user: any = users.find((u: any) => u.id === userId);
+      if (user) {
+        const organization = String(user.organization || '').trim();
+        let customerId = String(user.customerId || '').trim();
+        if (!customerId && organization) {
+          const customers = await db.getCustomers();
+          const match = customers.find(
+            (c) => c.organizationName.trim().toLowerCase() === organization.toLowerCase()
+          );
+          if (match) customerId = match.id;
+        }
+        customerScope = { customerId, organization };
+      }
+    }
+
+    // Helper: determine if a ticket is visible to the current requester.
+    const tickets = await db.getTickets();
+    const visibleTicketIds = new Set<string>();
+    tickets.forEach((ticket) => {
+      if (role === 'admin') {
+        visibleTicketIds.add(ticket.id);
+      } else if (role === 'technician') {
+        if (ticket.assignedTechnicianId === userId) {
+          visibleTicketIds.add(ticket.id);
+        }
+      } else if (role === 'customer' && customerScope) {
+        const userOrg = (customerScope.organization || '').toLowerCase();
+        const userCustId = (customerScope.customerId || '').toLowerCase();
+        const tCustName = (ticket.customerName || '').trim().toLowerCase();
+        if ((userOrg && tCustName === userOrg) || (userCustId && ticket.customerId?.toLowerCase() === userCustId)) {
+          visibleTicketIds.add(ticket.id);
+        }
       }
     });
 
+    // 1. Low Stock Notifications — admin only.
+    if (role === 'admin') {
+      const inventory = await db.getInventory();
+      inventory.forEach((part) => {
+        if (part.stockQuantity <= part.minThreshold) {
+          notifications.push({
+            id: `notif-stock-${part.id}`,
+            type: 'low_stock',
+            title: 'Low Stock Alert',
+            message: `Part "${part.name}" is running low (${part.stockQuantity} remaining).`,
+            timestamp: new Date().toISOString(),
+            linkId: part.id,
+            read: false
+          });
+        }
+      });
+    }
+
     // 2. New Ticket Notifications (Created within last 24h OR Received status)
-    const tickets = await db.getTickets();
-    tickets.forEach(ticket => {
+    tickets.forEach((ticket) => {
+      if (!visibleTicketIds.has(ticket.id)) return;
       const ticketDate = new Date(ticket.createdAt);
       if (ticket.status === 'Received' || ticketDate >= twentyFourHoursAgo) {
         notifications.push({
@@ -1537,10 +1645,13 @@ apiRouter.get('/notifications', async (req: Request, res: Response) => {
       }
     });
 
-    // 3. New Ticket Messages
+    // 3. Staff-channel messages — admin sees all; technicians see messages on
+    //    tickets assigned to them. Customers never see staff messages.
     try {
-      const recentMessages = await db.getRecentTicketMessages(30);
-      recentMessages.forEach(msg => {
+      const staffMessages = await db.getRecentTicketMessages(30, 'staff');
+      staffMessages.forEach((msg) => {
+        if (!visibleTicketIds.has(msg.ticketId)) return;
+        if (role === 'customer') return;
         const msgDate = new Date(msg.createdAt);
         if (msgDate >= twentyFourHoursAgo) {
           const roleLabel = msg.senderRole === 'customer' ? 'Customer' : msg.senderRole === 'admin' ? 'Admin' : 'Technician';
@@ -1550,13 +1661,38 @@ apiRouter.get('/notifications', async (req: Request, res: Response) => {
             title: `${roleLabel} Ticket Message`,
             message: `${msg.senderName} (${msg.senderRole}): "${msg.message.substring(0, 32)}${msg.message.length > 32 ? '...' : ''}"`,
             timestamp: msg.createdAt,
-            linkId: msg.ticketId, // Link to ticket ID to open it
+            linkId: msg.ticketId,
             read: false
           });
         }
       });
     } catch (msgErr) {
       // Gracefully continue if ticket_messages table query has issues
+    }
+
+    // 4. Customer-channel messages — admin sees all; customers see messages on
+    //    tickets tied to their organization/devices. Technicians never see them.
+    try {
+      const customerMessages = await db.getRecentTicketMessages(30, 'customer');
+      customerMessages.forEach((msg) => {
+        if (!visibleTicketIds.has(msg.ticketId)) return;
+        if (role === 'technician') return;
+        const msgDate = new Date(msg.createdAt);
+        if (msgDate >= twentyFourHoursAgo) {
+          const roleLabel = msg.senderRole === 'customer' ? 'Customer' : 'Admin';
+          notifications.push({
+            id: `notif-cmsg-${msg.id}`,
+            type: 'ticket_message',
+            title: `${roleLabel} Support Message`,
+            message: `${msg.senderName}: "${msg.message.substring(0, 32)}${msg.message.length > 32 ? '...' : ''}"`,
+            timestamp: msg.createdAt,
+            linkId: msg.ticketId,
+            read: false
+          });
+        }
+      });
+    } catch (msgErr) {
+      // Gracefully continue
     }
 
     // Sort by most recent

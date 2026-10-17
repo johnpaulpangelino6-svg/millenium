@@ -84,10 +84,9 @@ const SCAN = (limit) => {
   const FLOOR = 2.0;
 
   const worst = [];
-  // The top bar is gone, so the shell surfaces to scan are the main content,
-  // the sidebar (which now owns the brand, search, settings and user chip) and
-  // the floating notification control.
-  const all = document.querySelectorAll('#mainContent *, .app-sidebar *, .notif-wrapper *');
+  // Scan every shell surface that carries text: the main content, the sidebar
+  // (brand + nav + Settings) and the top bar (search, bell, account menu).
+  const all = document.querySelectorAll('#mainContent *, .app-sidebar *, .app-topbar *');
   all.forEach((el) => {
     const text = (el.textContent || '').trim();
     if (!text) return;
@@ -176,13 +175,17 @@ const isLight = (rgb) => {
     return {
       visible: r.width > 0 && r.height > 0 && b.offsetParent !== null,
       onScreen: r.left >= 0 && r.right <= window.innerWidth,
-      label: (document.getElementById('themeToggleLabel') || {}).textContent,
+      // The theme control is no longer in the sidebar at all — it moved into
+      // the Settings dialog, so the sidebar row is now a plain button.
+      sidebarThemeControl: !!document.getElementById('sidebarThemeToggle'),
       hasHandler: b.getAttribute('onclick') || '',
     };
   });
   check('the single Settings button exists in the sidebar', !!btn, btn);
   check('it is visible and on screen', !!(btn && btn.visible && btn.onScreen), btn);
   check('it opens the settings dialog', !!(btn && /openSettingsModal/.test(btn.hasHandler)), btn && btn.hasHandler);
+  check('the sidebar carries NO theme control any more',
+    btn && btn.sidebarThemeControl === false, btn);
 
   const before = await page.evaluate(() => ({
     attr: document.documentElement.getAttribute('data-theme') || '(none)',
@@ -190,53 +193,70 @@ const isLight = (rgb) => {
   }));
   check('starts in dark', before.attr === 'dark' && before.stored === 'dark', before);
 
-  // The light/dark control now lives INSIDE the Settings dialog, so the flow is
-  // open Settings -> pick a tile. Both modes are explicit tiles rather than a
-  // toggle switch, so the current choice is stated instead of implied.
+  // The light/dark control lives INSIDE the Settings dialog as a single
+  // "Light mode" pill. A switch is the right model here: there are exactly two
+  // states and one is the default, so naming the non-default one is enough.
   await page.click('#settingsBtn');
   await sleep(600);
   const dialog = await page.evaluate(() => {
-    const active = document.querySelector('[data-theme-option].is-active');
+    const pill = document.getElementById('settingsThemeToggle');
     return {
       open: !!document.getElementById('profileModalOverlay'),
       title: (document.getElementById('profileModalTitle') || {}).textContent,
-      tiles: document.querySelectorAll('[data-theme-option]').length,
-      active: active ? active.getAttribute('data-theme-option') : null,
+      hasPill: !!pill,
+      pillLabel: pill ? (pill.querySelector('.theme-pill-label') || {}).textContent : null,
+      pillRole: pill ? pill.getAttribute('role') : null,
+      pillOn: pill ? pill.classList.contains('is-on') : null,
+      pillChecked: pill ? pill.getAttribute('aria-checked') : null,
+      pillHasTrack: pill ? !!pill.querySelector('.theme-pill-track .theme-pill-knob') : null,
+      legacyTiles: document.querySelectorAll('[data-theme-option]').length,
       hasProfile: !!document.getElementById('profileFullName'),
     };
   });
   check('Settings opens a dialog', dialog.open === true, dialog);
   check('the dialog is titled Settings', /Settings/.test(dialog.title || ''), dialog.title);
-  check('it offers both Light and Dark tiles', dialog.tiles === 2, dialog.tiles);
-  check('the Dark tile is selected while in dark mode', dialog.active === 'dark', dialog.active);
+  check('it carries a single "Light mode" pill',
+    dialog.hasPill === true && dialog.pillLabel === 'Light mode', dialog);
+  check('the pill is exposed as a switch control',
+    dialog.pillRole === 'switch' && dialog.pillHasTrack === true, dialog);
+  check('the pill reads OFF while in dark mode',
+    dialog.pillOn === false && dialog.pillChecked === 'false', dialog);
+  check('the old two-tile picker is gone', dialog.legacyTiles === 0, dialog.legacyTiles);
   check('the same dialog carries the editable profile fields', dialog.hasProfile === true, dialog);
 
-  await page.click('[data-theme-option="light"]');
+  await page.click('#settingsThemeToggle');
   await sleep(500);
   const after = await page.evaluate(() => {
-    const active = document.querySelector('[data-theme-option].is-active');
+    const pill = document.getElementById('settingsThemeToggle');
     return {
       attr: document.documentElement.getAttribute('data-theme') || '(none)',
       stored: localStorage.getItem('millennium-theme'),
-      label: (document.getElementById('themeToggleLabel') || {}).textContent,
-      active: active ? active.getAttribute('data-theme-option') : null,
+      pillOn: pill ? pill.classList.contains('is-on') : null,
+      pillChecked: pill ? pill.getAttribute('aria-checked') : null,
+      pillLabel: pill ? (pill.querySelector('.theme-pill-label') || {}).textContent : null,
       bodyBg: getComputedStyle(document.body).backgroundColor,
       bodyColor: getComputedStyle(document.body).color,
     };
   });
-  check('picking Light switches to light', after.attr === '(none)' && after.stored === 'light', after);
-  check('the sidebar Settings status line follows the theme', after.label === 'Light mode', after.label);
-  check('the Light tile becomes the selected one', after.active === 'light', after.active);
+  check('toggling the pill switches to light', after.attr === '(none)' && after.stored === 'light', after);
+  check('the pill turns on and reports checked',
+    after.pillOn === true && after.pillChecked === 'true', after);
+  check('the pill keeps its "Light mode" label', after.pillLabel === 'Light mode', after.pillLabel);
   check('the page actually becomes light (body background)', isLight(after.bodyBg), after.bodyBg);
   check('body text becomes dark', !isLight(after.bodyColor), after.bodyColor);
 
-  await page.click('[data-theme-option="dark"]');
+  await page.click('#settingsThemeToggle');
   await sleep(500);
-  const back = await page.evaluate(() => ({
-    attr: document.documentElement.getAttribute('data-theme') || '(none)',
-    stored: localStorage.getItem('millennium-theme'),
-  }));
-  check('picking Dark switches back to dark', back.attr === 'dark' && back.stored === 'dark', back);
+  const back = await page.evaluate(() => {
+    const pill = document.getElementById('settingsThemeToggle');
+    return {
+      attr: document.documentElement.getAttribute('data-theme') || '(none)',
+      stored: localStorage.getItem('millennium-theme'),
+      pillOn: pill ? pill.classList.contains('is-on') : null,
+    };
+  });
+  check('toggling the pill again switches back to dark',
+    back.attr === 'dark' && back.stored === 'dark' && back.pillOn === false, back);
 
   // Close the dialog — the view-switching checks below need the shell clickable.
   await page.evaluate(() => document.getElementById('profileModalOverlay')?.remove());
@@ -254,8 +274,14 @@ const isLight = (rgb) => {
   }));
   check('body canvas is light', isLight(lightSurf.body), lightSurf.body);
   check('app container is light', isLight(lightSurf.container), lightSurf.container);
-  check('the floating notification button is light', isLight(lightSurf.header), lightSurf.header);
-  check('sidebar is light', isLight(lightSurf.sidebar), lightSurf.sidebar);
+  // The bell now sits inside the sticky top bar. It used to be a floating
+  // control hard-coded to #0d1733, which stayed dark in light mode; the bar is
+  // fully token-driven so this is the regression guard for that.
+  check('the notification button in the top bar is light', isLight(lightSurf.header), lightSurf.header);
+  // The sidebar is deliberately theme-locked to dark navy in BOTH themes — see
+  // the "Sidebar" block in style.css. A light sidebar was the old behaviour and
+  // made the brand wordmark unreadable.
+  check('sidebar stays dark navy in light mode', !isLight(lightSurf.sidebar), lightSurf.sidebar);
 
   // =============================================== 3. contrast scan, light
   console.log('\n=== 3. CONTRAST SCAN — LIGHT MODE, EVERY VIEW ===');

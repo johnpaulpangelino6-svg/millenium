@@ -109,7 +109,7 @@ async function seed() {
   // ── 5. Seed Inventory Parts ───────────────────────────────────────────
   console.log('📦 Seeding inventory parts...');
   const parts = [
-    { id: 'PART-001', partCode: 'TF-86-PRO', name: 'Touch Frame 86" Zero-Gap IR', category: 'Display & Touch', stockQuantity: 15, minThreshold: 5, unitCost: 14500, status: 'In Stock', lastRestocked: '2026-08-15' },
+    { id: 'PART-001', partCode: 'TF-86-PRO', name: 'Touch Frame 65"/75"/86" Zero-Gap IR', category: 'Display & Touch', stockQuantity: 15, minThreshold: 5, unitCost: 14500, status: 'In Stock', lastRestocked: '2026-08-15' },
     { id: 'PART-002', partCode: 'RC-MIL-BT', name: 'Millennium Remote Control & Air Mouse', category: 'Accessories', stockQuantity: 43, minThreshold: 10, unitCost: 1200, status: 'In Stock', lastRestocked: '2026-09-01' },
     { id: 'PART-003', partCode: 'OPS-I7-12G', name: 'OPS i7-12700 Module (16GB/512GB)', category: 'Computing (OPS)', stockQuantity: 6, minThreshold: 4, unitCost: 38500, status: 'Low Stock', lastRestocked: '2026-07-20' },
     { id: 'PART-004', partCode: 'CAM-4K-AI', name: '4K AI Auto-Framing Conference Camera', category: 'AV Equipment', stockQuantity: 12, minThreshold: 5, unitCost: 9800, status: 'In Stock', lastRestocked: '2026-08-10' },

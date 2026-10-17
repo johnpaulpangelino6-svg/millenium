@@ -127,12 +127,13 @@ async function login(page, u, p) {
     signedIn.overlayHidden && signedIn.hasToken, JSON.stringify(signedIn));
   check('admin lands on the dashboard', signedIn.dashRendered, signedIn.tab);
 
-  // ================= 3. SHELL CHROME — FLOATING CONTROLS =================
-  // The top bar was removed. Everything it carried (brand, search, theme
-  // switch, user chip) moved into the sidebar, and the only chrome left on the
-  // canvas is the floating menu button (top left) and the notification bell
-  // (top right). Both must stay on screen without overlapping each other.
-  console.log('\n=== 3. SHELL CHROME — FLOATING CONTROLS ===');
+  // ================= 3. SHELL CHROME — THE TOP BAR =================
+  // The shell is sidebar + (top bar / content). The bar carries the global
+  // search, the notification bell and the signed-in account; the sidebar keeps
+  // only the brand, the nav and Settings. On a phone the bar must fit 390px
+  // with the hamburger, a usable search field and both right-hand controls
+  // visible and non-overlapping.
+  console.log('\n=== 3. SHELL CHROME — TOP BAR ===');
   const head = await pageA.evaluate(() => {
     const box = (sel) => {
       const el = document.querySelector(sel);
@@ -142,28 +143,47 @@ async function login(page, u, p) {
       return {
         left: Math.round(b.left), right: Math.round(b.right),
         top: Math.round(b.top), bottom: Math.round(b.bottom),
+        w: Math.round(b.width),
       };
     };
+    const bar = document.querySelector('.app-topbar');
     return {
       innerWidth: window.innerWidth,
-      headerPresent: !!document.querySelector('.app-header'),
-      burger: box('.floating-menu-btn'),
+      bar: box('.app-topbar'),
+      barPosition: bar ? getComputedStyle(bar).position : null,
+      burger: box('.topbar-menu-btn'),
+      searchWrap: box('.topbar-search'),
+      searchInput: box('.topbar-search-input'),
       notif: box('.header-notif-btn'),
+      user: box('#topbarUserBtn'),
       sidebarRight: Math.round(document.querySelector('.app-sidebar').getBoundingClientRect().right),
     };
   });
-  check('the top bar is gone', head.headerPresent === false, `present=${head.headerPresent}`);
-  check('the floating menu button is on screen',
-    head.burger && head.burger !== 'hidden' &&
-    head.burger.left >= 0 && head.burger.right <= d390.w + 1,
-    JSON.stringify(head.burger));
-  check('the notification bell floats at the top right',
-    head.notif && head.notif !== 'hidden' &&
-    head.notif.right <= d390.w + 1 && head.notif.top < 80,
-    JSON.stringify(head.notif));
-  check('the two floating controls do not overlap',
-    head.burger.right < head.notif.left,
-    JSON.stringify({ burgerRight: head.burger.right, notifLeft: head.notif.left }));
+  const onScreen = (b) => b && b !== 'hidden' && b.left >= -1 && b.right <= d390.w + 1 && b.w > 0;
+
+  check('the top bar is present and sticky', !!head.bar && head.bar !== 'hidden' && head.barPosition === 'sticky',
+    JSON.stringify({ bar: head.bar, pos: head.barPosition }));
+  check('the top bar spans the phone width without overflowing',
+    onScreen(head.bar) && head.bar.right >= d390.w - 1, JSON.stringify(head.bar));
+  check('the hamburger is on screen (the sidebar is off-canvas)',
+    onScreen(head.burger), JSON.stringify(head.burger));
+  check('the search field is on screen with usable width',
+    onScreen(head.searchWrap) && head.searchWrap.w >= 110, JSON.stringify(head.searchWrap));
+  check('the search input itself is rendered and focusable',
+    onScreen(head.searchInput), JSON.stringify(head.searchInput));
+  check('the notification bell is in the bar, on screen',
+    onScreen(head.notif), JSON.stringify(head.notif));
+  check('the account chip is in the bar, on screen',
+    onScreen(head.user), JSON.stringify(head.user));
+  check('bar controls sit left-to-right without overlapping',
+    head.burger.right <= head.searchWrap.left + 1 &&
+    head.searchWrap.right <= head.notif.left + 1 &&
+    head.notif.right <= head.user.left + 1,
+    JSON.stringify({
+      burger: head.burger.right, search: head.searchWrap.left,
+      searchEnd: head.searchWrap.right, notif: head.notif.left,
+      notifEnd: head.notif.right, user: head.user.left,
+    }));
   check('the sidebar (and its brand) is off-canvas until opened',
     head.sidebarRight <= 1, `sidebarRight=${head.sidebarRight}`);
 
@@ -201,9 +221,10 @@ async function login(page, u, p) {
   check('a dimming overlay is shown behind the drawer', opened.overlayShown,
     JSON.stringify(opened));
 
-  // Everything the removed top bar carried has to be reachable inside the
-  // drawer on a phone: brand, search, the single Settings button and the user
-  // chip with its sign-out button.
+  // The sidebar now holds only the brand, the nav and Settings. The search and
+  // the account chip were deliberately moved up into the top bar, so the drawer
+  // must NOT carry them any more — that is the regression guard for "replace
+  // the user name above instead of in a sidebar, including the search bar".
   const drawerContent = await pageA.evaluate(() => {
     const state = (sel) => {
       const el = document.querySelector(sel);
@@ -216,22 +237,28 @@ async function login(page, u, p) {
     const sb = document.querySelector('.app-sidebar');
     return {
       brand: state('.sidebar-brand .millennium-word'),
-      search: state('.sidebar-search-input'),
       settings: state('#settingsBtn'),
-      userName: state('#authUserName'),
-      logout: state('.auth-logout-btn'),
+      navItems: sb.querySelectorAll('.nav-item').length,
+      searchInSidebar: !!sb.querySelector('.sidebar-search, .sidebar-search-input, .topbar-search'),
+      userInSidebar: !!sb.querySelector('#authUserName, #authUserAvatar, #topbarUserBtn'),
+      logoutInSidebar: !!sb.querySelector('.auth-logout-btn'),
+      themeInSidebar: !!sb.querySelector('#sidebarThemeToggle, .theme-switch-pill'),
       overflowX: sb.scrollWidth - sb.clientWidth,
     };
   });
   check('the drawer carries the brand wordmark',
     drawerContent.brand === 'visible', JSON.stringify(drawerContent));
-  check('the drawer carries the global search',
-    drawerContent.search === 'visible', drawerContent.search);
   check('the drawer carries the single Settings button',
     drawerContent.settings === 'visible', drawerContent.settings);
-  check('the drawer carries the user name and sign-out button',
-    drawerContent.userName === 'visible' && drawerContent.logout === 'visible',
+  check('the drawer still carries the full nav',
+    drawerContent.navItems > 0, `navItems=${drawerContent.navItems}`);
+  check('the search bar is NOT in the sidebar (it lives in the top bar)',
+    drawerContent.searchInSidebar === false, JSON.stringify(drawerContent));
+  check('the account chip is NOT in the sidebar (it lives in the top bar)',
+    drawerContent.userInSidebar === false && drawerContent.logoutInSidebar === false,
     JSON.stringify(drawerContent));
+  check('the theme control is NOT in the sidebar (it lives in Settings)',
+    drawerContent.themeInSidebar === false, JSON.stringify(drawerContent));
   check('the drawer content does not overflow sideways',
     drawerContent.overflowX <= 1, `overflowX=${drawerContent.overflowX}`);
 

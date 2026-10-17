@@ -15,11 +15,12 @@ const ROLE_ACCESS = {
   customer:   ['dashboard','devices','tickets','customer-portal','rentals','directory'],
 };
 
-// Role display metadata
+// Role display metadata. `icon` is a sprite name (see public/js/icons.js), not
+// a glyph — render it through ico() so it inherits colour and font-size.
 const ROLE_META = {
-  admin:      { icon: '🏢', name: 'Admin Portal',      desc: 'Full system access',          defaultTab: 'dashboard' },
-  technician: { icon: '🔧', name: 'Technician Portal', desc: 'Assigned jobs & inventory',   defaultTab: 'dashboard' },
-  customer:   { icon: '🏫', name: 'Customer Portal',   desc: 'My Devices & Tickets',        defaultTab: 'dashboard' },
+  admin:      { icon: 'building', name: 'Admin Portal',      desc: 'Full system access',          defaultTab: 'dashboard' },
+  technician: { icon: 'wrench',   name: 'Technician Portal', desc: 'Assigned jobs & inventory',   defaultTab: 'dashboard' },
+  customer:   { icon: 'school',   name: 'Customer Portal',   desc: 'My Devices & Tickets',        defaultTab: 'dashboard' },
 };
 
 // Sidebar copy for the shared 'dashboard' nav item. The single nav entry is
@@ -243,14 +244,25 @@ function updateAuthChip(user) {
   const nameEl = document.getElementById('authUserName');
   const locEl  = document.getElementById('authUserLoc');
   const avatarEl = document.getElementById('authUserAvatar');
-  if (nameEl)   nameEl.textContent  = user.fullName || user.username;
-  // No trailing caret: the card is clickable as a whole and opens Settings, so
-  // a dropdown arrow was promising a menu that does not exist.
+  const roleEl = document.getElementById('authUserRole');
+  const menuNameEl = document.getElementById('authUserMenuName');
+  const displayName = user.fullName || user.username;
+
+  if (nameEl)   nameEl.textContent  = displayName;
+  if (menuNameEl) menuNameEl.textContent = displayName;
   if (locEl)    locEl.textContent   = user.location || 'All Locations';
-  if (avatarEl) avatarEl.textContent = (user.fullName || user.username).charAt(0).toUpperCase();
-  // The card is only ~220px wide, so a long name or building ellipsizes; the
-  // tooltips keep the full value reachable on hover.
-  if (nameEl)   nameEl.title         = user.fullName || user.username;
+  if (avatarEl) avatarEl.textContent = displayName.charAt(0).toUpperCase();
+
+  // The top bar shows the role under the name (the reference design), while the
+  // account menu keeps the location — both are useful, so neither is dropped.
+  if (roleEl) {
+    const meta = ROLE_META[user.role];
+    roleEl.textContent = meta ? meta.name : (user.role || 'Member');
+  }
+
+  // The bar is narrow, so a long name ellipsizes; the tooltip keeps the full
+  // value reachable on hover.
+  if (nameEl)   nameEl.title         = displayName;
   if (locEl)    locEl.title          = user.location || 'All Locations';
 }
 
@@ -419,7 +431,7 @@ function handleForgotPassword() {
       // Swap the number for a tick once the step is behind us, so the track
       // reads as progress rather than three static labels.
       const badge = s.querySelector('b');
-      if (badge) badge.textContent = done ? '✓' : String(v);
+      if (badge) badge.innerHTML = done ? ico('check') : String(v);
     });
     backBtn.style.display = n === 1 ? 'none' : '';
     setAlert('');
@@ -673,7 +685,7 @@ function handleForgotPassword() {
 
       draft.code = '';
       closeOverlay();
-      showToast('✅ Password changed. Sign in with your new password.', 'success');
+      showToast('Password changed. Sign in with your new password.', 'success');
     } catch (err) {
       busy(false);
       setAlert('Network error. Please check your connection.');
@@ -755,7 +767,7 @@ function openAuthModal(formType) {
 
 /** Close auth modal */
 function closeAuthModal() {
-  console.log('🔒 Closing modal...');
+  console.log('Closing modal...');
   const authCard = document.getElementById('authPortalCard');
   const backdrop = document.getElementById('authModalBackdrop');
   
@@ -765,7 +777,7 @@ function closeAuthModal() {
     authCard.classList.add('auth-modal-hidden');
     backdrop.classList.remove('active');
     
-    console.log('✅ Modal closed');
+    console.log('Modal closed');
     
     // Restore body scroll
     document.body.style.overflow = '';
@@ -786,7 +798,7 @@ document.addEventListener('keydown', (e) => {
 document.addEventListener('DOMContentLoaded', () => {
   const authCard = document.getElementById('authPortalCard');
   if (authCard) {
-    console.log('🔍 Modal Check on Page Load:');
+    console.log('Modal Check on Page Load:');
     console.log('  - Element found:', !!authCard);
     console.log('  - Has auth-modal-hidden:', authCard.classList.contains('auth-modal-hidden'));
     console.log('  - Has auth-modal-visible:', authCard.classList.contains('auth-modal-visible'));
@@ -794,9 +806,9 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log('  - Computed opacity:', window.getComputedStyle(authCard).opacity);
     
     if (authCard.classList.contains('auth-modal-hidden')) {
-      console.log('✅ Modal is correctly HIDDEN on page load');
+      console.log('Modal is correctly HIDDEN on page load');
     } else {
-      console.warn('⚠️ Modal might be visible! Check CSS cache.');
+      console.warn('Modal might be visible! Check CSS cache.');
     }
   }
 
@@ -813,14 +825,14 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!r.ok) throw new Error(`Server returned ${r.status}`);
       // Healthy: make sure no stale error banner is left showing.
       if (banner) banner.style.display = 'none';
-      console.log('✅ Backend server is reachable');
+      console.log('Backend server is reachable');
     })
     .catch(err => {
-      console.error('❌ Backend server unreachable on page load:', err.message);
+      console.error('Backend server unreachable on page load:', err.message);
       if (banner) {
         banner.style.display = 'block';
         banner.style.background = 'linear-gradient(90deg,#dc2626,#991b1b)';
-        if (bannerText) bannerText.innerHTML = '❌ Backend server not reachable. Please start the server: <code style="background:rgba(0,0,0,0.3);padding:2px 6px;border-radius:4px;">cd c:\\xampp\\htdocs\\millenium-smartboard-main && npx tsx src/server.ts</code>';
+        if (bannerText) bannerText.innerHTML = 'Backend server not reachable. Please start the server: <code style="background:rgba(0,0,0,0.3);padding:2px 6px;border-radius:4px;">cd c:\\xampp\\htdocs\\millenium-smartboard-main && npx tsx src/server.ts</code>';
       }
     });
 });
@@ -872,7 +884,7 @@ async function quickDemoLogin(username, password, roleLabel) {
     closeAuthModal(); // Close the modal after successful login
     applyRoleUI();
     fetchAllData();
-    showToast(`Welcome, ${user.fullName || user.username}! Signed in as ${roleLabel} 🌟`, 'success');
+    showToast(`Welcome, ${user.fullName || user.username}! Signed in as ${roleLabel} `, 'success');
 
   } catch (err) {
     showAuthError(errorEl, 'Network error. Please check your connection.');
@@ -1011,8 +1023,10 @@ async function handleLogin(event) {
     hideAuthOverlay();
     closeAuthModal(); // Close the modal after successful login
     applyRoleUI();
+    // Load this account's own notification/accessibility preferences.
+    applyUserPrefs();
     fetchAllData();
-    showToast(`Welcome back, ${user.fullName || user.username}! 🌟`, 'success');
+    showToast(`Welcome back, ${user.fullName || user.username}! `, 'success');
 
   } catch (err) {
     showAuthError(errorEl, 'Network error. Please check your connection.');
@@ -1109,7 +1123,7 @@ async function handleRegister(event) {
       hideAuthOverlay();
       applyRoleUI();
       fetchAllData();
-      showToast(`Welcome to Millennium, ${user.fullName}! 🚀`, 'success');
+      showToast(`Welcome to Millennium, ${user.fullName}! `, 'success');
     }, 1200);
 
   } catch (err) {
@@ -1243,6 +1257,10 @@ async function openProfileModal() {
   // Which tile in the Appearance section should read as selected right now.
   const liveTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
 
+  // Per-account preferences for the new Notifications / Accessibility sections.
+  // Keyed by user id so two accounts on the same browser do not share them.
+  const prefs = getUserPrefs(me.id);
+
   const overlay = document.createElement('div');
   overlay.id = 'profileModalOverlay';
   overlay.className = 'modal-backdrop';
@@ -1250,7 +1268,7 @@ async function openProfileModal() {
   overlay.innerHTML = `
     <div class="modal-content modal-form modal-wide settings-modal" role="dialog" aria-modal="true" aria-labelledby="profileModalTitle">
       <div class="modal-header">
-        <h3 class="modal-title" id="profileModalTitle">⚙️ Settings</h3>
+        <h3 class="modal-title" id="profileModalTitle">Settings</h3>
         <button type="button" class="modal-close" aria-label="Close"
           onclick="document.getElementById('profileModalOverlay').remove()">×</button>
       </div>
@@ -1263,20 +1281,32 @@ async function openProfileModal() {
                instead of one long form you have to scroll to find things in. -->
           <nav class="settings-rail" aria-label="Settings sections">
             <button type="button" class="settings-rail-item is-active" data-settings-jump="setSecProfile">
-              <span class="settings-rail-ico" aria-hidden="true">👤</span>
+              <span class="settings-rail-ico" aria-hidden="true"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-user"></use></svg></span>
               <span class="settings-rail-text"><strong>Profile</strong><span>Name, email, location</span></span>
             </button>
             <button type="button" class="settings-rail-item" data-settings-jump="setSecAppearance">
-              <span class="settings-rail-ico" aria-hidden="true">🎨</span>
+              <span class="settings-rail-ico" aria-hidden="true"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-palette"></use></svg></span>
               <span class="settings-rail-text"><strong>Appearance</strong><span>Light or dark mode</span></span>
             </button>
             <button type="button" class="settings-rail-item" data-settings-jump="setSecAccount">
-              <span class="settings-rail-ico" aria-hidden="true">🔒</span>
+              <span class="settings-rail-ico" aria-hidden="true"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-lock"></use></svg></span>
               <span class="settings-rail-text"><strong>Account</strong><span>Role and organization</span></span>
             </button>
             <button type="button" class="settings-rail-item" data-settings-jump="setSecSecurity">
-              <span class="settings-rail-ico" aria-hidden="true">🔑</span>
+              <span class="settings-rail-ico" aria-hidden="true"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-key"></use></svg></span>
               <span class="settings-rail-text"><strong>Security</strong><span>Change password</span></span>
+            </button>
+            <button type="button" class="settings-rail-item" data-settings-jump="setSecNotifications">
+              <span class="settings-rail-ico" aria-hidden="true"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-bell"></use></svg></span>
+              <span class="settings-rail-text"><strong>Notifications</strong><span>What reaches you</span></span>
+            </button>
+            <button type="button" class="settings-rail-item" data-settings-jump="setSecAccessibility">
+              <span class="settings-rail-ico" aria-hidden="true"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-accessibility"></use></svg></span>
+              <span class="settings-rail-text"><strong>Accessibility</strong><span>Motion and density</span></span>
+            </button>
+            <button type="button" class="settings-rail-item" data-settings-jump="setSecData">
+              <span class="settings-rail-ico" aria-hidden="true"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-folders"></use></svg></span>
+              <span class="settings-rail-text"><strong>Data</strong><span>Export and reset</span></span>
             </button>
           </nav>
 
@@ -1293,12 +1323,12 @@ async function openProfileModal() {
                    the Directory. This opens the exact card they get, so "visible
                    to all users" is checkable instead of assumed. -->
               <button type="button" class="profile-preview-btn" id="profilePreviewBtn">
-                👁️ View as others see me
+                View as others see me
               </button>
             </div>
 
             <section class="form-section settings-sec" id="setSecProfile">
-              <div class="form-section-title">👤 Profile</div>
+              <div class="form-section-title">Profile</div>
               <p class="settings-sec-desc">How your name and location appear to everyone else on the system.</p>
               <div class="form-row">
                 <div class="form-group">
@@ -1321,32 +1351,23 @@ async function openProfileModal() {
             </section>
 
             <section class="form-section settings-sec" id="setSecAppearance">
-              <div class="form-section-title">🎨 Appearance</div>
+              <div class="form-section-title">Appearance</div>
               <p class="settings-sec-desc">Applies straight away and is remembered on this device.</p>
-              <div class="theme-option-grid">
-                <button type="button" class="theme-option${liveTheme === 'light' ? ' is-active' : ''}"
-                  data-theme-option="light" onclick="setThemeFromSettings('light')"
-                  aria-pressed="${liveTheme === 'light'}">
-                  <span class="theme-option-ico" aria-hidden="true">☀️</span>
-                  <span class="theme-option-text">
-                    <strong>Light mode</strong>
-                    <span>Bright surfaces for daytime</span>
-                  </span>
-                </button>
-                <button type="button" class="theme-option${liveTheme === 'dark' ? ' is-active' : ''}"
-                  data-theme-option="dark" onclick="setThemeFromSettings('dark')"
-                  aria-pressed="${liveTheme === 'dark'}">
-                  <span class="theme-option-ico" aria-hidden="true">🌙</span>
-                  <span class="theme-option-text">
-                    <strong>Dark mode</strong>
-                    <span>Low glare for dim rooms</span>
+              <div class="theme-pref-row">
+                <button type="button" class="theme-pill${liveTheme === 'light' ? ' is-on' : ''}"
+                  id="settingsThemeToggle" onclick="toggleThemeFromSettings()" role="switch"
+                  aria-checked="${liveTheme === 'light' ? 'true' : 'false'}"
+                  aria-label="Light mode">
+                  <span class="theme-pill-label">Light mode</span>
+                  <span class="theme-pill-track" aria-hidden="true">
+                    <span class="theme-pill-knob"></span>
                   </span>
                 </button>
               </div>
             </section>
 
             <section class="form-section settings-sec" id="setSecAccount">
-              <div class="form-section-title">🔒 Account</div>
+              <div class="form-section-title">Account</div>
               <p class="settings-sec-desc">Read-only. An administrator manages these values for you.</p>
               <div class="profile-grid">
                 <div class="profile-field">
@@ -1369,7 +1390,7 @@ async function openProfileModal() {
             </section>
 
             <section class="form-section settings-sec" id="setSecSecurity">
-              <div class="form-section-title">🔑 Security</div>
+              <div class="form-section-title">Security</div>
               <p class="settings-sec-desc">Leave the password fields blank to keep your current password.</p>
               <div class="form-group">
                 <label class="form-label" for="profileCurrentPassword">Current Password</label>
@@ -1390,6 +1411,137 @@ async function openProfileModal() {
               </div>
             </section>
 
+            <section class="form-section settings-sec" id="setSecNotifications">
+              <div class="form-section-title">Notifications</div>
+              <p class="settings-sec-desc">
+                Choose what reaches your bell. These preferences are per account and only ever filter
+                notifications you already have permission to see.
+              </p>
+
+              <div class="settings-toggle-list">
+                <div class="settings-toggle-row">
+                  <span class="settings-toggle-text">
+                    <strong>Ticket activity</strong>
+                    <span>New tickets and status changes on tickets you can access</span>
+                  </span>
+                  <button type="button" class="pref-switch${prefs.notifyTickets ? ' is-on' : ''}"
+                    data-pref-toggle="notifyTickets" role="switch" aria-checked="${prefs.notifyTickets ? 'true' : 'false'}"
+                    aria-label="Ticket activity notifications">
+                    <span class="pref-switch-track" aria-hidden="true"><span class="pref-switch-knob"></span></span>
+                  </button>
+                </div>
+
+                <div class="settings-toggle-row">
+                  <span class="settings-toggle-text">
+                    <strong>Chat messages</strong>
+                    <span>Messages in the ticket channels you are part of</span>
+                  </span>
+                  <button type="button" class="pref-switch${prefs.notifyMessages ? ' is-on' : ''}"
+                    data-pref-toggle="notifyMessages" role="switch" aria-checked="${prefs.notifyMessages ? 'true' : 'false'}"
+                    aria-label="Chat message notifications">
+                    <span class="pref-switch-track" aria-hidden="true"><span class="pref-switch-knob"></span></span>
+                  </button>
+                </div>
+
+                <div class="settings-toggle-row" id="prefStockRow">
+                  <span class="settings-toggle-text">
+                    <strong>Low stock alerts</strong>
+                    <span>Parts at or below their minimum threshold (admin only)</span>
+                  </span>
+                  <button type="button" class="pref-switch${prefs.notifyStock ? ' is-on' : ''}"
+                    data-pref-toggle="notifyStock" role="switch" aria-checked="${prefs.notifyStock ? 'true' : 'false'}"
+                    aria-label="Low stock notifications">
+                    <span class="pref-switch-track" aria-hidden="true"><span class="pref-switch-knob"></span></span>
+                  </button>
+                </div>
+
+                <div class="settings-toggle-row">
+                  <span class="settings-toggle-text">
+                    <strong>Show unread count on the bell</strong>
+                    <span>Turn off to keep the badge hidden while still collecting notifications</span>
+                  </span>
+                  <button type="button" class="pref-switch${prefs.showBadge ? ' is-on' : ''}"
+                    data-pref-toggle="showBadge" role="switch" aria-checked="${prefs.showBadge ? 'true' : 'false'}"
+                    aria-label="Show unread notification count">
+                    <span class="pref-switch-track" aria-hidden="true"><span class="pref-switch-knob"></span></span>
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <section class="form-section settings-sec" id="setSecAccessibility">
+              <div class="form-section-title">Accessibility</div>
+              <p class="settings-sec-desc">Display options that make the interface easier to read and calmer to use.</p>
+
+              <div class="settings-toggle-list">
+                <div class="settings-toggle-row">
+                  <span class="settings-toggle-text">
+                    <strong>Reduce motion</strong>
+                    <span>Stops slide, fade and pulse animations across the app</span>
+                  </span>
+                  <button type="button" class="pref-switch${prefs.reduceMotion ? ' is-on' : ''}"
+                    data-pref-toggle="reduceMotion" role="switch" aria-checked="${prefs.reduceMotion ? 'true' : 'false'}"
+                    aria-label="Reduce motion">
+                    <span class="pref-switch-track" aria-hidden="true"><span class="pref-switch-knob"></span></span>
+                  </button>
+                </div>
+
+                <div class="settings-toggle-row">
+                  <span class="settings-toggle-text">
+                    <strong>Compact density</strong>
+                    <span>Tighter spacing so more rows fit on screen</span>
+                  </span>
+                  <button type="button" class="pref-switch${prefs.compact ? ' is-on' : ''}"
+                    data-pref-toggle="compact" role="switch" aria-checked="${prefs.compact ? 'true' : 'false'}"
+                    aria-label="Compact density">
+                    <span class="pref-switch-track" aria-hidden="true"><span class="pref-switch-knob"></span></span>
+                  </button>
+                </div>
+
+                <div class="settings-toggle-row">
+                  <span class="settings-toggle-text">
+                    <strong>Larger text</strong>
+                    <span>Increases the base font size by one step</span>
+                  </span>
+                  <button type="button" class="pref-switch${prefs.largeText ? ' is-on' : ''}"
+                    data-pref-toggle="largeText" role="switch" aria-checked="${prefs.largeText ? 'true' : 'false'}"
+                    aria-label="Larger text">
+                    <span class="pref-switch-track" aria-hidden="true"><span class="pref-switch-knob"></span></span>
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <section class="form-section settings-sec" id="setSecData">
+              <div class="form-section-title">Data &amp; privacy</div>
+              <p class="settings-sec-desc">
+                Your notifications are private to this account. Technicians only see tickets assigned to them,
+                customers only see their own organization, and staff chat is never shown to customers.
+              </p>
+
+              <div class="settings-action-list">
+                <div class="settings-action-row">
+                  <span class="settings-action-text">
+                    <strong>Download my account data</strong>
+                    <span>Profile, role and preferences as a JSON file</span>
+                  </span>
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="downloadMyAccountData()">
+                    Download
+                  </button>
+                </div>
+
+                <div class="settings-action-row">
+                  <span class="settings-action-text">
+                    <strong>Reset local preferences</strong>
+                    <span>Restores notification and accessibility defaults on this device</span>
+                  </span>
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="resetMyPreferences()">
+                    ${ico('refresh')} Reset
+                  </button>
+                </div>
+              </div>
+            </section>
+
           </div>
         </div>
 
@@ -1397,7 +1549,7 @@ async function openProfileModal() {
           <span class="settings-footer-hint">Profile changes apply as soon as you save.</span>
           <button type="button" class="btn btn-secondary"
             onclick="document.getElementById('profileModalOverlay').remove()">Cancel</button>
-          <button type="submit" class="btn btn-primary" id="profileSaveBtn">💾 Save Changes</button>
+          <button type="submit" class="btn btn-primary" id="profileSaveBtn">Save Changes</button>
         </div>
       </form>
     </div>
@@ -1460,6 +1612,25 @@ async function openProfileModal() {
       markActive(btn.dataset.settingsJump);
     });
   });
+
+  // Notification / accessibility switches. Each one writes its own preference
+  // and re-applies display settings immediately, so the effect is visible
+  // behind the dialog without needing a save.
+  overlay.querySelectorAll('[data-pref-toggle]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.prefToggle;
+      const next = !btn.classList.contains('is-on');
+      btn.classList.toggle('is-on', next);
+      btn.setAttribute('aria-checked', next ? 'true' : 'false');
+      setUserPref(key, next);
+    });
+  });
+
+  // Low-stock alerts are admin-only (the server never sends them to other
+  // roles), so the row is hidden rather than shown as a dead control.
+  if (me.role !== 'admin') {
+    overlay.querySelector('#prefStockRow')?.remove();
+  }
 
   const onKey = (e) => {
     if (e.key === 'Escape') {
@@ -1529,7 +1700,7 @@ async function saveProfile(event) {
     const data = await res.json();
 
     if (!res.ok || !data.success) {
-      showToast(`❌ ${data.error || 'Could not save your profile.'}`, 'error');
+      showToast(`${data.error || 'Could not save your profile.'}`, 'error');
       return;
     }
 
@@ -1552,7 +1723,7 @@ async function saveProfile(event) {
   } catch (err) {
     showToast('Network error. Please try again.', 'error');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = original || '💾 Save Changes'; }
+    if (btn) { btn.disabled = false; btn.textContent = original || 'Save Changes'; }
   }
 }
 
@@ -1569,7 +1740,7 @@ function updateSidebarRole(role) {
   const iconEl = document.getElementById('sidebarRoleIcon');
   const nameEl = document.getElementById('sidebarRoleName');
   const descEl = document.getElementById('sidebarRoleDesc');
-  if (iconEl) iconEl.textContent = meta.icon;
+  if (iconEl) iconEl.innerHTML = ico(meta.icon);
   if (nameEl) nameEl.textContent = meta.name;
   if (descEl) descEl.textContent = meta.desc;
 }
@@ -1592,16 +1763,20 @@ function showToast(message, type = 'info') {
     toast.className = 'toast-notification';
     document.body.appendChild(toast);
   }
-  const icon = type === 'success' ? '✅' : type === 'error' ? '⚠️' : 'ℹ️';
+  // The toast draws its own status icon from `type`, so no call site has to
+  // repeat one — and the glyph is identical on Windows, macOS and Linux,
+  // which the old emoji was not.
+  const TOAST_ICON = { success: 'check-circle', error: 'x-circle', info: 'info' };
+  const tone = TOAST_ICON[type] ? type : 'info';
 
-  // About thirty call sites already prefix their message with a status emoji
-  // ("✅ Device assigned", "❌ Assignment failed"). The toast draws its own icon
-  // from `type`, so those messages rendered as "✅ ✅ Device assigned". Strip a
-  // leading status emoji here — one place, instead of editing every call site.
+  // A handful of call sites still prefix their message with a status emoji.
+  // Strip it here — one place, instead of editing every call site — so the
+  // icon above is never doubled up.
   const LEADING_STATUS_EMOJI = /^\s*(?:\u2705|\u274C|\u26A0\uFE0F?|\u2139\uFE0F?|\u{1F6AB}|\u26D4|\u{1F4A1})\s*/u;
   const text = String(message == null ? '' : message).replace(LEADING_STATUS_EMOJI, '');
 
-  toast.innerHTML = `<span>${icon}</span> <span>${text}</span>`;
+  toast.className = `toast-notification is-${tone}`;
+  toast.innerHTML = `${ico(TOAST_ICON[tone])}<span>${text}</span>`;
   toast.classList.add('active');
   setTimeout(() => {
     toast.classList.remove('active');
@@ -1667,6 +1842,75 @@ function getVisibleDevices() {
     if (userOrg && devCustName === userOrg) return true;
     return false;
   });
+}
+
+/**
+ * Resolve the customer organization record that owns a given device.
+ * Used by owner-facing helpers so device→user linking is consistent everywhere.
+ */
+function getDeviceCustomer(device) {
+  if (!device) return null;
+  const devCustId = String(device.customerId || '').trim().toLowerCase();
+  const devCustName = String(device.customerName || '').trim().toLowerCase();
+  return (state.customers || []).find((c) => {
+    const cid = String(c.id || '').trim().toLowerCase();
+    const org = String(c.organizationName || '').trim().toLowerCase();
+    return (devCustId && cid === devCustId) || (devCustName && org === devCustName);
+  }) || null;
+}
+
+/**
+ * Return the user account(s) that own a device, matched by customerId or
+ * organization name. A device may have multiple user accounts under the same
+ * customer organization; all of them are considered owners.
+ */
+function getDeviceOwners(device) {
+  const customer = getDeviceCustomer(device);
+  const custId = customer ? String(customer.id || '').trim().toLowerCase() : '';
+  const custOrg = customer ? String(customer.organizationName || '').trim().toLowerCase()
+    : String(device.customerName || '').trim().toLowerCase();
+
+  const candidates = state.directory || state.allUsers || [];
+  return candidates.filter((u) => {
+    const uCustId = String(u.customerId || '').trim().toLowerCase();
+    const uOrg = String(u.organization || '').trim().toLowerCase();
+    return (custId && uCustId === custId) || (custOrg && uOrg === custOrg);
+  });
+}
+
+/**
+ * Primary owner name for a device. Falls back to the customer organization name
+ * or the device's customerName if no user account is linked yet.
+ */
+function getDeviceOwnerName(device) {
+  const owners = getDeviceOwners(device);
+  if (owners.length > 0) return owners.map((u) => u.fullName || u.username).join(', ');
+  const customer = getDeviceCustomer(device);
+  if (customer) return customer.organizationName || customer.contactName || 'Customer Org';
+  return device.customerName || 'Unassigned';
+}
+
+/**
+ * Device online status is driven by real-time user account presence.
+ * If any user who owns the device is currently online, the device is "online".
+ * Otherwise it is "offline". This replaces the static telemetry status.
+ */
+function getDeviceOnlineStatus(device) {
+  const owners = getDeviceOwners(device);
+  if (owners.length === 0) return 'offline';
+  return owners.some((u) => u.online === true) ? 'online' : 'offline';
+}
+
+/**
+ * The status shown for a device. Maintenance and warning states are preserved
+ * so technicians still see actionable telemetry, but the online/offline branch
+ * is now derived from whether the owning user account is currently online.
+ */
+function getDeviceDisplayStatus(device) {
+  if (!device) return 'offline';
+  const base = device.status;
+  if (base === 'maintenance' || base === 'warning') return base;
+  return getDeviceOnlineStatus(device);
 }
 
 /**
@@ -1970,7 +2214,7 @@ function applyRoleUI() {
   const iconEl = document.getElementById('sidebarRoleIcon');
   const nameEl = document.getElementById('sidebarRoleName');
   const descEl = document.getElementById('sidebarRoleDesc');
-  if (iconEl) iconEl.textContent = meta.icon;
+  if (iconEl) iconEl.innerHTML = ico(meta.icon);
   if (nameEl) nameEl.textContent = meta.name;
   if (descEl) descEl.textContent = meta.desc;
 
@@ -1999,7 +2243,7 @@ function applyRoleUI() {
 }
 
 function renderSidebarBadges() {
-  const onlineCount = state.devices.filter((d) => d.status === 'online').length;
+  const onlineCount = state.devices.filter((d) => getDeviceDisplayStatus(d) === 'online').length;
   const tckCount = state.tickets.filter((t) => t.status !== 'Resolved' && t.status !== 'Closed').length;
   const predCount = state.predictiveAlerts.length;
   const invLowCount = state.inventory.filter((i) => i.status !== 'In Stock').length;
@@ -2033,10 +2277,20 @@ function renderNotifications() {
   const list = document.getElementById('notifList');
   if (!badge || !list) return;
 
-  const notifs = state.notifications || [];
+  const prefs = getUserPrefs();
+
+  // Preferences filter what is already permitted by the server — they can only
+  // narrow the feed, never widen it.
+  const notifs = (state.notifications || []).filter((n) => {
+    if (n.type === 'low_stock') return prefs.notifyStock;
+    if (n.type === 'new_ticket') return prefs.notifyTickets;
+    if (n.type === 'new_message' || n.type === 'ticket_message') return prefs.notifyMessages;
+    return true;
+  });
+
   const unreadCount = notifs.filter(n => !n.read).length;
 
-  if (unreadCount > 0) {
+  if (unreadCount > 0 && prefs.showBadge) {
     badge.textContent = unreadCount;
     badge.style.display = 'flex';
   } else {
@@ -2052,21 +2306,25 @@ function renderNotifications() {
   }
 
   if (notifs.length === 0) {
-    list.innerHTML = `<div style="padding:32px 20px;text-align:center;color:#94a3b8;font-size:0.85rem;"><span style="display:block;font-size:1.8rem;margin-bottom:8px;opacity:0.6;">🔔</span>No new notifications</div>`;
+    list.innerHTML = `<div style="padding:32px 20px;text-align:center;color:#94a3b8;font-size:0.85rem;"><span style="display:block;font-size:1.8rem;margin-bottom:8px;opacity:0.6;"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-bell"></use></svg></span>No new notifications</div>`;
     return;
   }
 
-  list.innerHTML = notifs.map((n, i) => {
-    let icon = '🔔';
+  // The rendered index must map back to the ORIGINAL array, because
+  // handleNotifClick() reads state.notifications[index]. Filtering changed the
+  // positions, so each item carries its source index through.
+  list.innerHTML = notifs.map((n) => {
+    const i = state.notifications.indexOf(n);
+    let icon = '';
     let path = '';
     if (n.type === 'low_stock') {
-      icon = '⚠️';
+      icon = '';
       path = 'inventory';
     } else if (n.type === 'new_ticket') {
-      icon = '🎫';
+      icon = '';
       path = 'tickets';
     } else if (n.type === 'new_message' || n.type === 'ticket_message') {
-      icon = '💬';
+      icon = '';
       path = 'tickets';
     }
 
@@ -2111,6 +2369,47 @@ document.addEventListener('click', (e) => {
       notifBtn.classList.remove('active');
     }
   }
+});
+
+/* --- Top-bar account menu ---
+   The sidebar's user card is gone; identity, profile and sign-out now live in
+   the top bar. The menu is a plain popover rather than a <select> so it can
+   carry the account header and a danger-styled sign-out. */
+function toggleUserMenu(e) {
+  if (e) e.stopPropagation();
+  const menu = document.getElementById('topbarUserMenu');
+  const btn = document.getElementById('topbarUserBtn');
+  if (!menu || !btn) return;
+  const open = !menu.classList.contains('show');
+  menu.classList.toggle('show', open);
+  btn.classList.toggle('is-open', open);
+  btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  // Only one popover at a time — an open notification panel behind the account
+  // menu looks like a rendering bug.
+  if (open && state.notifDropdownOpen) {
+    state.notifDropdownOpen = false;
+    document.getElementById('notifDropdown')?.classList.remove('show');
+    document.getElementById('notifBtn')?.classList.remove('active');
+  }
+}
+
+function closeUserMenu() {
+  const menu = document.getElementById('topbarUserMenu');
+  const btn = document.getElementById('topbarUserBtn');
+  if (menu) menu.classList.remove('show');
+  if (btn) {
+    btn.classList.remove('is-open');
+    btn.setAttribute('aria-expanded', 'false');
+  }
+}
+
+document.addEventListener('click', (e) => {
+  const wrap = document.getElementById('topbarUserWrap');
+  if (wrap && !wrap.contains(e.target)) closeUserMenu();
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeUserMenu();
 });
 
 function markAllNotificationsRead(e) {
@@ -2181,10 +2480,11 @@ function renderDashboardForRole(role) {
 
 function renderDashboardView() {
   const total    = state.devices.length;
-  const online   = state.devices.filter(d => d.status === 'online').length;
-  const offline  = state.devices.filter(d => d.status === 'offline').length;
-  const warning  = state.devices.filter(d => d.status === 'warning').length;
-  const maint    = state.devices.filter(d => d.status === 'maintenance').length;
+  const displayStatuses = state.devices.map(getDeviceDisplayStatus);
+  const online   = displayStatuses.filter(s => s === 'online').length;
+  const offline  = displayStatuses.filter(s => s === 'offline').length;
+  const warning  = displayStatuses.filter(s => s === 'warning').length;
+  const maint    = displayStatuses.filter(s => s === 'maintenance').length;
 
   const openTickets     = state.tickets.filter(t => t.status !== 'Resolved' && t.status !== 'Closed');
   const receivedTix     = state.tickets.filter(t => t.status === 'Received').length;
@@ -2193,8 +2493,14 @@ function renderDashboardView() {
   const resolvedTix     = state.tickets.filter(t => t.status === 'Resolved' || t.status === 'Closed').length;
 
   const lowStockParts   = state.inventory.filter(p => p.status !== 'In Stock');
+  const outStockParts   = state.inventory.filter(p => p.status === 'Out of Stock');
   const schoolDevices   = state.devices.filter(d => d.clientType === 'school').length;
   const corpDevices     = state.devices.filter(d => d.clientType === 'corporate').length;
+
+  // Stock level % for the gauge: in-stock items vs total tracked items.
+  const totalInventory = state.inventory.length;
+  const inStockItems   = state.inventory.filter(p => p.status === 'In Stock').length;
+  const stockLevelPct  = totalInventory > 0 ? Math.round((inStockItems / totalInventory) * 100) : 0;
 
   // Registered client ORGANISATIONS — the School/Corporate choice made at
   // sign-up, held in the `customers` table. Counted separately from devices:
@@ -2238,63 +2544,37 @@ function renderDashboardView() {
 
   return `
     <div class="dash-v2-container" data-dash="admin">
-      <!-- 1. Top Banner Row: Hero Welcome & Quick Actions -->
-      <div class="dash-top-grid">
-        <!-- Hero Announcement Card -->
-        <div class="hero-banner-card">
-          <div class="hero-text-content">
-            <h1 class="hero-greeting">Welcome Back,<br>${userName}!</h1>
-            <p class="hero-subtext">Manage your devices, monitor performance, and keep your operations running smoothly.</p>
-            <div class="hero-date-chip">
-              <span class="calendar-icon">📅</span>
-              <div>
-                <strong id="heroClockDate">${currentDate}</strong>
-                <small id="heroClockTime">${currentDayTime}</small>
-              </div>
-            </div>
-          </div>
-
-          <!-- Center Display Graphic -->
-          <div class="hero-display-wrapper">
-            <div class="hero-display-frame">
-              <img src="https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=800&q=80" alt="Millennium SmartBoard Display" class="hero-display-img" />
-              <div class="hero-display-ui-overlay">
-                <span class="hero-ui-badge">4K UHD</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Right Hero Accent Text & Dots -->
-          <div class="hero-right-accent">
-            <div class="hero-accent-title">Smart Technology<br>for a Brighter<br>Future</div>
-            <div class="hero-dots">
-              <span class="dot active"></span>
-              <span class="dot"></span>
-              <span class="dot"></span>
+      <!-- 1. Hero Banner (full width, no quick-actions panel) -->
+      <div class="hero-banner-card">
+        <div class="hero-text-content">
+          <h1 class="hero-greeting">Welcome Back,<br>${userName}!</h1>
+          <p class="hero-subtext">Manage your devices, monitor performance, and keep your operations running smoothly.</p>
+          <div class="hero-date-chip">
+            <span class="calendar-icon"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-calendar"></use></svg></span>
+            <div>
+              <strong id="heroClockDate">${currentDate}</strong>
+              <small id="heroClockTime">${currentDayTime}</small>
             </div>
           </div>
         </div>
 
-        <!-- Quick Actions Panel -->
-        <div class="quick-actions-card">
-          <div class="quick-actions-title">Quick Actions</div>
-          <div class="quick-actions-grid">
-            <button class="qa-btn qa-btn-blue" onclick="openRegisterModal()">
-              <span class="qa-icon">+</span>
-              <span>Register Board</span>
-            </button>
-            <button class="qa-btn qa-btn-purple" onclick="openTicketModal()">
-              <span class="qa-icon">🎫</span>
-              <span>Open Ticket</span>
-            </button>
-            <button class="qa-btn qa-btn-teal" onclick="openInventoryQuickAction()" title="Inventory & Parts Restock">
-              <span class="qa-icon">📦</span>
-              <span> add parts </span>
-            </button>
-            <button class="qa-btn qa-btn-navy" onclick="navigateTo('tickets')">
-              <span class="qa-icon">📊</span>
-              <span>View Reports</span>
-            </button>
+        <!-- Center Display Graphic -->
+        <div class="hero-display-wrapper">
+          <div class="hero-display-frame">
+            <img src="https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=800&q=80" alt="Millennium SmartBoard Display" class="hero-display-img" />
+            <div class="hero-display-ui-overlay">
+              <span class="hero-ui-badge">4K UHD</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Hero Accent Text & Dots -->
+        <div class="hero-right-accent">
+          <div class="hero-accent-title">Smart Technology<br>for a Brighter<br>Future</div>
+          <div class="hero-dots">
+            <span class="dot active"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
           </div>
         </div>
       </div>
@@ -2303,7 +2583,7 @@ function renderDashboardView() {
       <div class="stat-cards-grid-v2">
         <div class="kpi-card-v2 kpi-blue">
           <div class="kpi-v2-header">
-            <div class="kpi-v2-icon">🖥️</div>
+            <div class="kpi-v2-icon"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-monitor"></use></svg></div>
             <div>
               <div class="kpi-v2-label">Total Devices</div>
               <div class="kpi-v2-value">${total}</div>
@@ -2317,7 +2597,7 @@ function renderDashboardView() {
 
         <div class="kpi-card-v2 kpi-green">
           <div class="kpi-v2-header">
-            <div class="kpi-v2-icon">📶</div>
+            <div class="kpi-v2-icon"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-signal"></use></svg></div>
             <div>
               <div class="kpi-v2-label">Online</div>
               <div class="kpi-v2-value">${online}</div>
@@ -2331,7 +2611,7 @@ function renderDashboardView() {
 
         <div class="kpi-card-v2 kpi-amber">
           <div class="kpi-v2-header">
-            <div class="kpi-v2-icon">⚠️</div>
+            <div class="kpi-v2-icon"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-alert"></use></svg></div>
             <div>
               <div class="kpi-v2-label">Needs Attention</div>
               <div class="kpi-v2-value">${warning + offline + maint}</div>
@@ -2345,7 +2625,7 @@ function renderDashboardView() {
 
         <div class="kpi-card-v2 kpi-purple">
           <div class="kpi-v2-header">
-            <div class="kpi-v2-icon">🎫</div>
+            <div class="kpi-v2-icon"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-ticket"></use></svg></div>
             <div>
               <div class="kpi-v2-label">Open Tickets</div>
               <div class="kpi-v2-value">${openTickets.length}</div>
@@ -2362,20 +2642,20 @@ function renderDashboardView() {
       <div class="strip-bar-v2">
         <button type="button" class="strip-item strip-item--clickable"
           title="Show every school client account" onclick="showClientsByType('school')">
-          🏫 School Clients: <strong>${schoolClients}</strong>
+          School Clients: <strong>${schoolClients}</strong>
         </button>
         <div class="strip-divider"></div>
         <button type="button" class="strip-item strip-item--clickable"
           title="Show every corporate client account" onclick="showClientsByType('corporate')">
-          🏢 Corporate Clients: <strong>${corpClients}</strong>
+          Corporate Clients: <strong>${corpClients}</strong>
         </button>
         <div class="strip-divider"></div>
         <button type="button" class="strip-item strip-item--clickable"
           title="Open the spare-parts inventory" onclick="navigateTo('inventory')">
-          📦 Inventory: <strong class="text-amber">${lowStockParts.length} Low</strong>
+          Inventory: <strong class="text-amber">${lowStockParts.length} Low</strong>
         </button>
         <div class="strip-divider"></div>
-        <div class="strip-item" title="Share of the fleet reporting normally">💚 Health Score: <strong class="text-emerald">${healthPct}%</strong></div>
+        <div class="strip-item" title="Share of the fleet reporting normally">Health Score: <strong class="text-emerald">${healthPct}%</strong></div>
         <button class="strip-btn-link" onclick="navigateTo('devices')">View All →</button>
       </div>
 
@@ -2384,7 +2664,7 @@ function renderDashboardView() {
         <!-- Column 1: Device Fleet Status -->
         <div class="widget-card">
           <div class="widget-header">
-            <div class="widget-title">🖥️ Device Fleet Status</div>
+            <div class="widget-title">Device Fleet Status</div>
             <button class="widget-link" onclick="navigateTo('devices')">View All →</button>
           </div>
 
@@ -2428,45 +2708,48 @@ function renderDashboardView() {
             </div>
           </div>
 
-          <div class="client-type-box">
-            <div class="client-type-label">
-              Registered Clients by Type
-              <button class="widget-link" style="margin-left:auto;"
-                onclick="navigateTo('dataManager'); setClientTypeFilter('all');">Manage →</button>
+          <!-- Mini device fleet table -->
+          <div class="dash-mini-table">
+            <div class="dash-mini-table-head">
+              <span>Devices</span>
+              <span>Status</span>
+              <span>Location</span>
             </div>
-            <!-- Real buttons: each opens the Data Manager filtered to that type. -->
-            <div class="client-type-chips">
-              <button type="button"
-                class="client-chip${state.clientTypeFilter === 'school' ? ' active' : ''}"
-                onclick="showClientsByType('school')"
-                title="Show every school client account">
-                🏫 Schools <strong>${schoolClients}</strong>
-              </button>
-              <button type="button"
-                class="client-chip${state.clientTypeFilter === 'corporate' ? ' active' : ''}"
-                onclick="showClientsByType('corporate')"
-                title="Show every corporate client account">
-                🏢 Corporate <strong>${corpClients}</strong>
-              </button>
-            </div>
-            ${newestClient ? `
-              <button type="button" class="client-type-newest client-type-newest--clickable"
-                onclick="showClientsByType('${newestClient.clientType === 'school' ? 'school' : 'corporate'}')"
-                title="Show all ${newestClient.clientType} clients">
-                Latest sign-up:
-                <strong>${escapeHtml(newestClient.organizationName)}</strong>
-                <span class="client-type-tag ${newestClient.clientType === 'school' ? 'is-school' : 'is-corporate'}">
-                  ${newestClient.clientType === 'school' ? '🏫 School' : '🏢 Corporate'}
+            ${state.devices.slice(0, 5).map(dev => {
+              const displayStatus = getDeviceDisplayStatus(dev);
+              const statusClass = displayStatus === 'online' ? 'is-online'
+                : displayStatus === 'offline' ? 'is-offline'
+                : displayStatus === 'warning' ? 'is-warning'
+                : 'is-service';
+              const statusLabel = displayStatus === 'online' ? 'Online'
+                : displayStatus === 'offline' ? 'Offline'
+                : displayStatus === 'warning' ? 'Warning'
+                : 'Service';
+              return `
+              <div class="dash-mini-table-row" onclick="navigateTo('devices')" role="button" tabindex="0">
+                <span class="dash-mini-device">
+                  <span class="dash-mini-ico"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-monitor"></use></svg></span>
+                  <span>
+                    <strong>${escapeHtml(dev.id)}</strong>
+                    <small>${escapeHtml(dev.model || '')}</small>
+                  </span>
                 </span>
-              </button>` : `
-              <div class="client-type-newest">No client organizations have registered yet.</div>`}
+                <span class="dash-mini-status ${statusClass}">${statusLabel}</span>
+                <span class="dash-mini-location">${escapeHtml(dev.location || '—')}</span>
+              </div>
+              `;
+            }).join('')}
+            ${state.devices.length > 5 ? `
+              <div class="dash-mini-table-foot">
+                <button class="widget-link" onclick="navigateTo('devices')">View all ${state.devices.length} devices →</button>
+              </div>` : ''}
           </div>
         </div>
 
         <!-- Column 2: Service Tickets -->
         <div class="widget-card">
           <div class="widget-header">
-            <div class="widget-title">🔧 Service Tickets</div>
+            <div class="widget-title">Service Tickets</div>
             <button class="widget-link" onclick="navigateTo('tickets')">View All →</button>
           </div>
           <div class="tix-quad-grid">
@@ -2513,53 +2796,74 @@ function renderDashboardView() {
         <!-- Column 3: Stock & Inventory & Recent Activity -->
         <div class="widget-card">
           <div class="widget-header">
-            <div class="widget-title">📦 Stock & Inventory</div>
+            <div class="widget-title">Stock & Inventory</div>
             <select class="branch-select-v2" aria-label="Select Branch"><option>All Branches</option></select>
           </div>
           <div class="stock-gauge-row">
-            <div class="stock-gauge-circle">
-              <strong>68%</strong>
+            <div class="stock-gauge-circle" style="--gauge-pct: ${stockLevelPct};">
+              <strong>${stockLevelPct}%</strong>
               <small>Stock Level</small>
             </div>
             <div class="stock-alerts-list">
-              <div class="stock-alerts-title">Parts Stock Alerts <span class="badge-red-sm">2 alerts</span></div>
-              <div class="stock-alert-item">
-                <div>
-                  <strong>High-Efficiency Power Board 350W</strong>
-                  <small>PWR-80-350W</small>
-                </div>
-                <span class="alert-pill out">◆ Out ›</span>
-              </div>
-              <div class="stock-alert-item">
-                <div>
-                  <strong>OPS i7-12700 Module</strong>
-                  <small>(ACER | 57750A)</small>
-                </div>
-                <span class="alert-pill low">◆ Low ›</span>
-              </div>
+              <div class="stock-alerts-title">Parts Stock Alerts <span class="badge-red-sm">${lowStockParts.length} alert${lowStockParts.length === 1 ? '' : 's'}</span></div>
+              ${lowStockParts.length === 0 ? `
+                <div class="stock-alert-item stock-alert-item--empty">
+                  <span>All parts are in stock</span>
+                </div>` : lowStockParts.slice(0, 3).map(p => `
+                  <div class="stock-alert-item">
+                    <div>
+                      <strong>${escapeHtml(p.name)}</strong>
+                      <small>${escapeHtml(p.partCode)}</small>
+                    </div>
+                    <span class="alert-pill ${p.status === 'Out of Stock' ? 'out' : 'low'}">${p.status === 'Out of Stock' ? 'Out' : 'Low'} ${ico('chevron-right')}</span>
+                  </div>
+                `).join('')}
             </div>
           </div>
           <div class="view-inv-link" onclick="navigateTo('inventory')">View Inventory →</div>
 
+          <!-- Quick Actions -->
+          <div class="dash-quick-actions">
+            <div class="dash-quick-actions-title">Quick Actions</div>
+            <div class="dash-quick-actions-grid">
+              <button class="qa-btn qa-btn-blue" onclick="openRegisterModal()">
+                <span class="qa-icon">+</span>
+                <span>Register Board</span>
+              </button>
+              <button class="qa-btn qa-btn-purple" onclick="openTicketModal()">
+                <span class="qa-icon"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-ticket"></use></svg></span>
+                <span>Open Ticket</span>
+              </button>
+              <button class="qa-btn qa-btn-teal" onclick="openInventoryQuickAction()" title="Inventory & Parts Restock">
+                <span class="qa-icon"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-package"></use></svg></span>
+                <span>Add Parts</span>
+              </button>
+              <button class="qa-btn qa-btn-navy" onclick="navigateTo('tickets')">
+                <span class="qa-icon"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-chart"></use></svg></span>
+                <span>View Reports</span>
+              </button>
+            </div>
+          </div>
+
           <!-- Recent Activity Timeline -->
           <div class="recent-activity-box">
             <div class="activity-header">
-              <span>🕒 Recent Activity</span>
+              <span>Recent Activity</span>
               <button onclick="navigateTo('inventory')">View All →</button>
             </div>
             <div class="activity-timeline">
               <div class="activity-item">
-                <span class="act-icon tix">🎟️</span>
+                <span class="act-icon tix"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-ticket"></use></svg></span>
                 <div class="act-desc">Ticket #T-2026-0098 created</div>
                 <span class="act-time">2 days ago</span>
               </div>
               <div class="activity-item">
-                <span class="act-icon online">🟢</span>
+                <span class="act-icon online"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-dot"></use></svg></span>
                 <div class="act-desc">Device 1 went online</div>
                 <span class="act-time">3 days ago</span>
               </div>
               <div class="activity-item">
-                <span class="act-icon stock">📙</span>
+                <span class="act-icon stock"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-book"></use></svg></span>
                 <div class="act-desc">Stock level updated</div>
                 <span class="act-time">4 days ago</span>
               </div>
@@ -2880,7 +3184,7 @@ function renderCustomerDashboardView() {
     deviceIds.has(String(w.deviceId || '').toLowerCase())
   );
 
-  const onlineCount     = myDevices.filter(d => d.status === 'online').length;
+  const onlineCount     = myDevices.filter(d => getDeviceDisplayStatus(d) === 'online').length;
   const attentionCount  = myDevices.length - onlineCount;
   const openTickets     = myTickets.filter(t => t.status !== 'Resolved' && t.status !== 'Closed');
   const resolvedCount   = myTickets.filter(t => t.status === 'Resolved' || t.status === 'Closed').length;
@@ -2899,7 +3203,7 @@ function renderCustomerDashboardView() {
     .sort((a, b) => new Date(b.createdAt || b.startDate) - new Date(a.createdAt || a.startDate))
     .slice(0, 5);
   const fleetPreview = [...myDevices]
-    .sort((a, b) => (a.status === 'online' ? 1 : 0) - (b.status === 'online' ? 1 : 0))
+    .sort((a, b) => (getDeviceDisplayStatus(a) === 'online' ? 1 : 0) - (getDeviceDisplayStatus(b) === 'online' ? 1 : 0))
     .slice(0, 6);
 
   const now = new Date();
@@ -2927,7 +3231,7 @@ function renderCustomerDashboardView() {
             <h1 class="hero-greeting">Welcome back,<br>${escapeHtml(user.fullName || user.username || 'Customer')}!</h1>
             <p class="hero-subtext">Your devices, service tickets, bookings and warranty coverage — all in one place.</p>
             <div class="hero-date-chip">
-              <span class="calendar-icon">📅</span>
+              <span class="calendar-icon"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-calendar"></use></svg></span>
               <div>
                 <strong>${currentDate}</strong>
                 <small>${currentDayTime}</small>
@@ -2954,19 +3258,19 @@ function renderCustomerDashboardView() {
           <div class="quick-actions-title">Quick Actions</div>
           <div class="quick-actions-grid">
             <button class="qa-btn qa-btn-blue" onclick="openCreateTicketModal('${firstDevId}')">
-              <span class="qa-icon">🚨</span>
+              <span class="qa-icon"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-siren"></use></svg></span>
               <span>Report a Problem</span>
             </button>
             <button class="qa-btn qa-btn-purple" onclick="openRentalModal()">
-              <span class="qa-icon">📅</span>
+              <span class="qa-icon"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-calendar"></use></svg></span>
               <span>Book a Device</span>
             </button>
             <button class="qa-btn qa-btn-teal" onclick="navigateTo('devices')">
-              <span class="qa-icon">🖥️</span>
+              <span class="qa-icon"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-monitor"></use></svg></span>
               <span>My Devices</span>
             </button>
             <button class="qa-btn qa-btn-navy" onclick="fetchAllData()">
-              <span class="qa-icon">🔄</span>
+              <span class="qa-icon"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-refresh"></use></svg></span>
               <span>Refresh Records</span>
             </button>
           </div>
@@ -2975,28 +3279,28 @@ function renderCustomerDashboardView() {
 
       <!-- KPI row -->
       <div class="stat-cards-grid-v2">
-        ${kpiCard('blue', '🖥️', 'My Devices', myDevices.length,
+        ${kpiCard('blue', ico('monitor'), 'My Devices', myDevices.length,
           attentionCount > 0 ? `${onlineCount} online · ${attentionCount} need attention` : 'All devices online')}
-        ${kpiCard('purple', '🎫', 'Open Tickets', openTickets.length,
+        ${kpiCard('purple', ico('ticket'), 'Open Tickets', openTickets.length,
           resolvedCount > 0 ? `${resolvedCount} resolved all-time` : 'No closed tickets yet')}
-        ${kpiCard('green', '📅', 'Active Bookings', activeBookings.length,
+        ${kpiCard('green', ico('calendar'), 'Active Bookings', activeBookings.length,
           overdueBookings.length > 0 ? `${overdueBookings.length} overdue — action needed` : `${myBookings.length} booking${myBookings.length === 1 ? '' : 's'} on record`)}
-        ${kpiCard('amber', '🛡️', 'Warranty Coverage', activeWarranties.length,
+        ${kpiCard('amber', ico('shield'), 'Warranty Coverage', activeWarranties.length,
           expiringSoon.length > 0 ? `${expiringSoon.length} expiring within 90 days` : 'All contracts in good standing')}
       </div>
 
       <!-- Charts: fleet health + ticket mix + warranty runway -->
       <div class="chart-row-2">
-        ${chartPanel('🖥️ Device Health', `${myDevices.length} registered device${myDevices.length === 1 ? '' : 's'}`,
+        ${chartPanel('Device Health', `${myDevices.length} registered device${myDevices.length === 1 ? '' : 's'}`,
           donutChart([
-            { label: 'Online',       value: onlineCount,                                        tone: 'c3' },
-            { label: 'In Service',   value: myDevices.filter(d => d.status === 'maintenance').length, tone: 'c1' },
-            { label: 'Warning',      value: myDevices.filter(d => d.status === 'warning').length,     tone: 'c4' },
-            { label: 'Offline',      value: myDevices.filter(d => d.status === 'offline').length,     tone: 'c5' },
+            { label: 'Online',       value: onlineCount,                                                          tone: 'c3' },
+            { label: 'In Service',   value: myDevices.filter(d => getDeviceDisplayStatus(d) === 'maintenance').length, tone: 'c1' },
+            { label: 'Warning',      value: myDevices.filter(d => getDeviceDisplayStatus(d) === 'warning').length,     tone: 'c4' },
+            { label: 'Offline',      value: myDevices.filter(d => getDeviceDisplayStatus(d) === 'offline').length,       tone: 'c5' },
           ], `${fleetPct}%`, 'Online'),
           `<button class="btn btn-secondary btn-sm" onclick="navigateTo('devices')">View All →</button>`)}
 
-        ${chartPanel('🎫 Ticket Status', 'Every service ticket on this account',
+        ${chartPanel('Ticket Status', 'Every service ticket on this account',
           barChart([
             { label: 'Open',       value: myTickets.filter(t => t.status === 'Open').length,        tone: 'c1' },
             { label: 'Diagnosing', value: myTickets.filter(t => t.status === 'Diagnosing').length,  tone: 'c6' },
@@ -3008,7 +3312,7 @@ function renderCustomerDashboardView() {
       </div>
 
       <!-- Warranty runway: how much cover is left across the fleet -->
-      ${myWarranties.length > 0 ? chartPanel('🛡️ Warranty Runway', 'Remaining cover per registered device',
+      ${myWarranties.length > 0 ? chartPanel('Warranty Runway', 'Remaining cover per registered device',
         proportionStrip([
           { label: 'Protected (>90d)', value: activeWarranties.length - expiringSoon.length, tone: 'c3' },
           { label: 'Expiring soon',    value: expiringSoon.length,                          tone: 'c4' },
@@ -3020,14 +3324,14 @@ function renderCustomerDashboardView() {
       <!-- Records: tickets + orders/bookings -->
       <div class="dash-2col">
         ${recordSection(
-          '🎫 My Service Tickets',
+          'My Service Tickets',
           `${openTickets.length} open · ${resolvedCount} closed`,
           `<button class="btn btn-secondary btn-sm" onclick="navigateTo('tickets')">View All →</button>`,
           recentTickets.length === 0
-            ? recordEmpty('🎫', 'No service tickets yet',
+            ? recordEmpty(ico('ticket'), 'No service tickets yet',
                 'If a SmartBoard misbehaves, use <strong>Report a Problem</strong> and our team will be dispatched.')
             : recentTickets.map(t => recordRow({
-                icon: '🎫',
+                icon: '',
                 title: escapeHtml(t.ticketNumber || t.id) + ' · ' + escapeHtml(t.title || 'Service request'),
                 meta: `${escapeHtml(t.deviceId || '—')} · ${escapeHtml(t.category || 'General')} · ${escapeHtml(t.priority || 'Medium')} priority · ${relTime(t.createdAt)}`,
                 right: t.status || 'Received',
@@ -3037,18 +3341,18 @@ function renderCustomerDashboardView() {
         )}
 
         ${recordSection(
-          '📦 Orders & Bookings',
+          'Orders & Bookings',
           'Your rental orders and their delivery status',
           `<button class="btn btn-secondary btn-sm" onclick="navigateTo('rentals')">View All →</button>`,
           recentBookings.length === 0
-            ? recordEmpty('📦', 'No orders yet',
+            ? recordEmpty(ico('package'), 'No orders yet',
                 'Book a Millennium SmartBoard for an event, training or exhibit — use <strong>Book a Device</strong>.')
             : recentBookings.map(r => {
                 const days = r.startDate && r.endDate
                   ? Math.ceil((new Date(r.endDate) - new Date(r.startDate)) / 86400000) + 1
                   : 0;
                 return recordRow({
-                  icon: '📦',
+                  icon: '',
                   title: escapeHtml(r.rentalNumber || r.id) + ' · ' + escapeHtml(r.deviceModel || 'Millennium SmartBoard'),
                   meta: `${r.startDate || '—'} → ${r.endDate || '—'}${days > 0 ? ` · ${days} day${days > 1 ? 's' : ''}` : ''} · ${escapeHtml(r.purpose || 'Rental')}`,
                   right: r.status || 'Pending',
@@ -3061,28 +3365,28 @@ function renderCustomerDashboardView() {
 
       <!-- My devices -->
       ${recordSection(
-        '🖥️ My Devices',
+        'My Devices',
         `${myDevices.length} registered · ${fleetPct}% online`,
         `<button class="btn btn-secondary btn-sm" onclick="navigateTo('devices')">View All →</button>`,
         fleetPreview.length === 0
-          ? recordEmpty('🖥️', 'No devices linked yet',
+          ? recordEmpty(ico('monitor'), 'No devices linked yet',
               'Your purchased SmartBoards appear here once our team binds your serial numbers to this account.')
           : fleetPreview.map(d => `
               <div class="rec-device">
                 <div class="rec-device-head">
                   <span class="rec-device-id">${escapeHtml(d.id)}</span>
-                  ${tonePill(deviceStatusLabel(d.status), deviceStatusTone(d.status))}
+                  ${tonePill(deviceStatusLabel(getDeviceDisplayStatus(d)), deviceStatusTone(getDeviceDisplayStatus(d)))}
                 </div>
                 <div class="rec-device-model">${escapeHtml(d.model || 'Millennium SmartBoard')}</div>
-                <div class="rec-device-meta">📍 ${escapeHtml(d.location || '—')}${d.city ? ', ' + escapeHtml(d.city) : ''}</div>
+                <div class="rec-device-meta">${escapeHtml(d.location || '—')}${d.city ? ', ' + escapeHtml(d.city) : ''}</div>
                 <div class="rec-device-specs">
                   <span><strong>Serial</strong> ${escapeHtml(d.serialNumber || '—')}</span>
                   <span><strong>OS</strong> ${escapeHtml(d.osVersion || '—')}</span>
                   <span><strong>Installed</strong> ${escapeHtml(d.installedAt || '—')}</span>
                 </div>
                 <div class="rec-device-actions">
-                  <button class="btn btn-secondary btn-sm" onclick="openQRModal('${d.id}')">📱 Digital ID</button>
-                  <button class="btn btn-primary btn-sm" onclick="openCreateTicketModal('${d.id}')">🚨 Request Service</button>
+                  <button class="btn btn-secondary btn-sm" onclick="openQRModal('${d.id}')">Digital ID</button>
+                  <button class="btn btn-primary btn-sm" onclick="openCreateTicketModal('${d.id}')">Request Service</button>
                 </div>
               </div>
             `).join('')
@@ -3091,18 +3395,18 @@ function renderCustomerDashboardView() {
       <!-- Warranty + support -->
       <div class="dash-2col">
         ${recordSection(
-          '🛡️ Warranty Coverage',
+          'Warranty Coverage',
           'Coverage bound to your registered devices',
           '',
           myWarranties.length === 0
-            ? recordEmpty('🛡️', 'No warranty records',
+            ? recordEmpty(ico('shield'), 'No warranty records',
                 'Warranty terms appear here once a device is registered against your organization.')
             : myWarranties.map(w => {
                 const days = Number(w.daysRemaining);
                 const tone = w.status !== 'Under Warranty' ? 'neutral'
                   : (Number.isFinite(days) && days <= 90 ? 'warn' : 'ok');
                 return recordRow({
-                  icon: '🛡️',
+                  icon: '',
                   title: escapeHtml(w.deviceModel || 'Millennium SmartBoard'),
                   meta: `${escapeHtml(w.deviceId || '—')} · ${escapeHtml(w.coverageType || 'Standard coverage')} · expires ${escapeHtml(w.expiryDate || '—')}`,
                   right: w.status || 'Under Warranty',
@@ -3114,7 +3418,7 @@ function renderCustomerDashboardView() {
         <section class="rec-section">
           <div class="rec-section-head">
             <div>
-              <div class="rec-section-title">📞 Need Help?</div>
+              <div class="rec-section-title">Need Help?</div>
               <div class="rec-section-sub">Account and support details for ${escapeHtml(orgName)}</div>
             </div>
           </div>
@@ -3203,7 +3507,7 @@ function renderTechnicianDashboardView() {
             <h1 class="hero-greeting">Welcome back,<br>${escapeHtml(user.fullName || user.username || 'Technician')}!</h1>
             <p class="hero-subtext">Your assigned jobs, the devices you service, and the parts you have consumed.</p>
             <div class="hero-date-chip">
-              <span class="calendar-icon">📅</span>
+              <span class="calendar-icon"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-calendar"></use></svg></span>
               <div>
                 <strong>${currentDate}</strong>
                 <small>${currentDayTime}</small>
@@ -3230,19 +3534,19 @@ function renderTechnicianDashboardView() {
           <div class="quick-actions-title">Quick Actions</div>
           <div class="quick-actions-grid">
             <button class="qa-btn qa-btn-blue" onclick="navigateTo('tickets')">
-              <span class="qa-icon">🎫</span>
+              <span class="qa-icon"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-ticket"></use></svg></span>
               <span>My Job Queue</span>
             </button>
             <button class="qa-btn qa-btn-teal" onclick="navigateTo('devices')">
-              <span class="qa-icon">🖥️</span>
+              <span class="qa-icon"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-monitor"></use></svg></span>
               <span>Devices</span>
             </button>
             <button class="qa-btn qa-btn-purple" onclick="navigateTo('inventory')">
-              <span class="qa-icon">📦</span>
+              <span class="qa-icon"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-package"></use></svg></span>
               <span>Parts & Stock</span>
             </button>
             <button class="qa-btn qa-btn-navy" onclick="fetchAllData()">
-              <span class="qa-icon">🔄</span>
+              <span class="qa-icon"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-refresh"></use></svg></span>
               <span>Refresh Queue</span>
             </button>
           </div>
@@ -3251,19 +3555,19 @@ function renderTechnicianDashboardView() {
 
       <!-- KPI row -->
       <div class="stat-cards-grid-v2">
-        ${kpiCard('blue', '🎫', 'Assigned Tickets', myTickets.length,
+        ${kpiCard('blue', ico('ticket'), 'Assigned Tickets', myTickets.length,
           `${openTickets.length} still open`)}
-        ${kpiCard('amber', '🔧', 'In Progress', inProgress.length,
+        ${kpiCard('amber', ico('wrench'), 'In Progress', inProgress.length,
           `${received.length} awaiting first response`)}
-        ${kpiCard('green', '✅', 'Resolved', resolved.length,
+        ${kpiCard('green', ico('check-circle'), 'Resolved', resolved.length,
           `${resolveRate}% of everything assigned to you`)}
-        ${kpiCard('purple', '🖥️', 'Devices Serviced', servicedDevices.length,
+        ${kpiCard('purple', ico('monitor'), 'Devices Serviced', servicedDevices.length,
           servicedDevices.length === 1 ? '1 device in your ticket history' : `${servicedDevices.length} devices in your ticket history`)}
       </div>
 
       <!-- Charts: job mix + parts consumed -->
       <div class="chart-row-2">
-        ${chartPanel('🎫 Job Status Mix', `${myTickets.length} ticket${myTickets.length === 1 ? '' : 's'} assigned to you`,
+        ${chartPanel('Job Status Mix', `${myTickets.length} ticket${myTickets.length === 1 ? '' : 's'} assigned to you`,
           donutChart([
             { label: 'Awaiting first response', value: received.length,           tone: 'c7' },
             { label: 'Diagnosing',              value: myTickets.filter(t => t.status === 'Diagnosing').length, tone: 'c6' },
@@ -3272,7 +3576,7 @@ function renderTechnicianDashboardView() {
           ], `${resolveRate}%`, 'Resolved'),
           `<button class="btn btn-secondary btn-sm" onclick="navigateTo('tickets')">Open Queue →</button>`)}
 
-        ${chartPanel('🔩 Parts Consumed', 'Units logged against your tickets',
+        ${chartPanel('Parts Consumed', 'Units logged against your tickets',
           barChart(partsUsed.length === 0
             ? []
             : partsUsed.map((p, i) => ({ label: p.name, value: p.qty, tone: CHART_PALETTE[i % CHART_PALETTE.length] }))),
@@ -3280,7 +3584,7 @@ function renderTechnicianDashboardView() {
       </div>
 
       <!-- Workload by priority: shows where the pressure actually is -->
-      ${myTickets.length > 0 ? chartPanel('⚖️ Open Workload by Priority', 'Open jobs only — resolved work is excluded',
+      ${myTickets.length > 0 ? chartPanel('Open Workload by Priority', 'Open jobs only — resolved work is excluded',
         proportionStrip([
           { label: 'Critical', value: critical.length,                                             tone: 'c5' },
           { label: 'High',     value: high.length,                                                 tone: 'c4' },
@@ -3291,7 +3595,7 @@ function renderTechnicianDashboardView() {
 
       ${(critical.length > 0 || high.length > 0) ? `
         <div class="tech-alert-bar">
-          <span class="tech-alert-icon">⚠️</span>
+          <span class="tech-alert-icon"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-alert"></use></svg></span>
           <div>
             <strong>Priority work waiting</strong>
             <span>${[
@@ -3306,14 +3610,14 @@ function renderTechnicianDashboardView() {
       <!-- Work queue + parts -->
       <div class="dash-2col">
         ${recordSection(
-          '🧰 My Work Queue',
+          `${ico('toolbox')} My Work Queue`,
           'Open jobs, most urgent first',
           `<button class="btn btn-secondary btn-sm" onclick="navigateTo('tickets')">View All →</button>`,
           queue.length === 0
-            ? recordEmpty('✅', 'Queue is clear',
+            ? recordEmpty(ico('check-circle'), 'Queue is clear',
                 'You have no open jobs assigned right now. New assignments appear here automatically.')
             : queue.map(t => recordRow({
-                icon: t.priority === 'Critical' ? '🔥' : t.priority === 'High' ? '⚠️' : '🔧',
+                icon: t.priority === 'Critical' ? '' : t.priority === 'High' ? '' : '',
                 title: escapeHtml(t.ticketNumber || t.id) + ' · ' + escapeHtml(t.title || 'Service request'),
                 meta: `${escapeHtml(t.customerName || '—')} · ${escapeHtml(t.deviceId || '—')} · ${escapeHtml(t.category || 'General')} · ${relTime(t.createdAt)}`,
                 right: t.status || 'Received',
@@ -3323,14 +3627,14 @@ function renderTechnicianDashboardView() {
         )}
 
         ${recordSection(
-          '📦 Parts I Have Used',
+          'Parts I Have Used',
           `${partsUsed.reduce((s, p) => s + p.qty, 0)} units across your tickets`,
           `<button class="btn btn-secondary btn-sm" onclick="navigateTo('inventory')">Inventory →</button>`,
           partsUsed.length === 0
-            ? recordEmpty('📦', 'No parts logged',
+            ? recordEmpty(ico('package'), 'No parts logged',
                 'Parts you attach to a ticket are tallied here so stock stays accurate.')
             : partsUsed.map(p => recordRow({
-                icon: '🔩',
+                icon: '',
                 title: escapeHtml(p.name),
                 meta: 'Consumed on your service tickets',
                 right: `${p.qty} ×`,
@@ -3341,30 +3645,30 @@ function renderTechnicianDashboardView() {
       <!-- Serviced devices + low stock -->
       <div class="dash-2col">
         ${recordSection(
-          '🖥️ Devices I Service',
+          'Devices I Service',
           'Devices appearing in your ticket history',
           `<button class="btn btn-secondary btn-sm" onclick="navigateTo('devices')">View All →</button>`,
           servicedDevices.length === 0
-            ? recordEmpty('🖥️', 'No devices yet',
+            ? recordEmpty(ico('monitor'), 'No devices yet',
                 'Once a ticket is assigned to you, the device it concerns is listed here.')
             : servicedDevices.slice(0, 6).map(d => recordRow({
-                icon: '🖥️',
+                icon: '',
                 title: escapeHtml(d.model || 'Millennium SmartBoard') + ' · ' + escapeHtml(d.id),
-                meta: `📍 ${escapeHtml(d.location || '—')} · ${escapeHtml(d.customerName || '—')} · ${escapeHtml(d.serialNumber || '—')}`,
-                right: d.status === 'online' ? 'Online' : d.status === 'offline' ? 'Offline' : 'Attention',
-                tone: d.status === 'online' ? 'ok' : d.status === 'offline' ? 'danger' : 'warn',
+                meta: `${escapeHtml(d.location || '—')} · ${escapeHtml(d.customerName || '—')} · ${escapeHtml(d.serialNumber || '—')}`,
+                right: getDeviceDisplayStatus(d) === 'online' ? 'Online' : getDeviceDisplayStatus(d) === 'offline' ? 'Offline' : 'Attention',
+                tone: getDeviceDisplayStatus(d) === 'online' ? 'ok' : getDeviceDisplayStatus(d) === 'offline' ? 'danger' : 'warn',
               })).join('')
         )}
 
         ${recordSection(
-          '📉 Low Stock Parts',
+          'Low Stock Parts',
           'Order these before the next job',
           `<button class="btn btn-secondary btn-sm" onclick="navigateTo('inventory')">Restock →</button>`,
           lowStock.length === 0
-            ? recordEmpty('✅', 'Stock levels healthy',
+            ? recordEmpty(ico('check-circle'), 'Stock levels healthy',
                 'Every part is above its minimum threshold.')
             : lowStock.map(p => recordRow({
-                icon: '📉',
+                icon: '',
                 title: escapeHtml(p.name || p.partCode || 'Part'),
                 meta: `${escapeHtml(p.partCode || '—')} · min ${Number(p.minThreshold) || 0} · ${escapeHtml(p.category || 'General')}`,
                 right: `${Number(p.stockQuantity) || 0} left`,
@@ -3428,7 +3732,8 @@ function renderDevicesView() {
     filtered = filtered.filter((d) => d.model.includes(state.filterModel));
   }
   if (state.filterStatus) {
-    filtered = filtered.filter((d) => d.status.toLowerCase() === state.filterStatus.toLowerCase());
+    const wanted = state.filterStatus.toLowerCase();
+    filtered = filtered.filter((d) => getDeviceDisplayStatus(d).toLowerCase() === wanted);
   }
 
   const isAdmin = state.currentRole === 'admin';
@@ -3437,12 +3742,12 @@ function renderDevicesView() {
   return `
     <div class="page-header-row">
       <div>
-        <h1 class="page-title">🖥️ SmartBoards</h1>
+        <h1 class="page-title">SmartBoards</h1>
         <p class="page-description">All ${state.devices.length} SmartBoards we look after, and how each one is doing right now.</p>
       </div>
       <div class="page-actions">
-        ${isAdmin ? `<button class="btn btn-primary" onclick="openRegisterModal()">➕ Register a SmartBoard</button>` : ''}
-        ${isTech  ? `<span style="font-size:0.82rem;color:var(--text-muted);">🔍 View only. Ask an administrator to register new boards.</span>` : ''}
+        ${isAdmin ? `<button class="btn btn-primary" onclick="openRegisterModal()">Register a SmartBoard</button>` : ''}
+        ${isTech  ? `<span style="font-size:0.82rem;color:var(--text-muted);">View only. Ask an administrator to register new boards.</span>` : ''}
       </div>
     </div>
 
@@ -3450,7 +3755,7 @@ function renderDevicesView() {
     <div class="glass-panel" style="padding: 16px 20px;">
       <div class="filter-bar" style="margin-bottom: 0;">
         <div class="search-input-box">
-          <span class="search-icon">🔍</span>
+          <span class="search-icon"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-search"></use></svg></span>
           <input type="text" class="search-input" placeholder="Search by device ID, customer, serial number or location..." value="${state.searchQuery}" oninput="handleSearch(this.value)" />
         </div>
         <select class="filter-select" onchange="handleModelFilter(this.value)">
@@ -3461,10 +3766,10 @@ function renderDevicesView() {
         </select>
         <select class="filter-select" onchange="handleStatusFilter(this.value)">
           <option value="">Any status</option>
-          <option value="online" ${state.filterStatus === 'online' ? 'selected' : ''}>🟢 Online</option>
-          <option value="offline" ${state.filterStatus === 'offline' ? 'selected' : ''}>🔴 Offline</option>
-          <option value="warning" ${state.filterStatus === 'warning' ? 'selected' : ''}>⚠️ Needs attention</option>
-          <option value="maintenance" ${state.filterStatus === 'maintenance' ? 'selected' : ''}>🔧 Being repaired</option>
+          <option value="online" ${state.filterStatus === 'online' ? 'selected' : ''}>Online</option>
+          <option value="offline" ${state.filterStatus === 'offline' ? 'selected' : ''}>Offline</option>
+          <option value="warning" ${state.filterStatus === 'warning' ? 'selected' : ''}>Needs attention</option>
+          <option value="maintenance" ${state.filterStatus === 'maintenance' ? 'selected' : ''}>Being repaired</option>
         </select>
         ${state.searchQuery || state.filterModel || state.filterStatus ? `<button class="btn btn-secondary btn-sm" onclick="clearFilters()">Clear filters</button>` : ''}
       </div>
@@ -3481,7 +3786,7 @@ function renderDevicesView() {
               <th>Customer &amp; site</th>
               <th>Status</th>
               <th>System &amp; hardware</th>
-              <th>Last seen</th>
+              <th>Owner</th>
               <th class="col-actions">Actions</th>
             </tr>
           </thead>
@@ -3489,21 +3794,28 @@ function renderDevicesView() {
             ${filtered.length === 0 ? `<tr><td colspan="7" style="text-align: center; padding: 40px; color: var(--text-muted);">No SmartBoards match your search. Try clearing the filters.</td></tr>` : ''}
             ${filtered
               .map((dev) => {
+                const displayStatus = getDeviceDisplayStatus(dev);
                 const statusClass =
-                  dev.status === 'online'
+                  displayStatus === 'online'
                     ? 'status-online'
-                    : dev.status === 'offline'
+                    : displayStatus === 'offline'
                     ? 'status-offline'
-                    : dev.status === 'warning'
+                    : displayStatus === 'warning'
                     ? 'status-warning'
                     : 'status-maintenance';
+                const ownerName = getDeviceOwnerName(dev);
+                const owners = getDeviceOwners(dev);
+                const onlineOwners = owners.filter((u) => u.online === true);
+                const ownerHint = onlineOwners.length > 0
+                  ? `${ownerName} (${onlineOwners.length} online now)`
+                  : `${ownerName}`;
 
                 return `
                 <tr>
                   <td>
                     <div style="display: flex; align-items: center; gap: 8px;">
-                      <button class="action-btn" title="View & Print QR Code" onclick="openQRModal('${dev.id}')" style="color: var(--neon-cyan); border-color: rgba(0, 242, 254, 0.3);">
-                        📱
+                      <button class="action-btn" title="View & Print QR Code" aria-label="View and print QR code for ${dev.id}" onclick="openQRModal('${dev.id}')" style="color: var(--neon-cyan); border-color: rgba(0, 242, 254, 0.3);">
+                        ${ico('qr')}
                       </button>
                       <div>
                         <strong style="font-family: 'JetBrains Mono'; color: var(--neon-cyan);">${dev.id}</strong>
@@ -3521,23 +3833,23 @@ function renderDevicesView() {
                   </td>
                   <td>
                     <span class="status-pill ${statusClass}">
-                      ${dev.status === 'online' ? '🟢 Online' : dev.status === 'offline' ? '🔴 Offline' : dev.status === 'warning' ? '⚠️ Problem' : '🔧 Service'}
+                      ${displayStatus === 'online' ? 'Online' : displayStatus === 'offline' ? 'Offline' : displayStatus === 'warning' ? 'Problem' : 'Service'}
                     </span>
-                    ${dev.screenLocked ? `<div style="font-size: 0.72rem; color: #fb7185; margin-top: 4px;">🔒 Screen Locked</div>` : ''}
+                    ${dev.screenLocked ? `<div style="font-size: 0.72rem; color: #fb7185; margin-top: 4px;">Screen Locked</div>` : ''}
                   </td>
                   <td>
                     <div style="font-size: 0.8rem; font-weight: 600;">${dev.osVersion}</div>
                     <div style="font-size: 0.75rem; color: var(--text-muted);">${dev.opsSpec}</div>
                   </td>
-                  <td>
-                    <div style="font-size: 0.78rem;">${timeAgo(new Date(dev.lastPing))}</div>
-                    <div style="font-size: 0.72rem; color: var(--text-muted);">${dev.ipAddress}</div>
+                  <td title="${escapeHtml(ownerHint)}">
+                    <div style="font-size: 0.82rem; font-weight: 600; color: var(--text-primary);">${escapeHtml(ownerName)}</div>
+                    <div style="font-size: 0.72rem; color: var(--text-muted);">${onlineOwners.length > 0 ? 'Owner online' : 'Owner offline'}</div>
                   </td>
                   <td class="col-actions">
                     ${isAdmin
                       ? `<button class="action-btn action-btn-danger" title="Remove this device"
                            aria-label="Remove ${dev.id}"
-                           onclick="event.stopPropagation();deleteDevice('${dev.id}')">🗑️</button>`
+                           onclick="event.stopPropagation();deleteDevice('${dev.id}')"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-trash"></use></svg></button>`
                       : `<span class="action-none" title="Only an administrator can remove a device">—</span>`}
                   </td>
                 </tr>
@@ -3569,10 +3881,10 @@ function renderKanbanEmpty(icon, title, hint) {
 function renderTicketCardCustomer(t) {
   const isClosed = t.status === 'Resolved' || t.status === 'Closed';
   const statusIcon =
-    isClosed ? '✅'
-    : t.status === 'Repairing' ? '🔧'
-    : t.status === 'Diagnosing' ? '🔍'
-    : '📥';
+    isClosed ? ''
+    : t.status === 'Repairing' ? ''
+    : t.status === 'Diagnosing' ? ''
+    : '';
   const submitted = new Date(t.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
   return `
@@ -3587,24 +3899,24 @@ function renderTicketCardCustomer(t) {
       <h4 class="ticket-title">${escapeHtml(t.title)}</h4>
       <div class="ticket-facts">
         <span class="ticket-fact ticket-fact-wide" title="${escapeHtml(t.deviceId)} — ${escapeHtml(t.deviceModel || '')}">
-          <span class="ticket-fact-ico">🖥️</span><b>${escapeHtml(t.deviceId)}</b><span class="ticket-fact-soft">${escapeHtml(t.deviceModel || '')}</span>
+          <span class="ticket-fact-ico"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-monitor"></use></svg></span><b>${escapeHtml(t.deviceId)}</b><span class="ticket-fact-soft">${escapeHtml(t.deviceModel || '')}</span>
         </span>
         <span class="ticket-fact" title="Category">
-          <span class="ticket-fact-ico">🏷️</span><span>${escapeHtml(t.category || '—')}</span>
+          <span class="ticket-fact-ico"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-tag"></use></svg></span><span>${escapeHtml(t.category || '—')}</span>
         </span>
         <span class="ticket-fact" title="Warranty coverage">
-          <span class="ticket-fact-ico">🛡️</span>
+          <span class="ticket-fact-ico"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-shield"></use></svg></span>
           <span class="${t.warrantyCovered ? 'warranty-badge-active' : 'warranty-badge-expired'}">${t.warrantyCovered ? 'Covered' : 'Not covered'}</span>
         </span>
         <span class="ticket-fact" title="Assigned technician">
-          <span class="ticket-fact-ico">👤</span><span>${escapeHtml(t.assignedTechnician || 'Pending assignment')}</span>
+          <span class="ticket-fact-ico"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-user"></use></svg></span><span>${escapeHtml(t.assignedTechnician || 'Pending assignment')}</span>
         </span>
       </div>
       <div class="ticket-foot">
-        <span class="ticket-date" title="Submitted ${new Date(t.createdAt).toLocaleDateString()}">🕒 ${submitted}</span>
+        <span class="ticket-date" title="Submitted ${new Date(t.createdAt).toLocaleDateString()}">${submitted}</span>
         <span class="ticket-actions">
           <button type="button" class="ticket-btn ticket-btn-chat"
-            onclick="event.stopPropagation();openTicketDetailModal('${t.id}')">💬 Chat with Admin</button>
+            onclick="event.stopPropagation();openTicketDetailModal('${t.id}')">Chat with Admin</button>
         </span>
       </div>
     </article>
@@ -3672,35 +3984,35 @@ function renderTicketsView() {
         <h4 class="ticket-title">${escapeHtml(t.title)}</h4>
         <div class="ticket-facts">
           <span class="ticket-fact ticket-fact-wide" title="${escapeHtml(t.deviceId)} — ${escapeHtml(t.deviceModel || '')}">
-            <span class="ticket-fact-ico">🖥️</span><b>${escapeHtml(t.deviceId)}</b><span class="ticket-fact-soft">${escapeHtml(t.deviceModel || '')}</span>
+            <span class="ticket-fact-ico"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-monitor"></use></svg></span><b>${escapeHtml(t.deviceId)}</b><span class="ticket-fact-soft">${escapeHtml(t.deviceModel || '')}</span>
           </span>
           <span class="ticket-fact" title="Client">
-            <span class="ticket-fact-ico">🏫</span><span>${escapeHtml(t.customerName || '—')}</span>
+            <span class="ticket-fact-ico"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-school"></use></svg></span><span>${escapeHtml(t.customerName || '—')}</span>
           </span>
           <span class="ticket-fact" title="Category">
-            <span class="ticket-fact-ico">🏷️</span><span>${escapeHtml(t.category || '—')}</span>
+            <span class="ticket-fact-ico"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-tag"></use></svg></span><span>${escapeHtml(t.category || '—')}</span>
           </span>
           <span class="ticket-fact" title="Warranty coverage">
-            <span class="ticket-fact-ico">🛡️</span>
+            <span class="ticket-fact-ico"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-shield"></use></svg></span>
             <span class="${t.warrantyCovered ? 'warranty-badge-active' : 'warranty-badge-expired'}">${t.warrantyCovered ? 'Covered' : 'Not covered'}</span>
           </span>
           <span class="ticket-fact" title="Assigned technician">
-            <span class="ticket-fact-ico">👤</span><span>${escapeHtml(t.assignedTechnician || 'Unassigned')}</span>
+            <span class="ticket-fact-ico"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-user"></use></svg></span><span>${escapeHtml(t.assignedTechnician || 'Unassigned')}</span>
           </span>
         </div>
         ${t.partsUsed && t.partsUsed.length > 0 ? `
           <div class="ticket-parts" title="${escapeHtml(t.partsUsed.map((p) => `${p.quantity}x ${p.partName}`).join(', '))}">
-            🔩 <span>${t.partsUsed.map((p) => `${p.quantity}× ${escapeHtml(p.partName)}`).join(', ')}</span>
+            <span>${t.partsUsed.map((p) => `${p.quantity}× ${escapeHtml(p.partName)}`).join(', ')}</span>
           </div>
         ` : ''}
         <div class="ticket-foot">
-          <span class="ticket-date" title="Logged ${new Date(t.createdAt).toLocaleDateString()}">🕒 ${logged}</span>
+          <span class="ticket-date" title="Logged ${new Date(t.createdAt).toLocaleDateString()}">${logged}</span>
           <span class="ticket-actions">
             <button type="button" class="ticket-btn ticket-btn-chat" title="Open ticket chat"
-              onclick="event.stopPropagation();openTicketDetailModal('${t.id}')">💬 Chat</button>
+              onclick="event.stopPropagation();openTicketDetailModal('${t.id}')">Chat</button>
             ${isAdmin ? `
               <button type="button" class="ticket-btn ticket-btn-danger" title="Delete ticket"
-                onclick="event.stopPropagation();deleteTicket('${t.id}')">🗑️</button>
+                onclick="event.stopPropagation();deleteTicket('${t.id}')"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-trash"></use></svg></button>
             ` : ''}
           </span>
         </div>
@@ -3751,42 +4063,42 @@ function renderTicketsView() {
     return `
       <div class="page-header-row">
         <div>
-          <h1 class="page-title">🔧 My Service Requests</h1>
+          <h1 class="page-title">My Service Requests</h1>
           <p class="page-description">Track your submitted Millennium SmartBoard service requests and repair status.</p>
         </div>
         <div class="page-actions">
-          <button class="btn btn-primary" onclick="openCreateTicketModal()">🚨 Report a Problem</button>
+          <button class="btn btn-primary" onclick="openCreateTicketModal()">Report a Problem</button>
         </div>
       </div>
       
       <!-- Search Bar for Customer Tickets -->
       <div class="glass-panel" style="padding: 16px 20px; margin-bottom: 20px;">
         <div class="search-input-box">
-          <span class="search-icon">🔍</span>
+          <span class="search-icon"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-search"></use></svg></span>
           <input type="text" class="search-input" placeholder="Search your tickets by ID, title, device..." value="${state.searchQuery}" oninput="handleSearch(this.value)" />
         </div>
       </div>
       
       <div class="role-info-banner">
-        ℹ️ <strong>Customer View:</strong> You can report issues and track your repair status. For urgent matters, call our support hotline.
+        <strong>Customer View:</strong> You can report issues and track your repair status. For urgent matters, call our support hotline.
       </div>
       <div class="kanban-board">
         <div class="kanban-column stage-open${open.length === 0 ? ' is-empty' : ''}">
           <div class="kanban-header">
-            <span class="kanban-header-label">🔴 Open Requests</span>
+            <span class="kanban-header-label">Open Requests</span>
             <span class="kanban-count">${open.length}</span>
           </div>
           ${open.length === 0
-            ? renderKanbanEmpty('🎉', 'No open requests', 'Everything you reported has been closed.')
+            ? renderKanbanEmpty('', 'No open requests', 'Everything you reported has been closed.')
             : open.map(t => renderTicketCardCustomer(t)).join('')}
         </div>
         <div class="kanban-column stage-resolved${closed.length === 0 ? ' is-empty' : ''}">
           <div class="kanban-header">
-            <span class="kanban-header-label">✅ Closed Requests</span>
+            <span class="kanban-header-label">Closed Requests</span>
             <span class="kanban-count">${closed.length}</span>
           </div>
           ${closed.length === 0
-            ? renderKanbanEmpty('📭', 'Nothing closed yet', 'Resolved requests will be listed here.')
+            ? renderKanbanEmpty('', 'Nothing closed yet', 'Resolved requests will be listed here.')
             : closed.map(t => renderTicketCardCustomer(t)).join('')}
         </div>
       </div>
@@ -3796,30 +4108,30 @@ function renderTicketsView() {
   return `
     <div class="page-header-row">
       <div>
-        <h1 class="page-title">🔧 ${isTech ? 'My Assigned Tickets' : 'Maintenance & Service Tickets'}</h1>
+        <h1 class="page-title">${isTech ? 'My Assigned Tickets' : 'Maintenance & Service Tickets'}</h1>
         <p class="page-description">${isTech ? 'Your active service jobs and repair tasks assigned to you.' : 'Automated lifecycle from issue detection to technician dispatch and inventory parts deduction.'}</p>
       </div>
       <div class="page-actions">
-        ${isAdmin ? `<button class="btn btn-primary" onclick="openCreateTicketModal()">➕ Submit Service Ticket</button>` : ''}
-        ${isTech  ? `<button class="btn btn-secondary" onclick="fetchAllData()">🔄 Refresh My Jobs</button>` : ''}
+        ${isAdmin ? `<button class="btn btn-primary" onclick="openCreateTicketModal()">Submit Service Ticket</button>` : ''}
+        ${isTech  ? `<button class="btn btn-secondary" onclick="fetchAllData()">Refresh My Jobs</button>` : ''}
       </div>
     </div>
     
     <!-- Search Bar for Tickets -->
     <div class="glass-panel" style="padding: 16px 20px; margin-bottom: 20px;">
       <div class="search-input-box">
-        <span class="search-icon">🔍</span>
+        <span class="search-icon"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-search"></use></svg></span>
         <input type="text" class="search-input" placeholder="Search tickets by ID, title, device, customer, category..." value="${state.searchQuery}" oninput="handleSearch(this.value)" />
       </div>
     </div>
     
-    ${isTech ? `<div class="role-info-banner">🔧 <strong>Technician View:</strong> Showing only tickets assigned to you. Contact admin to view unassigned tickets.</div>` : ''}
-    ${isAdmin ? `<div class="role-info-banner">👑 <strong>Admin View:</strong> You can see all tickets from all customers and assign them to technicians.</div>` : ''}
+    ${isTech ? `<div class="role-info-banner"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-wrench"></use></svg><strong>Technician View:</strong> Showing only tickets assigned to you. Contact admin to view unassigned tickets.</div>` : ''}
+    ${isAdmin ? `<div class="role-info-banner"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-crown"></use></svg><strong>Admin View:</strong> You can see all tickets from all customers and assign them to technicians.</div>` : ''}
 
     <!-- Kanban Columns -->
     <div class="kanban-board">${received.length === 0 && diagnosing.length === 0 && repairing.length === 0 && resolved.length === 0 && isTech ? `
       <div class="kanban-empty kanban-empty-lg">
-        <span class="kanban-empty-ico">📭</span>
+        <span class="kanban-empty-ico"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-inbox"></use></svg></span>
         <strong>No tickets assigned yet</strong>
         <span>You don't have any assigned service tickets at the moment. Check back later or contact your admin.</span>
       </div>
@@ -3827,44 +4139,44 @@ function renderTicketsView() {
       <!-- 1. New Tickets -->
       <div class="kanban-column stage-received${received.length === 0 ? ' is-empty' : ''}">
         <div class="kanban-header">
-          <span class="kanban-header-label">📥 New Tickets</span>
+          <span class="kanban-header-label">New Tickets</span>
           <span class="kanban-count">${received.length}</span>
         </div>
         ${received.length === 0
-          ? renderKanbanEmpty('📥', 'No new tickets', 'Freshly submitted requests land here.')
+          ? renderKanbanEmpty('', 'No new tickets', 'Freshly submitted requests land here.')
           : received.map(renderTicketCard).join('')}
       </div>
 
       <!-- 2. Diagnosing -->
       <div class="kanban-column stage-diagnosing${diagnosing.length === 0 ? ' is-empty' : ''}">
         <div class="kanban-header">
-          <span class="kanban-header-label">🔍 Diagnosing</span>
+          <span class="kanban-header-label">Diagnosing</span>
           <span class="kanban-count">${diagnosing.length}</span>
         </div>
         ${diagnosing.length === 0
-          ? renderKanbanEmpty('🔍', 'Nothing in diagnosis', 'Tickets under investigation appear here.')
+          ? renderKanbanEmpty('', 'Nothing in diagnosis', 'Tickets under investigation appear here.')
           : diagnosing.map(renderTicketCard).join('')}
       </div>
 
       <!-- 3. Repairing -->
       <div class="kanban-column stage-repairing${repairing.length === 0 ? ' is-empty' : ''}">
         <div class="kanban-header">
-          <span class="kanban-header-label">⚙️ Repairing</span>
+          <span class="kanban-header-label">Repairing</span>
           <span class="kanban-count">${repairing.length}</span>
         </div>
         ${repairing.length === 0
-          ? renderKanbanEmpty('⚙️', 'Nothing in repair', 'Devices currently being worked on appear here.')
+          ? renderKanbanEmpty('', 'Nothing in repair', 'Devices currently being worked on appear here.')
           : repairing.map(renderTicketCard).join('')}
       </div>
 
       <!-- 4. Resolved -->
       <div class="kanban-column stage-resolved${resolved.length === 0 ? ' is-empty' : ''}">
         <div class="kanban-header">
-          <span class="kanban-header-label">✅ Resolved</span>
+          <span class="kanban-header-label">Resolved</span>
           <span class="kanban-count">${resolved.length}</span>
         </div>
         ${resolved.length === 0
-          ? renderKanbanEmpty('✅', 'Nothing resolved yet', 'Closed tickets are archived here.')
+          ? renderKanbanEmpty('', 'Nothing resolved yet', 'Closed tickets are archived here.')
           : resolved.map(renderTicketCard).join('')}
       </div>
     `}
@@ -3886,13 +4198,13 @@ function renderCustomerPortalView() {
   return `
     <div class="page-header-row">
       <div>
-        <h1 class="page-title">📱 Customer Portal & My Devices</h1>
+        <h1 class="page-title">Customer Portal & My Devices</h1>
         <p class="page-description">Welcome, <strong>${user ? user.fullName : 'Customer'}</strong> (${clientName}). Manage your institutional SmartBoards and service contracts.</p>
       </div>
       <div class="page-actions">
-        ${customerDevices.length > 0 ? `<button class="btn btn-primary" onclick="openCreateTicketModal('${firstDevId}')">🚨 Report Problem / Request Service</button>` : ''}
-        <button class="btn btn-secondary" onclick="openRentalModal()" style="background:linear-gradient(135deg,#8b5cf6,#7c3aed);color:#fff;font-weight:700;">📅 Book a Device</button>
-        <button class="btn btn-secondary btn-sm" onclick="fetchAllData()">🔄 Refresh</button>
+        ${customerDevices.length > 0 ? `<button class="btn btn-primary" onclick="openCreateTicketModal('${firstDevId}')">Report Problem / Request Service</button>` : ''}
+        <button class="btn btn-secondary" onclick="openRentalModal()" style="background:linear-gradient(135deg,#8b5cf6,#7c3aed);color:#fff;font-weight:700;">Book a Device</button>
+        <button class="btn btn-secondary btn-sm" onclick="fetchAllData()">Refresh</button>
       </div>
     </div>
 
@@ -3923,34 +4235,34 @@ function renderCustomerPortalView() {
     ${customerDevices.length === 0 ? `
       <!-- Empty Device State for Newly Created Customer Accounts -->
       <div class="glass-panel" style="text-align: center; padding: 48px 24px; margin-top: 20px; border: 1px dashed rgba(0, 242, 254, 0.3);">
-        <div style="font-size: 3.5rem; margin-bottom: 12px; filter: drop-shadow(0 0 15px rgba(0,242,254,0.4));">🖥️📦</div>
+        <div style="font-size: 3.5rem; margin-bottom: 12px; filter: drop-shadow(0 0 15px rgba(0,242,254,0.4));"></div>
         <h2 style="font-size: 1.4rem; font-weight: 800; color: var(--text-primary); margin-bottom: 8px;">No Millennium SmartBoards Assigned Yet</h2>
         <p style="color: var(--text-secondary); max-width: 580px; margin: 0 auto 20px; font-size: 0.95rem; line-height: 1.6;">
           Your customer account is verified and ready. Our administrative team assigns your purchased <strong>Millennium 86", 75", or 65" SmartBoards</strong> once your sales purchase order or serial numbers are verified.
         </p>
         <div style="display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; margin-bottom: 24px;">
           <span class="ft-spec-pill" style="padding: 6px 14px; background: rgba(0, 242, 254, 0.1); border: 1px solid rgba(0, 242, 254, 0.3);">
-            🏢 Client Entity: <strong>${user?.organization || 'Institutional Client'}</strong>
+            Client Entity: <strong>${user?.organization || 'Institutional Client'}</strong>
           </span>
           <span class="ft-spec-pill" style="padding: 6px 14px; background: rgba(168, 85, 247, 0.1); border: 1px solid rgba(168, 85, 247, 0.3);">
-            📍 Location: <strong>${user?.location || 'Metro Manila'}</strong>
+            Location: <strong>${user?.location || 'Metro Manila'}</strong>
           </span>
           <span class="ft-spec-pill" style="padding: 6px 14px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3);">
-            👤 Account: <strong>${user?.username || 'Customer'}</strong>
+            Account: <strong>${user?.username || 'Customer'}</strong>
           </span>
         </div>
         <div style="background: rgba(0,0,0,0.3); border-radius: 12px; padding: 18px; max-width: 540px; margin: 0 auto 24px; text-align: left; font-size: 0.85rem; border: 1px solid rgba(255,255,255,0.08);">
-          <div style="font-weight: 700; color: var(--neon-cyan); margin-bottom: 6px;">📞 Have your purchase invoice or serial number ready?</div>
+          <div style="font-weight: 700; color: var(--neon-cyan); margin-bottom: 6px;">Have your purchase invoice or serial number ready?</div>
           <div style="color: var(--text-muted); margin-bottom: 10px;">Please contact Brains Infinite Innovations support to immediately bind your purchased units to this portal:</div>
           <div style="display: flex; flex-direction: column; gap: 6px;">
             <div><strong style="color: var(--text-primary);">Hotline 1:</strong> <a href="tel:+639755826830" style="color: var(--neon-cyan); text-decoration: none;">+63 975 582 6830</a></div>
             <div><strong style="color: var(--text-primary);">Hotline 2:</strong> <a href="tel:+639815409835" style="color: var(--neon-cyan); text-decoration: none;">+63 981 540 9835</a></div>
-            <div style="color: var(--text-muted); font-size: 0.8rem; margin-top: 4px;">📍 Suite 1004 Atlanta Center, 31 Annapolis St., Greenhills, San Juan City Philippines</div>
+            <div style="color: var(--text-muted); font-size: 0.8rem; margin-top: 4px;">Suite 1004 Atlanta Center, 31 Annapolis St., Greenhills, San Juan City Philippines</div>
           </div>
         </div>
         <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
-          <button class="btn btn-secondary" onclick="fetchAllData()">🔄 Check Again for Linked Devices</button>
-          <button class="btn" style="background:linear-gradient(135deg,#8b5cf6,#7c3aed);color:#fff;font-weight:700;border:none;" onclick="openRentalModal()">📅 Book a Device for Rent</button>
+          <button class="btn btn-secondary" onclick="fetchAllData()">Check Again for Linked Devices</button>
+          <button class="btn" style="background:linear-gradient(135deg,#8b5cf6,#7c3aed);color:#fff;font-weight:700;border:none;" onclick="openRentalModal()">Book a Device for Rent</button>
         </div>
       </div>
     ` : `
@@ -3963,12 +4275,12 @@ function renderCustomerPortalView() {
           <div class="stat-card" style="border-color: rgba(0, 242, 254, 0.2);">
             <div class="stat-header">
               <span class="ticket-id">${dev.id}</span>
-              <span class="status-pill ${dev.status === 'online' ? 'status-online' : 'status-warning'}">
-                ${dev.status === 'online' ? '🟢 Online' : '⚠️ Warning'}
+              <span class="status-pill ${getDeviceDisplayStatus(dev) === 'online' ? 'status-online' : 'status-warning'}">
+                ${getDeviceDisplayStatus(dev) === 'online' ? 'Online' : '' + (getDeviceDisplayStatus(dev) === 'offline' ? 'Offline' : 'Warning')}
               </span>
             </div>
             <div style="font-size: 1.15rem; font-weight: 800; color: var(--text-primary);">${dev.model}</div>
-            <div style="font-size: 0.85rem; color: var(--text-secondary);">📍 ${dev.location}</div>
+            <div style="font-size: 0.85rem; color: var(--text-secondary);">${dev.location}</div>
             
             <div style="background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px; font-size: 0.78rem; display: flex; flex-direction: column; gap: 4px; margin-top: 8px;">
               <div><strong>Serial:</strong> <span style="font-family: var(--font-mono); color: var(--neon-cyan);">${dev.serialNumber}</span></div>
@@ -3978,9 +4290,9 @@ function renderCustomerPortalView() {
             </div>
 
             <div style="display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap;">
-              <button class="btn btn-secondary btn-sm" style="flex: 1;" onclick="openQRModal('${dev.id}')">📱 Digital ID</button>
+              <button class="btn btn-secondary btn-sm" style="flex: 1;" onclick="openQRModal('${dev.id}')">Digital ID</button>
               <button class="btn btn-primary btn-sm" style="flex: 1;" onclick="openCreateTicketModal('${dev.id}')">Request Tech</button>
-              <button class="btn btn-sm" style="flex: 1 1 100%; background:linear-gradient(135deg,#8b5cf6,#7c3aed);color:#fff;font-weight:700;border:none;" onclick="openRentalModal(null,'${dev.id}')">📅 Book This Device</button>
+              <button class="btn btn-sm" style="flex: 1 1 100%; background:linear-gradient(135deg,#8b5cf6,#7c3aed);color:#fff;font-weight:700;border:none;" onclick="openRentalModal(null,'${dev.id}')">Book This Device</button>
             </div>
           </div>
         `
@@ -3995,7 +4307,7 @@ function renderCustomerPortalView() {
     <!-- Downloadable Resources & Manuals -->
     <div class="glass-panel">
       <div class="panel-header">
-        <div class="panel-title">📚 Documentation, Drivers & Whiteboard Software</div>
+        <div class="panel-title">Documentation, Drivers & Whiteboard Software</div>
       </div>
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;">
         <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); padding: 16px; border-radius: 12px; display: flex; align-items: center; justify-content: space-between;">
@@ -4003,7 +4315,7 @@ function renderCustomerPortalView() {
             <strong style="display: block;">Millennium 86"/75" User Manual (PDF)</strong>
             <span style="font-size: 0.78rem; color: var(--text-muted);">Hardware setup, touch calibration & dual-OS guide</span>
           </div>
-          <button class="btn btn-secondary btn-sm" onclick="showToast('Downloading Millennium User Manual (PDF)...', 'success')">⬇️ PDF</button>
+          <button class="btn btn-secondary btn-sm" onclick="showToast('Downloading Millennium User Manual (PDF)...', 'success')">PDF</button>
         </div>
 
         <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); padding: 16px; border-radius: 12px; display: flex; align-items: center; justify-content: space-between;">
@@ -4011,7 +4323,7 @@ function renderCustomerPortalView() {
             <strong style="display: block;">Intel OPS Windows 11 Driver Pack</strong>
             <span style="font-size: 0.78rem; color: var(--text-muted);">Full GPU, chipset & optical touch drivers</span>
           </div>
-          <button class="btn btn-secondary btn-sm" onclick="showToast('Downloading OPS Driver Pack (ZIP)...', 'success')">⬇️ Drivers</button>
+          <button class="btn btn-secondary btn-sm" onclick="showToast('Downloading OPS Driver Pack (ZIP)...', 'success')">Drivers</button>
         </div>
 
         <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); padding: 16px; border-radius: 12px; display: flex; align-items: center; justify-content: space-between;">
@@ -4019,7 +4331,7 @@ function renderCustomerPortalView() {
             <strong style="display: block;">Millennium Whiteboard Suite v5.1</strong>
             <span style="font-size: 0.78rem; color: var(--text-muted);">Android interactive whiteboard & annotation APK</span>
           </div>
-          <button class="btn btn-secondary btn-sm" onclick="showToast('Downloading Whiteboard Suite v5.1...', 'success')">⬇️ APK</button>
+          <button class="btn btn-secondary btn-sm" onclick="showToast('Downloading Whiteboard Suite v5.1...', 'success')">APK</button>
         </div>
       </div>
     </div>
@@ -4045,12 +4357,12 @@ function renderCustomerBookings(user) {
   return `
     <div class="glass-panel" style="margin-top: 20px;">
       <div class="panel-header">
-        <div class="panel-title">📅 My Rental Bookings</div>
-        <button class="btn btn-primary btn-sm" onclick="openRentalModal()">➕ New Booking</button>
+        <div class="panel-title">My Rental Bookings</div>
+        <button class="btn btn-primary btn-sm" onclick="openRentalModal()">New Booking</button>
       </div>
       ${myBookings.length === 0 ? `
         <div style="text-align:center;padding:32px 16px;">
-          <div style="font-size:2.5rem;margin-bottom:8px;">📅</div>
+          <div style="font-size:2.5rem;margin-bottom:8px;"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-calendar"></use></svg></div>
           <p style="color:var(--text-secondary);font-size:0.9rem;">You have no rental bookings yet. Click <strong>New Booking</strong> to rent a Millennium SmartBoard for your event or project.</p>
         </div>
       ` : `
@@ -4061,16 +4373,16 @@ function renderCustomerBookings(user) {
             return `
               <div style="background:var(--bg-surface,#15151f);border:1px solid var(--border-subtle,rgba(255,255,255,0.08));border-radius:12px;padding:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
                 <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
-                  <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#8b5cf6,#7c3aed);display:flex;align-items:center;justify-content:center;font-size:1.4rem;flex-shrink:0;">🖥️</div>
+                  <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#8b5cf6,#7c3aed);display:flex;align-items:center;justify-content:center;font-size:1.4rem;flex-shrink:0;"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-monitor"></use></svg></div>
                   <div>
                     <div style="font-weight:700;font-size:0.95rem;color:var(--text-primary);">${r.deviceModel || 'Millennium SmartBoard'}</div>
                     <div style="font-size:0.78rem;color:var(--text-muted);">${r.ticketNumber || r.rentalNumber || ''} · ${days} day${days > 1 ? 's' : ''} · ${r.startDate} → ${r.endDate}</div>
-                    ${r.purpose ? `<div style="font-size:0.78rem;color:var(--text-secondary);margin-top:2px;">📌 ${r.purpose}</div>` : ''}
+                    ${r.purpose ? `<div style="font-size:0.78rem;color:var(--text-secondary);margin-top:2px;">${r.purpose}</div>` : ''}
                   </div>
                 </div>
                 <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
                   <span style="padding:5px 12px;border-radius:20px;font-size:0.75rem;font-weight:700;background:${sc.bg};border:1px solid ${sc.border};color:${sc.text};">${r.status}</span>
-                  <button class="btn btn-secondary btn-sm" onclick="viewRentalDetail('${r.id}')">📋 Details</button>
+                  <button class="btn btn-secondary btn-sm" onclick="viewRentalDetail('${r.id}')">Details</button>
                 </div>
               </div>
             `;
@@ -4116,20 +4428,20 @@ function renderWarrantyView() {
   return `
     <div class="page-header-row">
       <div>
-        <h1 class="page-title">📅 ${isCustomer ? 'My Warranty Coverage' : 'Warranty & RMA Management'}</h1>
+        <h1 class="page-title">${isCustomer ? 'My Warranty Coverage' : 'Warranty & RMA Management'}</h1>
         <p class="page-description">${isCustomer ? 'View your active SmartBoard warranty contracts and coverage details.' : 'Automated eligibility verification, contract duration tracking, and replacement coverage.'}</p>
       </div>
       <div class="page-actions">
         <button class="btn btn-primary" onclick="openWarrantyScannerModal()">
-          📷 Scan Warranty
+          Scan Warranty
         </button>
       </div>
     </div>
-    ${isCustomer ? `<div class="role-info-banner">📋 <strong>Customer View:</strong> Showing your registered warranty contracts only. Contact support for RMA or replacement requests.</div>` : ''}
+    ${isCustomer ? `<div class="role-info-banner"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-clipboard"></use></svg><strong>Customer View:</strong> Showing your registered warranty contracts only. Contact support for RMA or replacement requests.</div>` : ''}
 
     <!-- Quick Warranty Checker Box -->
     <div class="glass-panel" style="background: linear-gradient(135deg, rgba(79, 172, 254, 0.1) 0%, rgba(17, 24, 39, 0.8) 100%);">
-      <h2 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 12px;">🔍 Instant Warranty Coverage Check</h2>
+      <h2 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 12px;">Instant Warranty Coverage Check</h2>
       <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 14px;">
         Enter any Millennium Device ID to instantly check warranty expiration and on-site repair coverage before dispatching technicians.
       </p>
@@ -4172,7 +4484,7 @@ function renderWarrantyView() {
                 <td>${w.expiryDate}</td>
                 <td>
                   <span class="status-pill ${w.status === 'Under Warranty' ? 'status-online' : 'status-offline'}">
-                    ${w.status === 'Under Warranty' ? '🟢 Active' : '⚠️ Expired'}
+                    ${w.status === 'Under Warranty' ? 'Active' : 'Expired'}
                   </span>
                 </td>
                 <td>
@@ -4186,7 +4498,7 @@ function renderWarrantyView() {
                     title="Generate Barcode"
                     style="padding: 6px 12px; font-size: 0.8rem;"
                   >
-                    📊 Barcode
+                    Barcode
                   </button>
                 </td>
               </tr>
@@ -4253,26 +4565,26 @@ function renderDirectoryView() {
   return `
     <div class="page-header-row">
       <div>
-        <h1 class="page-title">👥 Directory</h1>
+        <h1 class="page-title">Directory</h1>
         <p class="page-description">Everyone with an account on this system. Click any person to see their full profile and the devices they hold.</p>
       </div>
       <div class="page-actions">
-        <button class="btn btn-secondary btn-sm" onclick="fetchAllData()">🔄 Refresh</button>
+        <button class="btn btn-secondary btn-sm" onclick="fetchAllData()">Refresh</button>
       </div>
     </div>
 
     <div class="glass-panel directory-toolbar">
       <div class="search-input-box">
-        <span class="search-icon">🔍</span>
+        <span class="search-icon"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-search"></use></svg></span>
         <input type="text" class="search-input"
           placeholder="Search by name, role, location or organization..."
           value="${escapeHtml(state.searchQuery || '')}" oninput="handleSearch(this.value)" />
       </div>
       <div class="dm-filter-bar directory-role-bar">
-        ${roleChip('all', '👥 Everyone', roleCounts.all)}
-        ${roleChip('admin', '🛡️ Admins', roleCounts.admin)}
-        ${roleChip('technician', '🔧 Technicians', roleCounts.technician)}
-        ${roleChip('customer', '🏢 Customers', roleCounts.customer)}
+        ${roleChip('all', 'Everyone', roleCounts.all)}
+        ${roleChip('admin', 'Admins', roleCounts.admin)}
+        ${roleChip('technician', 'Technicians', roleCounts.technician)}
+        ${roleChip('customer', 'Customers', roleCounts.customer)}
       </div>
     </div>
 
@@ -4284,7 +4596,7 @@ function renderDirectoryView() {
 
     ${sorted.length === 0
       ? `<div class="glass-panel directory-empty">
-           <div class="directory-empty-ico" aria-hidden="true">🔍</div>
+           <div class="directory-empty-ico" aria-hidden="true"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-search"></use></svg></div>
            <h3 class="directory-empty-title">${nothingAtAll ? 'Nobody here yet' : 'No one matches'}</h3>
            <p class="directory-empty-text">
              ${nothingAtAll
@@ -4299,7 +4611,7 @@ function renderDirectoryView() {
          </div>`
       : `<div class="directory-grid">
           ${sorted.map((p) => {
-            const meta = ROLE_META[p.role] || { icon: '👤', name: p.role || 'User' };
+            const meta = ROLE_META[p.role] || { icon: 'user', name: p.role || 'User' };
             const isMe = p.id === me.id;
             const initials = String(p.fullName || '?').trim().charAt(0).toUpperCase();
             const held = countDevicesForPerson(p);
@@ -4316,11 +4628,11 @@ function renderDirectoryView() {
                     ${escapeHtml(p.fullName)}
                     ${isMe ? '<span class="directory-you">You</span>' : ''}
                   </div>
-                  <div class="directory-role">${meta.icon} ${escapeHtml(meta.name)}</div>
+                  <div class="directory-role">${ico(meta.icon)} <span>${escapeHtml(meta.name)}</span></div>
                   <div class="directory-meta">
-                    <span title="Location">📍 ${escapeHtml(p.location || '—')}</span>
-                    ${p.organization ? `<span title="Organization">🏢 ${escapeHtml(p.organization)}</span>` : ''}
-                    ${held > 0 ? `<span title="Devices held">🖥️ ${held} device${held === 1 ? '' : 's'}</span>` : ''}
+                    <span title="Location">${escapeHtml(p.location || '—')}</span>
+                    ${p.organization ? `<span title="Organization">${escapeHtml(p.organization)}</span>` : ''}
+                    ${held > 0 ? `<span title="Devices held">${held} device${held === 1 ? '' : 's'}</span>` : ''}
                   </div>
                 </div>
                 <span class="presence-pill ${p.online ? 'is-online' : 'is-offline'}"
@@ -4363,9 +4675,10 @@ function countDevicesForPerson(person) {
   return devicesForPerson(person).length;
 }
 
+/** Plain-text role label. Callers escape it, so no markup here. */
 function roleDisplay(role) {
-  const meta = ROLE_META[role] || { icon: '👤', name: role || 'User' };
-  return `${meta.icon} ${meta.name}`;
+  const meta = ROLE_META[role] || { name: role || 'User' };
+  return meta.name;
 }
 
 function formatJoined(value) {
@@ -4400,14 +4713,14 @@ function openDirectoryProfile(personId) {
   const heldIds = new Set(held.map((d) => String(d.id)));
   const theirTickets = (state.tickets || []).filter((t) => heldIds.has(String(t.deviceId)));
   const openTickets = theirTickets.filter((t) => t.status !== 'Resolved' && t.status !== 'Closed');
-  const onlineDevices = held.filter((d) => d.status === 'online').length;
+  const onlineDevices = held.filter((d) => getDeviceDisplayStatus(d) === 'online').length;
 
   const statusPill = (s) => {
     const map = {
-      online: ['status-online', '🟢 Online'],
-      offline: ['status-offline', '🔴 Offline'],
-      warning: ['status-warning', '⚠️ Needs attention'],
-      maintenance: ['status-maintenance', '🔧 In service'],
+      online: ['status-online', 'Online'],
+      offline: ['status-offline', 'Offline'],
+      warning: ['status-warning', 'Needs attention'],
+      maintenance: ['status-maintenance', 'In service'],
     };
     const [cls, label] = map[s] || ['status-offline', s || 'Unknown'];
     return `<span class="status-pill ${cls}" style="font-size:0.7rem;">${label}</span>`;
@@ -4421,7 +4734,7 @@ function openDirectoryProfile(personId) {
          aria-label="Profile for ${escapeHtml(p.fullName)}">
 
       <button type="button" class="dir-profile-close" id="dirProfileClose"
-        aria-label="Close profile">✕</button>
+        aria-label="Close profile"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg></button>
 
       <div class="dir-profile-head">
         <div class="dir-profile-avatar directory-avatar--${escapeHtml(p.role || 'user')}" aria-hidden="true">
@@ -4455,7 +4768,7 @@ function openDirectoryProfile(personId) {
       </div>
 
       <div class="dir-profile-section">
-        <div class="dir-profile-section-title">📇 Contact</div>
+        <div class="dir-profile-section-title">Contact</div>
         <div class="dir-profile-rows">
           <div class="dir-profile-row">
             <span class="dir-profile-key">Email</span>
@@ -4475,7 +4788,7 @@ function openDirectoryProfile(personId) {
       </div>
 
       <div class="dir-profile-section">
-        <div class="dir-profile-section-title">🏢 Work</div>
+        <div class="dir-profile-section-title">Work</div>
         <div class="dir-profile-rows">
           <div class="dir-profile-row">
             <span class="dir-profile-key">Organization</span>
@@ -4507,7 +4820,7 @@ function openDirectoryProfile(personId) {
 
       <div class="dir-profile-section">
         <div class="dir-profile-section-title">
-          🖥️ Devices held
+          Devices held
           ${held.length > 0 ? `<span class="dir-profile-count">${held.length}</span>` : ''}
         </div>
         ${held.length === 0
@@ -4524,8 +4837,8 @@ function openDirectoryProfile(personId) {
                      <span class="dir-profile-device-model">${escapeHtml(d.model || '')}</span>
                    </div>
                    <div class="dir-profile-device-meta">
-                     ${statusPill(d.status)}
-                     <span class="dir-profile-device-loc">📍 ${escapeHtml(d.location || '—')}</span>
+                     ${statusPill(getDeviceDisplayStatus(d))}
+                     <span class="dir-profile-device-loc">${escapeHtml(d.location || '—')}</span>
                    </div>
                  </div>
                `).join('')}
@@ -4533,7 +4846,7 @@ function openDirectoryProfile(personId) {
       </div>
 
       <div class="modal-footer dir-profile-foot">
-        ${p.email ? `<a class="btn btn-secondary" href="mailto:${escapeHtml(p.email)}">✉️ Send email</a>` : ''}
+        ${p.email ? `<a class="btn btn-secondary" href="mailto:${escapeHtml(p.email)}">Send email</a>` : ''}
         <button type="button" class="btn btn-primary" id="dirProfileDone">Close</button>
       </div>
     </div>
@@ -4558,64 +4871,154 @@ function openDirectoryProfile(personId) {
 }
 
 // 6. Inventory & Spare Parts Management View
+/* Part artwork.
+   Keyed by part code so the card does not depend on a stored image URL — the
+   inventory rows carry only catalogue data. Anything unrecognised falls back to
+   a neutral placeholder rather than borrowing another part's photo.
+
+   The artwork is a vector reproduction of the actual hardware shown in the
+   Millennium product film, so the versions are appended as a query string —
+   the filenames stay stable but a redraw still reaches clients that already
+   cached the old asset. */
+const PART_IMAGE_VERSION = '20261018a';
+const PART_IMAGES = {
+  'CAM-4K-AI':  '/images/parts/cam-4k-ai.svg',
+  'PEN-DUO-MAG': '/images/parts/pen-duo-mag.svg',
+  'PWR-BD-350W': '/images/parts/pwr-bd-350w.svg',
+  'RC-MIL-BT':  '/images/parts/rc-mil-bt.svg',
+  'OPS-I7-12G': '/images/parts/ops-i7-12g.svg',
+  'TF-86-PRO':  '/images/parts/tf-86-pro.svg',
+};
+
+const PART_CATEGORY_ICONS = {
+  'AV Equipment': '',
+  'Accessories': '',
+  'Power & Mainboard': '',
+  'Computing (OPS)': '',
+  'Display & Touch': '',
+};
+
+function getPartImage(part) {
+  if (!part) return null;
+  if (part.imageUrl) return part.imageUrl;
+  const code = String(part.partCode || '').trim().toUpperCase();
+  const src = PART_IMAGES[code];
+  return src ? `${src}?v=${PART_IMAGE_VERSION}` : null;
+}
+
+function getPartCategoryIcon(category) {
+  return PART_CATEGORY_ICONS[category] || '';
+}
+
+function formatUnitCost(value) {
+  const n = Number(value);
+  return (Number.isFinite(n) ? n : 0).toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
+}
+
+/** Mirrors the status rule the server applies, for optimistic redraws. */
+function stockStatusFor(quantity, minThreshold) {
+  const q = Number(quantity) || 0;
+  const min = Number(minThreshold) || 5;
+  if (q <= 0) return 'Out of Stock';
+  return q < min ? 'Low Stock' : 'In Stock';
+}
+
+function inventoryTone(status) {
+  return status === 'In Stock' ? 'is-in' : status === 'Low Stock' ? 'is-low' : 'is-out';
+}
+
+/* One card. Kept separate from the view so a price edit or a restock can repaint
+   just the grid — a full fetchAllData() would re-render the page and throw away
+   the scroll position and any in-progress inline editor. */
+function renderInventoryCard(part, isAdmin) {
+  const tone = inventoryTone(part.status);
+  const statusPillClass =
+    part.status === 'In Stock' ? 'status-online'
+      : part.status === 'Low Stock' ? 'status-warning' : 'status-offline';
+
+  // Fill bar: three times the minimum threshold is the "comfortable"
+  // ceiling, so a part sitting at its minimum reads as one third full.
+  const ceiling = Math.max(part.minThreshold * 3, 1);
+  const fillPct = Math.max(4, Math.min(100, Math.round((part.stockQuantity / ceiling) * 100)));
+
+  const img = getPartImage(part);
+  const catIcon = getPartCategoryIcon(part.category);
+  const priceText = `<span class="currency-symbol">₱</span>${formatUnitCost(part.unitCost)}`;
+
+  return `
+          <article class="inv-card ${tone}" data-part-id="${part.id}">
+            <div class="inv-media">
+              ${img
+                ? `<img src="${img}" alt="${escapeHtml(part.name)}" loading="lazy" decoding="async" />`
+                : `<span class="inv-media-fallback" aria-hidden="true"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-package"></use></svg></span>`}
+              <span class="status-pill ${statusPillClass} inv-media-pill">${part.status}</span>
+            </div>
+
+            <div class="inv-body">
+              <div class="inv-code">${escapeHtml(part.partCode)}</div>
+              <h3 class="inv-part-name">${escapeHtml(part.name)}</h3>
+              <div class="inv-part-category"><span aria-hidden="true">${catIcon}</span>${escapeHtml(part.category)}</div>
+
+              <div class="inv-stock-box">
+                <div class="inv-stock-line">
+                  <span class="inv-stock-number">${part.stockQuantity}</span>
+                  <span class="inv-stock-hint">units remaining<br /><small>(Min: ${part.minThreshold})</small></span>
+                </div>
+                <div class="inv-stock-bar"><span style="width:${fillPct}%"></span></div>
+              </div>
+
+              <div class="inv-card-foot">
+                <span class="inv-unit-cost">Unit Cost<br /><span class="inv-price-host" data-price-for="${part.id}">${
+                  isAdmin
+                    ? `<button type="button" class="inv-price-btn" onclick="editPartPrice('${part.id}')"
+                         title="Edit unit cost" aria-label="Edit unit cost for ${escapeHtml(part.name)}"><strong>${priceText}</strong><svg class="inv-price-pencil" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg></button>`
+                    : `<strong>${priceText}</strong>`
+                }</span></span>
+                ${isAdmin
+                  ? `<button class="inv-restock-btn" onclick="restockOne('${part.id}')" title="Add 1 unit to stock">Restock<span class="inv-restock-plus">+1</span></button>`
+                  : `<span class="status-pill ${statusPillClass}" style="font-size:0.72rem;">${part.status}</span>`}
+              </div>
+
+              ${isAdmin ? `
+                <div class="inv-delete-row">
+                  <button class="inv-delete-btn" onclick="deleteInventoryPart('${part.id}')">Delete Part</button>
+                </div>
+              ` : ''}
+            </div>
+          </article>
+        `;
+}
+
+function renderInventoryCards() {
+  const isAdmin = state.currentRole === 'admin';
+  return (state.inventory || []).map((part) => renderInventoryCard(part, isAdmin)).join('');
+}
+
+/** Repaint the grid in place — no refetch, no scroll jump. */
+function refreshInventoryGrid() {
+  const grid = document.querySelector('.inv-grid');
+  if (!grid) return;
+  grid.innerHTML = renderInventoryCards();
+}
+
 function renderInventoryView() {
   const isAdmin = state.currentRole === 'admin';
   return `
     <div class="page-header-row">
       <div>
-        <h1 class="page-title">📦 Spare Parts & Hardware Inventory</h1>
+        <h1 class="page-title">Spare Parts & Hardware Inventory</h1>
         <p class="page-description">Real-time stock tracking for Millennium replacements, touch frames, OPS boards, and accessories.</p>
       </div>
       <div class="page-actions">
-        ${isAdmin ? `<button class="btn btn-primary" onclick="openRestockModal()">📦 Restock Shipment</button>` : `<span style="font-size:0.82rem;color:var(--text-muted);">🔍 View only. Deduct parts via a ticket.</span>`}
+        ${isAdmin ? `<button class="btn btn-primary" onclick="openRestockModal()">Restock Shipment</button>` : `<span style="font-size:0.82rem;color:var(--text-muted);">View only. Deduct parts via a ticket.</span>`}
       </div>
     </div>
 
     <!-- Inventory Cards -->
-    <div class="stat-cards-grid">
-      ${state.inventory
-        .map((part) => {
-          const statusClass =
-            part.status === 'In Stock'
-              ? 'card-online'
-              : part.status === 'Low Stock'
-              ? 'card-warning'
-              : 'card-offline';
-
-          return `
-          <div class="stat-card ${statusClass}">
-            <div class="stat-header">
-              <span class="ticket-id">${part.partCode}</span>
-              <span class="status-pill ${part.status === 'In Stock' ? 'status-online' : part.status === 'Low Stock' ? 'status-warning' : 'status-offline'}">
-                ${part.status}
-              </span>
-            </div>
-            <div style="font-size: 1.1rem; font-weight: 800;">${part.name}</div>
-            <div style="font-size: 0.8rem; color: var(--text-muted);">${part.category}</div>
-            
-            <div style="display: flex; align-items: baseline; gap: 8px; margin: 8px 0;">
-              <span style="font-size: 2rem; font-weight: 800; font-family: 'JetBrains Mono';">${part.stockQuantity}</span>
-              <span style="font-size: 0.8rem; color: var(--text-muted);">units remaining (Min: ${part.minThreshold})</span>
-            </div>
-
-            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem;">
-              <span>Unit Cost: <strong><span class="currency-symbol">₱</span>${part.unitCost.toLocaleString()}</strong></span>
-              ${isAdmin ? `<button class="btn btn-secondary btn-sm" onclick="quickAdjustStock('${part.id}', ${part.stockQuantity + 5})">+5 Restock</button>` : `<span class="status-pill ${part.status === 'In Stock' ? 'status-online' : 'status-warning'}" style="font-size:0.72rem;">${part.status}</span>`}
-            </div>
-            ${isAdmin ? `
-              <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border-subtle,rgba(255,255,255,0.08));">
-                <button onclick="deleteInventoryPart('${part.id}')" style="
-                  width:100%;padding:7px;border-radius:7px;border:1px solid #f43f5e55;
-                  background:rgba(244,63,94,0.08);color:#f43f5e;cursor:pointer;
-                  font-size:0.78rem;font-weight:700;transition:all 0.2s;
-                ">🗑️ Delete Part</button>
-              </div>
-            ` : ''}
-          </div>
-        `;
-        })
-        .join('')}
-    </div>
+    <div class="inv-grid">${renderInventoryCards()}</div>
   `;
 }
 
@@ -4624,11 +5027,11 @@ function renderCmsView() {
   return `
     <div class="page-header-row">
       <div>
-        <h1 class="page-title">📢 Digital Display Content CMS</h1>
+        <h1 class="page-title">Digital Display Content CMS</h1>
         <p class="page-description">Broadcast announcements, campus schedules, and corporate welcome slides directly to Millennium SmartBoards.</p>
       </div>
       <div class="page-actions">
-        <button class="btn btn-primary" onclick="openCreateCmsModal()">➕ Publish Content</button>
+        <button class="btn btn-primary" onclick="openCreateCmsModal()">Publish Content</button>
       </div>
     </div>
 
@@ -4673,11 +5076,11 @@ function renderPredictiveView() {
   return `
     <div class="page-header-row">
       <div>
-        <h1 class="page-title">🤖 AI Predictive Maintenance Engine</h1>
+        <h1 class="page-title">AI Predictive Maintenance Engine</h1>
         <p class="page-description">Machine learning telemetry analysis predicts component degradation and hardware failure *before* customer outage.</p>
       </div>
       <div class="page-actions">
-        <button class="btn btn-primary" onclick="openAnomalySimulatorModal()">⚡ Fault Injection Simulator</button>
+        <button class="btn btn-primary" onclick="openAnomalySimulatorModal()">Fault Injection Simulator</button>
       </div>
     </div>
 
@@ -4689,7 +5092,7 @@ function renderPredictiveView() {
         <div class="predictive-alert-card ${alert.riskLevel === 'High' ? 'high-risk' : ''}">
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
             <div style="display: flex; align-items: center; gap: 12px;">
-              <span style="font-size: 1.8rem;">⚠️</span>
+              <span style="font-size: 1.8rem;"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-alert"></use></svg></span>
               <div>
                 <h3 style="font-size: 1.2rem; font-weight: 800; color: var(--text-primary);">
                   ${alert.riskFactor}
@@ -4731,9 +5134,9 @@ function renderPredictiveView() {
           </div>
 
           <div style="display: flex; justify-content: flex-end; gap: 10px;">
-            <button class="btn btn-secondary btn-sm" onclick="openRemoteControlModal('${alert.deviceId}')">🎮 Run Remote Diagnostic</button>
+            <button class="btn btn-secondary btn-sm" onclick="openRemoteControlModal('${alert.deviceId}')">Run Remote Diagnostic</button>
             <button class="btn btn-primary btn-sm" onclick="createPreventiveTicketFromAlert('${alert.deviceId}', '${alert.riskFactor.replace(/'/g, "\\'")}')">
-              🚨 Dispatch Preventive Technician
+              Dispatch Preventive Technician
             </button>
           </div>
         </div>
@@ -4764,11 +5167,11 @@ function renderAnalyticsView() {
   return `
     <div class="page-header-row">
       <div>
-        <h1 class="page-title">📈 Business & Reliability Analytics</h1>
+        <h1 class="page-title">Business & Reliability Analytics</h1>
         <p class="page-description">Hardware performance insights, sales distribution, and after-sales failure mode Pareto charts.</p>
       </div>
       <div class="page-actions">
-        <button class="btn btn-primary" onclick="exportAnalyticsReport()">📄 Export Executive Summary</button>
+        <button class="btn btn-primary" onclick="exportAnalyticsReport()">Export Executive Summary</button>
       </div>
     </div>
 
@@ -4777,7 +5180,7 @@ function renderAnalyticsView() {
       <!-- Popular Models -->
       <div class="glass-panel">
         <div class="panel-header">
-          <div class="panel-title">🏆 Popular Display Sizes Sold</div>
+          <div class="panel-title">Popular Display Sizes Sold</div>
           <span style="font-size: 0.8rem; color: var(--text-muted);">Total 327 Units</span>
         </div>
         <div style="display: flex; flex-direction: column; gap: 16px;">
@@ -4786,7 +5189,7 @@ function renderAnalyticsView() {
               (p, idx) => `
             <div>
               <div style="display: flex; justify-content: space-between; font-weight: 700; margin-bottom: 6px;">
-                <span>${idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'} ${p.model}</span>
+                <span>${idx === 0 ? '' : idx === 1 ? '' : ''} ${p.model}</span>
                 <span style="color: var(--neon-cyan);">${p.count} units (${p.percentage}%)</span>
               </div>
               <div style="background: rgba(255,255,255,0.08); height: 10px; border-radius: 5px; overflow: hidden;">
@@ -4802,7 +5205,7 @@ function renderAnalyticsView() {
       <!-- Failure Modes Pareto -->
       <div class="glass-panel">
         <div class="panel-header">
-          <div class="panel-title">🔍 Common Support Issues (Pareto)</div>
+          <div class="panel-title">Common Support Issues (Pareto)</div>
           <span style="font-size: 0.8rem; color: var(--text-muted);">Service Log Breakdown</span>
         </div>
         <div style="display: flex; flex-direction: column; gap: 16px;">
@@ -4828,7 +5231,7 @@ function renderAnalyticsView() {
     <!-- Service Level Performance Metrics -->
     <div class="glass-panel">
       <div class="panel-header">
-        <div class="panel-title">🛡️ After-Sales Operations Efficiency</div>
+        <div class="panel-title">After-Sales Operations Efficiency</div>
       </div>
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; text-align: center;">
         <div style="background: var(--bg-surface); padding: 20px; border-radius: 12px; border: 1px solid var(--border-subtle);">
@@ -4862,9 +5265,9 @@ function renderDataManagerView() {
   const subTab = state.dataManagerSubTab || 'users';
 
   const tabs = [
-    { id: 'users',      icon: '👥', label: 'System Users' },
-    { id: 'customers',  icon: '🏢', label: 'Registered Customers' },
-    { id: 'allocation', icon: '🔗', label: 'Device Allocation' },
+    { id: 'users',      icon: '', label: 'System Users' },
+    { id: 'customers',  icon: '', label: 'Registered Customers' },
+    { id: 'allocation', icon: '', label: 'Device Allocation' },
   ];
 
   // Counts live on the tab that owns them. 'allocation' has no count of its own
@@ -4877,7 +5280,7 @@ function renderDataManagerView() {
   return `
     <div class="page-header-row">
       <div>
-        <h1 class="page-title">🗄️ Data Manager</h1>
+        <h1 class="page-title">Data Manager</h1>
         <p class="page-description">Manage system users, customer organizations, and assign purchased devices to customers.</p>
       </div>
     </div>
@@ -4949,8 +5352,8 @@ function renderDMUsersTab() {
   return `
     <div class="glass-panel">
       <div class="panel-header" style="margin-bottom: 16px;">
-        <div class="panel-title">👥 System Users</div>
-        <button class="btn btn-primary btn-sm" onclick="openCreateUserModal()">➕ Create User</button>
+        <div class="panel-title">System Users</div>
+        <button class="btn btn-primary btn-sm" onclick="openCreateUserModal()">Create User</button>
       </div>
 
       <div class="data-table-wrapper">
@@ -4983,14 +5386,14 @@ function renderDMUsersTab() {
                 <td><div class="dm-ellipsis" title="${u.email || ''}">${u.email || '—'}</div></td>
                 <td>
                   <div class="dm-ellipsis" title="${u.organization || ''}">${u.organization || '—'}</div>
-                  <div class="dm-sub">📍 ${u.location || '—'}</div>
+                  <div class="dm-sub">${u.location || '—'}</div>
                 </td>
                 <td class="col-actions">
                   <div class="dm-actions">
                     <button class="action-btn" title="Edit user" aria-label="Edit ${u.username}"
-                      onclick="openEditUserModal('${u.id}')">✏️</button>
+                      onclick="openEditUserModal('${u.id}')"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-pencil"></use></svg></button>
                     <button class="action-btn action-btn-danger" title="Delete user" aria-label="Delete ${u.username}"
-                      onclick="deleteUser('${u.id}','${(u.fullName||u.username).replace(/'/g,"\\'")}')">🗑️</button>
+                      onclick="deleteUser('${u.id}','${(u.fullName||u.username).replace(/'/g,"\\'")}')"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-trash"></use></svg></button>
                   </div>
                 </td>
               </tr>
@@ -5044,16 +5447,16 @@ function renderDMCustomersTab() {
   return `
     <div class="glass-panel">
       <div class="panel-header" style="margin-bottom: 16px;">
-        <div class="panel-title">👤 Registered Customers</div>
+        <div class="panel-title">Registered Customers</div>
         <span style="font-size:0.82rem;color:var(--text-muted);">
           ${rows.length} of ${registeredCustomers.length} account${registeredCustomers.length !== 1 ? 's' : ''}
         </span>
       </div>
 
       <div class="dm-filter-bar">
-        ${filterChip('all', '👥 All clients', allRows.length)}
-        ${filterChip('school', '🏫 Schools', schoolCount)}
-        ${filterChip('corporate', '🏢 Corporate', corpCount)}
+        ${filterChip('all', 'All clients', allRows.length)}
+        ${filterChip('school', 'Schools', schoolCount)}
+        ${filterChip('corporate', 'Corporate', corpCount)}
       </div>
 
       <p style="font-size:0.82rem;color:var(--text-muted);margin:0 0 16px;">
@@ -5091,10 +5494,10 @@ function renderDMCustomersTab() {
                     ? `<div class="dm-org-line">
                          <span class="dm-ellipsis" title="${org.organizationName}">${org.organizationName}</span>
                          <span class="status-pill ${org.clientType === 'school' ? 'status-online' : 'status-maintenance'}" style="font-size:0.7rem;">
-                           ${org.clientType === 'school' ? '🏫 School' : '🏢 Corporate'}
+                           ${org.clientType === 'school' ? 'School' : 'Corporate'}
                          </span>
                        </div>
-                       <div class="dm-sub">📍 ${u.location || '—'}</div>`
+                       <div class="dm-sub">${u.location || '—'}</div>`
                     : `<div class="dm-ellipsis" style="color:#f59e0b;">${orgName || 'Not linked'}</div>
                        <div class="dm-sub">No customer record</div>`}
                 </td>
@@ -5137,22 +5540,22 @@ function renderDMAllocationTab() {
       <!-- Summary Bar -->
       <div class="stat-cards-grid alloc-stats">
         <div class="stat-card">
-          <div class="stat-header"><span class="stat-label">Total Devices</span><div class="stat-icon" style="background:rgba(0,242,254,0.1);color:var(--neon-cyan);">🖥️</div></div>
+          <div class="stat-header"><span class="stat-label">Total Devices</span><div class="stat-icon" style="background:rgba(0,242,254,0.1);color:var(--neon-cyan);"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-monitor"></use></svg></div></div>
           <div class="stat-value" style="color:var(--neon-cyan);">${devices.length}</div>
           <div class="stat-footer">All registered SmartBoards</div>
         </div>
         <div class="stat-card">
-          <div class="stat-header"><span class="stat-label">Assigned</span><div class="stat-icon" style="background:rgba(16,185,129,0.1);color:#10b981;">✅</div></div>
+          <div class="stat-header"><span class="stat-label">Assigned</span><div class="stat-icon" style="background:rgba(16,185,129,0.1);color:#10b981;"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-check-circle"></use></svg></div></div>
           <div class="stat-value" style="color:#10b981;">${assignedDevices.length}</div>
           <div class="stat-footer">Linked to a customer</div>
         </div>
         <div class="stat-card">
-          <div class="stat-header"><span class="stat-label">Unassigned</span><div class="stat-icon" style="background:rgba(245,158,11,0.1);color:#f59e0b;">📦</div></div>
+          <div class="stat-header"><span class="stat-label">Unassigned</span><div class="stat-icon" style="background:rgba(245,158,11,0.1);color:#f59e0b;"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-package"></use></svg></div></div>
           <div class="stat-value" style="color:#f59e0b;">${unassignedDevices.length}</div>
           <div class="stat-footer">Pending customer assignment</div>
         </div>
         <div class="stat-card">
-          <div class="stat-header"><span class="stat-label">Customers</span><div class="stat-icon" style="background:rgba(168,85,247,0.1);color:#a855f7;">🏢</div></div>
+          <div class="stat-header"><span class="stat-label">Customers</span><div class="stat-icon" style="background:rgba(168,85,247,0.1);color:#a855f7;"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-building"></use></svg></div></div>
           <div class="stat-value" style="color:#a855f7;">${customers.length}</div>
           <div class="stat-footer">Registered organizations</div>
         </div>
@@ -5167,7 +5570,7 @@ function renderDMAllocationTab() {
       <section class="glass-panel alloc-panel">
         <header class="alloc-head">
           <div class="alloc-head-main">
-            <span class="alloc-head-ico" aria-hidden="true">🔗</span>
+            <span class="alloc-head-ico" aria-hidden="true"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-link"></use></svg></span>
             <div>
               <h2 class="alloc-head-title">Assign a SmartBoard</h2>
               <p class="alloc-head-sub">Link a registered device to the customer organization that owns it.</p>
@@ -5220,7 +5623,7 @@ function renderDMAllocationTab() {
             The device keeps its serial number, firmware and service history — only the owning organization changes.
           </p>
           <button type="button" class="btn btn-primary alloc-submit" onclick="executeDeviceAllocation()">
-            🔗 Assign device
+            Assign device
           </button>
         </footer>
       </section>
@@ -5234,8 +5637,8 @@ function renderDMAllocationTab() {
           </div>
           <div class="dm-filter-bar">
             ${chip('all', 'All', devices.length)}
-            ${chip('assigned', '✅ Assigned', assignedDevices.length)}
-            ${chip('unassigned', '📦 Unassigned', unassignedDevices.length)}
+            ${chip('assigned', 'Assigned', assignedDevices.length)}
+            ${chip('unassigned', 'Unassigned', unassignedDevices.length)}
           </div>
         </header>
 
@@ -5265,14 +5668,15 @@ function renderDMAllocationTab() {
               ${visible.map(dev => {
                 const linkedCust = customers.find(c => c.id === dev.customerId);
                 const isAssigned = !!linkedCust;
-                const statusCls = dev.status === 'online' ? 'status-online'
-                                : dev.status === 'warning' ? 'status-warning'
-                                : dev.status === 'maintenance' ? 'status-maintenance'
+                const displayStatus = getDeviceDisplayStatus(dev);
+                const statusCls = displayStatus === 'online' ? 'status-online'
+                                : displayStatus === 'warning' ? 'status-warning'
+                                : displayStatus === 'maintenance' ? 'status-maintenance'
                                 : 'status-offline';
-                const statusTxt = dev.status === 'online' ? '🟢 Online'
-                                : dev.status === 'offline' ? '🔴 Offline'
-                                : dev.status === 'warning' ? '⚠️ Warning'
-                                : '🔧 Maintenance';
+                const statusTxt = displayStatus === 'online' ? 'Online'
+                                : displayStatus === 'offline' ? 'Offline'
+                                : displayStatus === 'warning' ? 'Warning'
+                                : 'Maintenance';
                 return `
                 <tr>
                   <td>
@@ -5286,7 +5690,7 @@ function renderDMAllocationTab() {
                   <td>
                     ${isAssigned
                       ? `<div class="alloc-owner">${escapeHtml(dev.customerName || linkedCust.organizationName)}</div>
-                         <div class="alloc-dev-sub alloc-dev-sub--ok">✅ ${escapeHtml(dev.customerId)}</div>`
+                         <div class="alloc-dev-sub alloc-dev-sub--ok">${escapeHtml(dev.customerId)}</div>`
                       : `<div class="alloc-owner alloc-owner--none">Not assigned</div>
                          <div class="alloc-dev-sub">Awaiting a customer</div>`}
                   </td>
@@ -5298,7 +5702,7 @@ function renderDMAllocationTab() {
                   <td class="col-actions">
                     <button class="btn btn-secondary btn-sm" onclick="quickAssignFromTable('${dev.id}')"
                       title="${isAssigned ? 'Reassign this device to a different customer' : 'Assign this device to a customer'}">
-                      🔗 ${isAssigned ? 'Reassign' : 'Assign'}
+                      ${isAssigned ? 'Reassign' : 'Assign'}
                     </button>
                   </td>
                 </tr>
@@ -5346,10 +5750,10 @@ async function executeDeviceAllocation() {
     });
     const data = await res.json();
     if (data.success) {
-      showToast(`✅ Device ${deviceId} successfully assigned to customer!`, 'success');
+      showToast(`Device ${deviceId} successfully assigned to customer!`, 'success');
       await fetchAllData();
     } else {
-      showToast(`❌ ${data.error || 'Assignment failed.'}`, 'error');
+      showToast(`${data.error || 'Assignment failed.'}`, 'error');
     }
   } catch (err) {
     showToast('Network error. Could not assign device.', 'error');
@@ -5366,7 +5770,7 @@ function openCreateUserModal() {
   overlay.style.cssText = 'position:fixed;inset:0;z-index:9000;background:rgba(15,23,42,0.65);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(8px);';
   overlay.innerHTML = `
     <div class="modal-content" style="max-width:500px;">
-      <h2 style="font-size:1.2rem;font-weight:800;margin-bottom:20px;">👤 Create System User</h2>
+      <h2 style="font-size:1.2rem;font-weight:800;margin-bottom:20px;">Create System User</h2>
       <div style="display:flex;flex-direction:column;gap:14px;">
         <div><label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:5px;">Full Name *</label>
           <input id="uFullName" class="form-input" placeholder="e.g. Juan dela Cruz" /></div>
@@ -5390,7 +5794,7 @@ function openCreateUserModal() {
         <div id="uErrorMsg" class="form-error" role="alert" style="display:none;"></div>
         <div style="display:flex;gap:12px;margin-top:6px;">
           <button class="btn btn-secondary" style="flex:1;" onclick="document.getElementById('userModalOverlay').remove()">Cancel</button>
-          <button class="btn btn-primary" style="flex:1;" onclick="submitCreateUser()">✅ Create User</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="submitCreateUser()">Create User</button>
         </div>
       </div>
     </div>
@@ -5418,7 +5822,7 @@ async function submitCreateUser() {
     const res  = await fetch(`${API_BASE}/auth/users`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const data = await res.json();
     if (data.success) {
-      showToast(`✅ User @${body.username} created successfully!`, 'success');
+      showToast(`User @${body.username} created successfully!`, 'success');
       document.getElementById('userModalOverlay')?.remove();
       fetchAllData();
     } else {
@@ -5441,7 +5845,7 @@ function openEditUserModal(userId) {
   overlay.style.cssText = 'position:fixed;inset:0;z-index:9000;background:rgba(15,23,42,0.65);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(8px);';
   overlay.innerHTML = `
     <div class="modal-content" style="max-width:500px;">
-      <h2 style="font-size:1.2rem;font-weight:800;margin-bottom:20px;">✏️ Edit User — <span style="color:var(--neon-cyan);">@${user.username}</span></h2>
+      <h2 style="font-size:1.2rem;font-weight:800;margin-bottom:20px;">Edit User — <span style="color:var(--neon-cyan);">@${user.username}</span></h2>
       <div style="display:flex;flex-direction:column;gap:14px;">
         <div><label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:5px;">Full Name</label>
           <input id="euFullName" class="form-input" value="${user.fullName || ''}" /></div>
@@ -5462,7 +5866,7 @@ function openEditUserModal(userId) {
         <div id="euErrorMsg" class="form-error" role="alert" style="display:none;"></div>
         <div style="display:flex;gap:12px;margin-top:6px;">
           <button class="btn btn-secondary" style="flex:1;" onclick="document.getElementById('userModalOverlay').remove()">Cancel</button>
-          <button class="btn btn-primary" style="flex:1;" onclick="submitEditUser('${userId}')">💾 Save Changes</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="submitEditUser('${userId}')">Save Changes</button>
         </div>
       </div>
     </div>
@@ -5492,7 +5896,7 @@ async function submitEditUser(userId) {
     const res  = await fetch(`${API_BASE}/auth/users/${userId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const data = await res.json();
     if (data.success) {
-      showToast('✅ User updated successfully!', 'success');
+      showToast('User updated successfully!', 'success');
       document.getElementById('userModalOverlay')?.remove();
       fetchAllData();
     } else {
@@ -5511,10 +5915,10 @@ async function deleteUser(userId, userName) {
         const res  = await fetch(`${API_BASE}/auth/users/${userId}`, { method: 'DELETE' });
         const data = await res.json();
         if (data.success) {
-          showToast(`✅ User ${userName} deleted.`, 'success');
+          showToast(`User ${userName} deleted.`, 'success');
           fetchAllData();
         } else {
-          showToast(`❌ ${data.error}`, 'error');
+          showToast(`${data.error}`, 'error');
         }
       } catch (e) {
         showToast('Network error. Could not delete user.', 'error');
@@ -5533,14 +5937,14 @@ function openCreateCustomerModal() {
   overlay.style.cssText = 'position:fixed;inset:0;z-index:9000;background:rgba(15,23,42,0.65);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(8px);';
   overlay.innerHTML = `
     <div class="modal-content" style="max-width:500px;">
-      <h2 style="font-size:1.2rem;font-weight:800;margin-bottom:20px;">🏢 Add Customer Organization</h2>
+      <h2 style="font-size:1.2rem;font-weight:800;margin-bottom:20px;">Add Customer Organization</h2>
       <div style="display:flex;flex-direction:column;gap:14px;">
         <div><label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:5px;">Organization Name *</label>
           <input id="cOrgName" class="form-input" placeholder="e.g. ABC University" /></div>
         <div><label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:5px;">Client Type</label>
           <select id="cType" class="form-input">
-            <option value="school">🏫 School / Educational</option>
-            <option value="corporate">🏢 Corporate / Enterprise</option>
+            <option value="school">School / Educational</option>
+            <option value="corporate">Corporate / Enterprise</option>
           </select></div>
         <div><label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:5px;">Contact Person</label>
           <input id="cContact" class="form-input" placeholder="e.g. Maria Santos" /></div>
@@ -5555,7 +5959,7 @@ function openCreateCustomerModal() {
         <div id="cErrorMsg" class="form-error" role="alert" style="display:none;"></div>
         <div style="display:flex;gap:12px;margin-top:6px;">
           <button class="btn btn-secondary" style="flex:1;" onclick="document.getElementById('customerModalOverlay').remove()">Cancel</button>
-          <button class="btn btn-primary" style="flex:1;" onclick="submitCreateCustomer()">✅ Add Organization</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="submitCreateCustomer()">Add Organization</button>
         </div>
       </div>
     </div>
@@ -5583,7 +5987,7 @@ async function submitCreateCustomer() {
     const res  = await fetch(`${API_BASE}/customers`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const data = await res.json();
     if (data.success) {
-      showToast(`✅ Customer "${body.organizationName}" added successfully!`, 'success');
+      showToast(`Customer "${body.organizationName}" added successfully!`, 'success');
       document.getElementById('customerModalOverlay')?.remove();
       await fetchAllData();
     } else {
@@ -5602,10 +6006,10 @@ async function deleteCustomerOrg(customerId, orgName) {
         const res  = await fetch(`${API_BASE}/customers/${customerId}`, { method: 'DELETE' });
         const data = await res.json();
         if (data.success) {
-          showToast(`✅ Customer "${orgName}" deleted.`, 'success');
+          showToast(`Customer "${orgName}" deleted.`, 'success');
           fetchAllData();
         } else {
-          showToast(`❌ ${data.error}`, 'error');
+          showToast(`${data.error}`, 'error');
         }
       } catch (e) {
         showToast('Network error. Could not delete customer.', 'error');
@@ -5713,7 +6117,7 @@ function updateRemoteModalUI(dev) {
   }
 
   if (lockBtn) {
-    lockBtn.textContent = dev.screenLocked ? '🔓 Unlock Display' : '🔒 Lock Screen';
+    lockBtn.textContent = dev.screenLocked ? 'Unlock Display' : 'Lock Screen';
   }
 }
 
@@ -5871,253 +6275,236 @@ function openTicketDetailModal(ticketId) {
   const canSeeStaffChat    = isAdmin || isAssignedTech;   // Admin & assigned tech see staff channel
   const canSeeCustomerChat = isAdmin || isCustomer;       // Admin & customer see customer-private channel
 
-  if (title) title.textContent = `Ticket Details — ${tck.ticketNumber}`;
+  if (title) title.textContent = `Ticket ${tck.ticketNumber}`;
 
   if (body) {
-    // Build chat section HTML based on role
-    let chatSectionHtml = '';
+    // ---------------------------------------------------------------------
+    // Conversation gate.
+    //
+    // The chat used to be rendered inline, in the middle of the ticket, with
+    // its message list already polling. Opening a ticket therefore fired a
+    // request every three seconds even when the reader only wanted to check
+    // the device serial — and the composer pushed the status controls below
+    // the fold. The panel is now closed until "Open chat" is pressed, and the
+    // poll only runs while it is open.
+    // ---------------------------------------------------------------------
+    const chatCopy = isCustomer
+      ? { title: 'Support conversation', hint: 'Private with Millennium support. Technicians cannot read this.', chip: 'Private', tone: 'green' }
+      : isAdmin
+        ? { title: 'Conversation', hint: 'Staff channel and the customer’s private support channel.', chip: '2 channels', tone: 'cyan' }
+        : { title: 'Staff conversation', hint: 'Internal coordination with admin. Customers cannot read this.', chip: 'Internal', tone: 'purple' };
 
-    if (isCustomer) {
-      // CUSTOMER VIEW: Only the private customer↔admin channel
-      chatSectionHtml = `
-      <div style="background: var(--bg-muted); padding: 16px; border-radius: 12px;
-                  border: 1px solid rgba(16,185,129,0.35); box-shadow: 0 4px 20px rgba(0,0,0,0.4);">
-        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
-          <h4 style="font-size:0.96rem; font-weight:700; margin:0; color:var(--accent-green-text); display:flex; align-items:center; gap:8px;">
-            💬 Customer Support Chat <span style="font-size:0.68rem;font-weight:400;color:var(--text-muted);">(Private — Admin & Support only)</span>
-          </h4>
-          <span style="font-size:0.72rem;padding:2px 9px;border-radius:9999px;background:rgba(16,185,129,0.18);color:var(--accent-green-text);font-weight:700;">● Private Channel</span>
-        </div>
-        <p style="font-size:0.78rem; color:var(--text-secondary); margin-bottom:12px;">
-          This is a <strong>private conversation</strong> between you and Millennium SmartBoard Admin/Support.
-          Your messages are <strong>not visible</strong> to technicians.
-        </p>
-        <div id="ticketChatMessages" style="max-height:280px; min-height:120px; overflow-y:auto;
-             background:var(--bg-canvas); border:1px solid rgba(16,185,129,0.2); border-radius:10px;
-             padding:14px; margin-bottom:12px;">
-          <div style="text-align:center; color:var(--text-muted); font-size:0.8rem; padding:20px;">
-            <div class="spinner" style="margin:10px auto;"></div>
-            Connecting to support chat...
-          </div>
-        </div>
-        <div style="display:flex; gap:8px;">
-          <input type="text" id="ticketChatInput" class="form-input"
-            placeholder="Message Millennium Support (private)..."
-            style="flex:1; background:var(--bg-surface); border-color:rgba(16,185,129,0.3);"
-            onkeypress="if(event.key==='Enter') sendTicketMessage('customer')" />
-          <button class="btn btn-primary btn-sm" onclick="sendTicketMessage('customer')"
-            style="display:flex; align-items:center; gap:6px; font-weight:700; padding:0 16px;
-                   background:linear-gradient(135deg,#059669,#34d399); border:none;">
-            📤 Send
-          </button>
-        </div>
-      </div>`;
-    } else if (isAdmin) {
-      // ADMIN VIEW: Two tabs — Staff Channel + Customer Support Channel
-      chatSectionHtml = `
-      <div style="background:var(--bg-muted); padding:16px; border-radius:12px;
-                  border:1px solid rgba(0,242,254,0.28); box-shadow:0 4px 20px rgba(0,0,0,0.4);">
-        <h4 style="font-size:0.96rem; font-weight:700; margin:0 0 12px 0; color:var(--neon-cyan);">👑 Admin Chat Channels</h4>
-        <!-- Tab Switcher -->
-        <div style="display:flex; gap:8px; margin-bottom:14px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:10px;">
-          <button id="tabStaffChat" onclick="switchTicketChatTab('staff','${tck.id}')"
-            style="padding:6px 14px; border-radius:8px; font-size:0.82rem; font-weight:700; cursor:pointer;
-                   background:rgba(0,242,254,0.2); color:var(--neon-cyan); border:1px solid rgba(0,242,254,0.4);
-                   transition:all 0.2s;">
-            🔧 Staff Channel
-          </button>
-          <button id="tabCustomerChat" onclick="switchTicketChatTab('customer','${tck.id}')"
-            style="padding:6px 14px; border-radius:8px; font-size:0.82rem; font-weight:700; cursor:pointer;
-                   background:var(--bg-muted); color:var(--text-secondary); border:1px solid var(--border-color);
-                   transition:all 0.2s;">
-            💬 Customer Support
-          </button>
-        </div>
-        <!-- Chat Subtitle -->
-        <p id="ticketChatSubtitle" style="font-size:0.78rem; color:var(--text-secondary); margin-bottom:12px;">
-          Staff channel — coordination with assigned technician. <strong>Customers cannot see this.</strong>
-        </p>
-        <!-- Messages Container -->
-        <div id="ticketChatMessages" style="max-height:280px; min-height:120px; overflow-y:auto;
-             background:var(--bg-canvas); border:1px solid rgba(0,242,254,0.15); border-radius:10px;
-             padding:14px; margin-bottom:12px;">
-          <div style="text-align:center; color:var(--text-muted); font-size:0.8rem; padding:20px;">
-            <div class="spinner" style="margin:10px auto;"></div>
-            Loading staff messages...
-          </div>
-        </div>
-        <!-- Input -->
-        <div style="display:flex; gap:8px;">
-          <input type="text" id="ticketChatInput" class="form-input"
-            placeholder="Reply to technician (staff channel)..."
-            style="flex:1; background:var(--bg-surface); border-color:rgba(0,242,254,0.3);"
-            onkeypress="if(event.key==='Enter') sendTicketMessage(state._activeChatTab||'staff')" />
-          <button class="btn btn-primary btn-sm" onclick="sendTicketMessage(state._activeChatTab||'staff')"
-            style="display:flex; align-items:center; gap:6px; font-weight:700; padding:0 16px;">
-            📤 Send
-          </button>
-        </div>
-      </div>`;
-    } else if (isAssignedTech) {
-      // TECHNICIAN VIEW: Staff channel only
-      chatSectionHtml = `
-      <div style="background:var(--bg-muted); padding:16px; border-radius:12px;
-                  border:1px solid rgba(168,85,247,0.3); box-shadow:0 4px 20px rgba(0,0,0,0.4);">
-        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
-          <h4 style="font-size:0.96rem; font-weight:700; margin:0; color:var(--accent-purple-text); display:flex; align-items:center; gap:8px;">
-            🔧 Staff Channel <span style="font-size:0.68rem;font-weight:400;color:var(--text-muted);">(Admin & Technician)</span>
-          </h4>
-          <span style="font-size:0.72rem;padding:2px 9px;border-radius:9999px;background:rgba(168,85,247,0.2);color:var(--accent-purple-text);font-weight:700;">● Tech Dispatch</span>
-        </div>
-        <p style="font-size:0.78rem; color:var(--text-secondary); margin-bottom:12px;">
-          Internal coordination with admin. <strong>Customer messages are kept separate and private.</strong>
-        </p>
-        <div id="ticketChatMessages" style="max-height:280px; min-height:120px; overflow-y:auto;
-             background:var(--bg-canvas); border:1px solid rgba(168,85,247,0.2); border-radius:10px;
-             padding:14px; margin-bottom:12px;">
-          <div style="text-align:center; color:var(--text-muted); font-size:0.8rem; padding:20px;">
-            <div class="spinner" style="margin:10px auto;"></div>
-            Connecting to staff chat...
-          </div>
-        </div>
-        <div style="display:flex; gap:8px;">
-          <input type="text" id="ticketChatInput" class="form-input"
-            placeholder="Reply to admin or field update..."
-            style="flex:1; background:var(--bg-surface); border-color:rgba(168,85,247,0.3);"
-            onkeypress="if(event.key==='Enter') sendTicketMessage('staff')" />
-          <button class="btn btn-primary btn-sm" onclick="sendTicketMessage('staff')"
-            style="display:flex; align-items:center; gap:6px; font-weight:700; padding:0 16px;
-                   background:linear-gradient(135deg,#7c3aed,#c084fc); border:none;">
-            📤 Send
-          </button>
-        </div>
-      </div>`;
-    }
+    const activeChannel = isCustomer ? 'customer' : (state._activeChatTab || 'staff');
+    const sendChannelAttr = isCustomer ? "'customer'" : "(state._activeChatTab||'staff')";
+    const inputPlaceholder = isCustomer
+      ? 'Message Millennium support…'
+      : activeChannel === 'customer'
+        ? 'Reply to the customer…'
+        : 'Reply to the technician…';
+
+    const tabsHtml = isAdmin ? `
+      <div class="tix-chat-tabs" role="tablist" aria-label="Conversation channel">
+        <button type="button" id="tabStaffChat" role="tab" class="tix-chat-tab is-active"
+          onclick="switchTicketChatTab('staff','${tck.id}')">Staff channel</button>
+        <button type="button" id="tabCustomerChat" role="tab" class="tix-chat-tab"
+          onclick="switchTicketChatTab('customer','${tck.id}')">Customer support</button>
+      </div>` : '';
+
+    const fact = (label, valueHtml) =>
+      `<div class="tix-fact"><dt>${label}</dt><dd>${valueHtml}</dd></div>`;
 
     body.innerHTML = `
-      <div style="display:flex; flex-direction:column; gap:14px;">
-        <div style="background:var(--bg-muted); padding:14px; border-radius:8px; border:1px solid var(--border-subtle);">
-          <h3 style="font-size:1.1rem; font-weight:800; color:var(--text-primary);">${escapeHtml(tck.title)}</h3>
-          <p style="color:var(--text-secondary); font-size:0.88rem; margin-top:6px;">${escapeHtml(tck.description)}</p>
-        </div>
+      <div class="tix-modal">
 
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; font-size:0.85rem;">
-          <div><strong>Device:</strong> <span style="color:var(--neon-cyan);">${escapeHtml(tck.deviceId)}</span> (${escapeHtml(tck.deviceModel||'')})</div>
-          <div><strong>Customer:</strong> ${escapeHtml(tck.customerName)}</div>
-          <div><strong>Priority:</strong> <span style="font-weight:700;">${tck.priority}</span></div>
-          <div><strong>Warranty Covered:</strong> <span class="${tck.warrantyCovered ? 'warranty-badge-active' : 'warranty-badge-expired'}">${tck.warrantyCovered ? 'Yes ✅' : 'No ⚠️'}</span></div>
-          <div><strong>Assigned Tech:</strong> ${escapeHtml(tck.assignedTechnician||'Pending')}</div>
-          <div><strong>Status:</strong> <span class="status-pill status-online">${escapeHtml(ticketStatusLabel(tck.status))}</span></div>
-        </div>
+        <!-- Summary -->
+        <section class="tix-sum">
+          <div class="tix-sum-head">
+            <div class="tix-sum-copy">
+              <h3>${escapeHtml(tck.title)}</h3>
+              <p>${escapeHtml(tck.description)}</p>
+            </div>
+            <span class="tix-status-chip is-${String(tck.status || '').toLowerCase().replace(/[^a-z]+/g, '-')}">
+              ${escapeHtml(ticketStatusLabel(tck.status))}
+            </span>
+          </div>
+
+          <dl class="tix-facts">
+            ${fact('Device', `<span class="tix-mono">${escapeHtml(tck.deviceId)}</span><small>${escapeHtml(tck.deviceModel || '')}</small>`)}
+            ${fact('Customer', escapeHtml(tck.customerName))}
+            ${fact('Priority', `<span class="tix-pri is-${String(tck.priority || '').toLowerCase()}">${escapeHtml(tck.priority || '—')}</span>`)}
+            ${fact('Warranty', tck.warrantyCovered
+              ? '<span class="tix-flag is-ok">' + ico('shield') + ' Covered</span>'
+              : '<span class="tix-flag is-off">' + ico('shield') + ' Not covered</span>')}
+            ${fact('Assigned to', escapeHtml(tck.assignedTechnician || 'Unassigned'))}
+            ${fact('Logged', escapeHtml(formatShortDate(tck.createdAt)))}
+          </dl>
+        </section>
+
+        <!-- Conversation (collapsed until opened) -->
+        <section class="tix-convo" id="tixConvo">
+          <button type="button" class="tix-convo-bar" id="tixConvoBar"
+            aria-expanded="false" aria-controls="tixConvoPanel" onclick="toggleTicketChat()">
+            <span class="tix-convo-ico" aria-hidden="true">${ico('message')}</span>
+            <span class="tix-convo-txt">
+              <strong>${chatCopy.title}</strong>
+              <small>${chatCopy.hint}</small>
+            </span>
+            <span class="tix-convo-chip is-${chatCopy.tone}">${chatCopy.chip}</span>
+            <span class="tix-convo-cta" id="tixConvoCta">Open chat</span>
+          </button>
+
+          <div class="tix-convo-panel" id="tixConvoPanel">
+            ${tabsHtml}
+            <p id="ticketChatSubtitle" class="tix-convo-sub">
+              ${isAdmin
+                ? 'Staff channel — coordination with the assigned technician. <strong>Customers cannot see this.</strong>'
+                : isCustomer
+                  ? 'Messages here go to Millennium admin and support only.'
+                  : 'Internal coordination with admin. <strong>Customer messages stay separate.</strong>'}
+            </p>
+            <div id="ticketChatMessages" class="tix-chat-messages">
+              <div class="tix-chat-loading">
+                <div class="spinner" style="margin:8px auto;"></div>
+                Loading messages…
+              </div>
+            </div>
+            <div class="tix-composer">
+              <input type="text" id="ticketChatInput" class="form-input"
+                placeholder="${inputPlaceholder}"
+                aria-label="Message"
+                onkeypress="if(event.key==='Enter') sendTicketMessage(${sendChannelAttr})" />
+              <button type="button" class="tix-composer-send" onclick="sendTicketMessage(${sendChannelAttr})">
+                ${ico('arrow-right')}<span>Send</span>
+              </button>
+            </div>
+          </div>
+        </section>
 
         ${isAdmin ? `
-        <div style="background:rgba(0,242,254,0.08); padding:16px; border-radius:10px; border:1px solid rgba(0,242,254,0.25);">
-          <h4 style="font-size:0.95rem; font-weight:700; margin-bottom:8px; color:var(--neon-cyan);">👤 Assign Technician</h4>
-          <p style="font-size:0.78rem; color:var(--text-secondary); margin-bottom:10px;">Select a field technician to assign this ticket for repair.</p>
-          <div style="display:flex; gap:10px; align-items:center;">
+        <section class="tix-sec">
+          <h4 class="tix-sec-title">${ico('wrench')} Assign technician</h4>
+          <p class="tix-sec-hint">Send this ticket to a field technician for repair.</p>
+          <div class="tix-sec-row">
             <select id="assignTechnicianSelect" class="form-select" style="flex:1;">
-              <option value="">Select Technician...</option>
-              ${(state.allUsers||state.users||[]).filter(u=>u.role==='technician').map(u=>
-                `<option value="${u.id}" ${tck.assignedTechnicianId===u.id?'selected':''}>${u.fullName} (${u.location})</option>`
+              <option value="">Select technician…</option>
+              ${(state.allUsers || state.users || []).filter(u => u.role === 'technician').map(u =>
+                `<option value="${u.id}" ${tck.assignedTechnicianId === u.id ? 'selected' : ''}>${u.fullName} (${u.location})</option>`
               ).join('')}
             </select>
-            <button class="btn btn-primary btn-sm" onclick="assignTicketToTechnician()">
-              ${tck.assignedTechnicianId ? '🔄 Reassign' : '📋 Assign'}
+            <button type="button" class="btn btn-primary btn-sm" onclick="assignTicketToTechnician()">
+              ${tck.assignedTechnicianId ? 'Reassign' : 'Assign'}
             </button>
           </div>
-        </div>` : ''}
+        </section>` : ''}
 
-        ${chatSectionHtml}
-
-        ${(isAdmin||isTechnician) ? `
+        ${(isAdmin || isTechnician) ? `
         <div class="ticket-status-panel">
-          <h4 class="ticket-status-title">🏷️ Mark Ticket Status</h4>
+          <h4 class="ticket-status-title">Update status</h4>
           <p class="ticket-status-hint">
-            New tickets land in <strong>New Tickets</strong>. Open one, then mark it as it moves
-            through the pipeline — the lane updates the moment you save.
+            New tickets land in <strong>New Tickets</strong>. Move one along as the work progresses —
+            the lane updates the moment you save.
           </p>
           <div class="ticket-status-actions">
             <button type="button" class="ticket-status-btn${tck.status === 'Diagnosing' ? ' is-current' : ''}"
               onclick="advanceTicketStatus('${tck.id}','Diagnosing')">
-              <span class="ticket-status-ico" aria-hidden="true">🔍</span>
-              <span class="ticket-status-text"><strong>Needs Diagnosis</strong><span>Investigate the fault</span></span>
+              <span class="ticket-status-ico" aria-hidden="true">${ico('search')}</span>
+              <span class="ticket-status-text"><strong>Needs diagnosis</strong><span>Investigate the fault</span></span>
             </button>
             <button type="button" class="ticket-status-btn${tck.status === 'Repairing' ? ' is-current' : ''}"
               onclick="advanceTicketStatus('${tck.id}','Repairing')">
-              <span class="ticket-status-ico" aria-hidden="true">⚙️</span>
+              <span class="ticket-status-ico" aria-hidden="true">${ico('settings')}</span>
               <span class="ticket-status-text"><strong>Repair</strong><span>Work in progress</span></span>
             </button>
             <button type="button" class="ticket-status-btn ticket-status-btn--resolve${tck.status === 'Resolved' || tck.status === 'Closed' ? ' is-current' : ''}"
               onclick="advanceTicketStatus('${tck.id}','Resolved')">
-              <span class="ticket-status-ico" aria-hidden="true">✅</span>
+              <span class="ticket-status-ico" aria-hidden="true">${ico('check-circle')}</span>
               <span class="ticket-status-text"><strong>Resolved</strong><span>Close the ticket</span></span>
             </button>
           </div>
         </div>
 
-        <div style="background:var(--bg-muted); padding:16px; border-radius:10px; border:1px solid var(--border-color);">
-          <h4 style="font-size:0.95rem; font-weight:700; margin-bottom:8px; color:var(--neon-cyan);">🔩 Consume Spare Part from Inventory</h4>
-          <p style="font-size:0.78rem; color:var(--text-secondary); margin-bottom:10px;">
-            Select a replacement part used by the technician to automatically deduct from company inventory.
-          </p>
-          <div style="display:flex; gap:10px;">
+        <section class="tix-sec">
+          <h4 class="tix-sec-title">${ico('package')} Consume spare part</h4>
+          <p class="tix-sec-hint">Deduct a replacement part from inventory against this ticket.</p>
+          <div class="tix-sec-row">
             <select id="ticketPartSelect" class="form-select" style="flex:2;">
-              ${state.inventory.map(p=>`<option value="${p.id}">${p.name} (In Stock: ${p.stockQuantity})</option>`).join('')}
+              ${state.inventory.map(p => `<option value="${p.id}">${p.name} — ${p.stockQuantity} in stock</option>`).join('')}
             </select>
-            <input type="number" id="ticketPartQty" class="form-input" style="flex:1; min-width:60px;" value="1" min="1" max="10" />
-            <button class="btn btn-secondary btn-sm" onclick="consumePartForSelectedTicket()">Deduct Part</button>
+            <input type="number" id="ticketPartQty" class="form-input tix-qty" value="1" min="1" max="10"
+              aria-label="Quantity" />
+            <button type="button" class="btn btn-secondary btn-sm" onclick="consumePartForSelectedTicket()">Deduct</button>
           </div>
           ${tck.partsUsed && tck.partsUsed.length > 0 ? `
-            <div style="margin-top:10px; font-size:0.8rem; color:var(--neon-cyan);">
-              <strong>Parts Used:</strong> ${tck.partsUsed.map(p=>`${p.quantity}x ${p.partName}`).join(', ')}
-            </div>` : ''}
-        </div>` : ''}
+            <p class="tix-parts-used"><strong>Used:</strong> ${tck.partsUsed.map(p => `${p.quantity}× ${p.partName}`).join(', ')}</p>` : ''}
+        </section>` : ''}
       </div>
     `;
 
-    // Clear any previous poll
-    if (state.ticketChatPollInterval) {
-      clearInterval(state.ticketChatPollInterval);
-      state.ticketChatPollInterval = null;
-    }
-
-    // Start the appropriate chat channel
-    if (isCustomer) {
-      state._activeChatTab = 'customer';
-      loadTicketMessages(ticketId, false, 'customer');
-      state.ticketChatPollInterval = setInterval(() => {
-        if (state.selectedTicket?.id === ticketId) loadTicketMessages(ticketId, true, 'customer');
-        else { clearInterval(state.ticketChatPollInterval); state.ticketChatPollInterval = null; }
-      }, 3000);
-    } else if (isAdmin) {
-      state._activeChatTab = 'staff';
-      loadTicketMessages(ticketId, false, 'staff');
-      state.ticketChatPollInterval = setInterval(() => {
-        if (state.selectedTicket?.id === ticketId) loadTicketMessages(ticketId, true, state._activeChatTab || 'staff');
-        else { clearInterval(state.ticketChatPollInterval); state.ticketChatPollInterval = null; }
-      }, 3000);
-    } else if (isAssignedTech) {
-      state._activeChatTab = 'staff';
-      loadTicketMessages(ticketId, false, 'staff');
-      state.ticketChatPollInterval = setInterval(() => {
-        if (state.selectedTicket?.id === ticketId) loadTicketMessages(ticketId, true, 'staff');
-        else { clearInterval(state.ticketChatPollInterval); state.ticketChatPollInterval = null; }
-      }, 3000);
-    }
+    // Nothing polls until the conversation is actually opened.
+    stopTicketChatPolling();
+    state._activeChatTab = activeChannel;
   }
 
   if (modal) modal.classList.add('active');
 }
 
-function closeTicketDetailModal() {
-  const modal = document.getElementById('ticketDetailModal');
-  if (modal) modal.classList.remove('active');
+/** Open / close the in-ticket conversation panel. */
+function toggleTicketChat() {
+  const wrap = document.getElementById('tixConvo');
+  if (!wrap || !state.selectedTicket) return;
+
+  const willOpen = !wrap.classList.contains('is-open');
+  wrap.classList.toggle('is-open', willOpen);
+
+  const bar = document.getElementById('tixConvoBar');
+  if (bar) bar.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+  const cta = document.getElementById('tixConvoCta');
+  if (cta) cta.textContent = willOpen ? 'Hide chat' : 'Open chat';
+
+  if (willOpen) {
+    startTicketChatPolling(state.selectedTicket.id);
+    setTimeout(() => document.getElementById('ticketChatInput')?.focus(), 80);
+  } else {
+    stopTicketChatPolling();
+  }
+}
+
+/** Load the active channel once, then refresh it every 3s while the panel is open. */
+function startTicketChatPolling(ticketId) {
+  stopTicketChatPolling();
+  const channel = state.currentRole === 'customer'
+    ? 'customer'
+    : (state._activeChatTab || 'staff');
+  state._activeChatTab = channel;
+
+  loadTicketMessages(ticketId, false, channel);
+  state.ticketChatPollInterval = setInterval(() => {
+    if (state.selectedTicket?.id !== ticketId) { stopTicketChatPolling(); return; }
+    const live = state.currentRole === 'customer'
+      ? 'customer'
+      : (state._activeChatTab || 'staff');
+    loadTicketMessages(ticketId, true, live);
+  }, 3000);
+}
+
+function stopTicketChatPolling() {
   if (state.ticketChatPollInterval) {
     clearInterval(state.ticketChatPollInterval);
     state.ticketChatPollInterval = null;
   }
+}
+
+function closeTicketDetailModal() {
+  const modal = document.getElementById('ticketDetailModal');
+  if (modal) modal.classList.remove('active');
+  stopTicketChatPolling();
+  // The conversation collapses with the modal, so reopening a ticket always
+  // starts from the gate rather than silently restoring a live chat panel.
+  document.getElementById('tixConvo')?.classList.remove('is-open');
+  const bar = document.getElementById('tixConvoBar');
+  if (bar) bar.setAttribute('aria-expanded', 'false');
   state.selectedTicket = null;
-  state._activeChatTab = null;
+  state._activeChatTab = 'staff';
 }
 
 // Switch between Staff / Customer chat tabs (Admin only)
@@ -6125,41 +6512,28 @@ function switchTicketChatTab(tab, ticketId) {
   if (!state.selectedTicket) return;
   state._activeChatTab = tab;
 
-  // Update tab button styles
   const staffBtn    = document.getElementById('tabStaffChat');
   const customerBtn = document.getElementById('tabCustomerChat');
   const subtitle    = document.getElementById('ticketChatSubtitle');
   const input       = document.getElementById('ticketChatInput');
 
+  // Toggle the .is-active class instead of inline styles
   if (tab === 'staff') {
-    if (staffBtn) {
-      staffBtn.style.background = 'rgba(0,242,254,0.2)';
-      staffBtn.style.color = 'var(--neon-cyan)';
-      staffBtn.style.border = '1px solid rgba(0,242,254,0.4)';
-    }
-    if (customerBtn) {
-      customerBtn.style.background = 'var(--bg-muted)';
-      customerBtn.style.color = 'var(--text-secondary)';
-      customerBtn.style.border = '1px solid var(--border-color)';
-    }
-    if (subtitle) subtitle.textContent = 'Staff channel — coordination with assigned technician. Customers cannot see this.';
-    if (input) input.placeholder = 'Reply to technician (staff channel)...';
+    staffBtn?.classList.add('is-active');
+    customerBtn?.classList.remove('is-active');
+    staffBtn?.setAttribute('aria-selected', 'true');
+    customerBtn?.setAttribute('aria-selected', 'false');
+    if (subtitle) subtitle.innerHTML = 'Staff channel — coordination with the assigned technician. <strong>Customers cannot see this.</strong>';
+    if (input) input.placeholder = 'Reply to the technician…';
   } else {
-    if (customerBtn) {
-      customerBtn.style.background = 'rgba(16,185,129,0.2)';
-      customerBtn.style.color = 'var(--accent-green-text)';
-      customerBtn.style.border = '1px solid rgba(16,185,129,0.4)';
-    }
-    if (staffBtn) {
-      staffBtn.style.background = 'var(--bg-muted)';
-      staffBtn.style.color = 'var(--text-secondary)';
-      staffBtn.style.border = '1px solid var(--border-color)';
-    }
-    if (subtitle) subtitle.textContent = 'Customer support channel — private conversation with the customer. Technicians cannot see this.';
-    if (input) input.placeholder = 'Reply to customer (private support)...';
+    customerBtn?.classList.add('is-active');
+    staffBtn?.classList.remove('is-active');
+    customerBtn?.setAttribute('aria-selected', 'true');
+    staffBtn?.setAttribute('aria-selected', 'false');
+    if (subtitle) subtitle.innerHTML = 'Customer support channel — private conversation with the customer. <strong>Technicians cannot see this.</strong>';
+    if (input) input.placeholder = 'Reply to the customer…';
   }
 
-  // Reload messages for the selected tab
   loadTicketMessages(ticketId, false, tab);
 }
 
@@ -6193,7 +6567,7 @@ async function assignTicketToTechnician() {
     const data = await res.json();
     
     if (data.success) {
-      showToast(`✅ Ticket assigned to ${technician.fullName}!`, 'success');
+      showToast(`Ticket assigned to ${technician.fullName}!`, 'success');
       await fetchAllData();
       // Reopen modal to refresh the view
       openTicketDetailModal(state.selectedTicket.id);
@@ -6214,7 +6588,7 @@ async function loadTicketMessages(ticketId, isSilent = false, channel = 'staff')
 
   if (!isSilent) {
     container.innerHTML = `
-      <div style="text-align:center; color:var(--text-muted); font-size:0.82rem; padding:24px 16px;">
+      <div class="tix-chat-loading">
         <div class="spinner" style="margin:8px auto;"></div>
         Loading ${channel === 'customer' ? 'support' : 'staff'} messages...
       </div>
@@ -6234,9 +6608,12 @@ async function loadTicketMessages(ticketId, isSilent = false, channel = 'staff')
 
       if (messages.length === 0) {
         container.innerHTML = `
-          <div style="text-align:center; color:var(--text-muted); font-size:0.85rem; padding:30px 16px;">
-            <span style="display:block;font-size:2rem;margin-bottom:8px;opacity:0.8;">💬</span>
-            No messages yet. ${channel === 'customer' ? 'Send a message to reach Admin/Support!' : 'Start the staff coordination here.'}
+          <div class="tix-chat-empty">
+            <span class="tix-chat-emoji">${ico('message')}</span>
+            <strong>No messages yet</strong>
+            <span>${channel === 'customer'
+              ? 'Anything you write here reaches Millennium admin and support.'
+              : 'Use this thread to coordinate the repair with admin.'}</span>
           </div>
         `;
       } else {
@@ -6244,40 +6621,18 @@ async function loadTicketMessages(ticketId, isSilent = false, channel = 'staff')
 
         container.innerHTML = messages.map(msg => {
           const isCurrentUser = msg.senderId === state.currentUser?.id;
-          let roleTag = '', bubbleBg = '', bubbleBorder = '';
-
-          if (msg.senderRole === 'admin') {
-            roleTag = `<span style="background:rgba(0,242,254,0.18);color:var(--neon-cyan);padding:2px 7px;border-radius:4px;font-size:0.68rem;font-weight:700;">👑 Admin</span>`;
-            bubbleBg = isCurrentUser ? 'rgba(0,242,254,0.18)' : 'rgba(0,242,254,0.10)';
-            bubbleBorder = 'rgba(0,242,254,0.35)';
-          } else if (msg.senderRole === 'customer') {
-            roleTag = `<span style="background:rgba(16,185,129,0.18);color:var(--accent-green-text);padding:2px 7px;border-radius:4px;font-size:0.68rem;font-weight:700;">🏢 Customer</span>`;
-            bubbleBg = isCurrentUser ? 'rgba(16,185,129,0.18)' : 'rgba(16,185,129,0.10)';
-            bubbleBorder = 'rgba(16,185,129,0.35)';
-          } else {
-            roleTag = `<span style="background:rgba(168,85,247,0.18);color:var(--accent-purple-text);padding:2px 7px;border-radius:4px;font-size:0.68rem;font-weight:700;">🔧 Technician</span>`;
-            bubbleBg = isCurrentUser ? 'rgba(168,85,247,0.18)' : 'rgba(168,85,247,0.10)';
-            bubbleBorder = 'rgba(168,85,247,0.35)';
-          }
-
-          const textAlign   = isCurrentUser ? 'right' : 'left';
-          const marginSide  = isCurrentUser ? 'margin-left:auto' : 'margin-right:auto';
+          const role = msg.senderRole || 'technician';
+          const selfClass = isCurrentUser ? 'is-self' : 'is-other';
+          const roleLabel = role === 'admin' ? 'Admin' : role === 'customer' ? 'Customer' : 'Technician';
 
           return `
-            <div style="text-align:${textAlign}; margin-bottom:12px;">
-              <div style="display:inline-block; max-width:82%; ${marginSide}; text-align:left;">
-                <div style="display:flex; align-items:center; gap:6px; font-size:0.72rem; color:var(--text-secondary); margin-bottom:4px;
-                            justify-content:${isCurrentUser ? 'flex-end' : 'flex-start'};">
-                  <strong style="color:${isCurrentUser ? 'var(--neon-cyan)' : 'var(--text-primary)'};">${isCurrentUser ? 'You' : escapeHtml(msg.senderName)}</strong>
-                  ${roleTag}
-                  <span style="font-size:0.65rem; color:var(--text-muted);">${formatTimestamp(msg.createdAt)}</span>
-                </div>
-                <div style="background:${bubbleBg}; border:1px solid ${bubbleBorder}; padding:10px 14px;
-                            border-radius:12px; font-size:0.86rem; color:var(--text-primary); word-break:break-word;
-                            line-height:1.45; box-shadow:var(--shadow-xs);">
-                  ${escapeHtml(msg.message)}
-                </div>
+            <div class="tix-chat-msg ${selfClass}">
+              <div class="tix-chat-msg-meta">
+                <strong>${isCurrentUser ? 'You' : escapeHtml(msg.senderName)}</strong>
+                <span class="tix-chat-role ${role}">${roleLabel}</span>
+                <time class="tix-chat-time" datetime="${escapeHtml(msg.createdAt || '')}" title="${escapeHtml(formatShortDate(msg.createdAt))}">${formatTimestamp(msg.createdAt)}</time>
               </div>
+              <div class="tix-chat-bubble ${role}">${escapeHtml(msg.message)}</div>
             </div>
           `;
         }).join('');
@@ -6286,13 +6641,13 @@ async function loadTicketMessages(ticketId, isSilent = false, channel = 'staff')
       }
     } else {
       if (!isSilent) {
-        container.innerHTML = `<div style="text-align:center; color:#f87171; font-size:0.8rem; padding:16px;">⚠️ ${escapeHtml(data.error || 'Failed to load messages')}</div>`;
+        container.innerHTML = `<div class="tix-chat-error">${escapeHtml(data.error || 'Failed to load messages')}</div>`;
       }
     }
   } catch (err) {
     if (!isSilent) {
       console.error('Load messages error:', err);
-      container.innerHTML = `<div style="text-align:center; color:#f87171; font-size:0.8rem; padding:16px;">⚠️ Network error loading chat</div>`;
+      container.innerHTML = `<div class="tix-chat-error">Network error loading chat</div>`;
     }
   }
 }
@@ -6332,7 +6687,6 @@ async function sendTicketMessage(channel) {
     if (data.success) {
       if (input) input.value = '';
       await loadTicketMessages(state.selectedTicket.id, false, effectiveChannel);
-      showToast('✅ Message sent!', 'success');
       // Background notification refresh
       fetch(`${API_BASE}/notifications`).then(r => r.json()).then(d => {
         if (d.success) { state.notifications = d.data; renderNotifications(); }
@@ -6369,6 +6723,21 @@ function formatTimestamp(isoString) {
   if (diffDays < 7) return `${diffDays}d ago`;
   
   return date.toLocaleDateString();
+}
+
+/**
+ * Short, unambiguous date for detail rows: "18 Oct 2026".
+ * `toLocaleDateString()` on its own renders 10/18/2026 in the US and 18/10/2026
+ * in most of Europe, so the same record read differently depending on the
+ * browser's locale — a real problem on a support desk that spans regions.
+ */
+function formatShortDate(value) {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return '—';
+  const month = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()];
+  return `${d.getDate()} ${month} ${d.getFullYear()}`;
 }
 
 
@@ -6433,7 +6802,7 @@ function openRestockModal() {
   overlay.innerHTML = `
     <div class="modal-content modal-form" style="max-width:560px;" role="dialog" aria-modal="true" aria-labelledby="restockModalTitle">
       <div class="modal-header">
-        <h3 class="modal-title" id="restockModalTitle">📦 Restock Inventory Shipment</h3>
+        <h3 class="modal-title" id="restockModalTitle">Restock Inventory Shipment</h3>
         <button type="button" class="modal-close" aria-label="Close" onclick="closeRestockModal()">×</button>
       </div>
 
@@ -6449,12 +6818,12 @@ function openRestockModal() {
             <button id="tabExistingPart" type="button" class="seg-tab is-active" role="tab"
               aria-selected="true" onclick="toggleRestockMode('existing')">Existing Part</button>
             <button id="tabNewPart" type="button" class="seg-tab" role="tab"
-              aria-selected="false" onclick="toggleRestockMode('new')">➕ New Part Catalog</button>
+              aria-selected="false" onclick="toggleRestockMode('new')">New Part Catalog</button>
           </div>
 
           <!-- Restock an existing part -->
           <div id="restockExistingSection" class="form-section">
-            <div class="form-section-title">📦 Shipment Details</div>
+            <div class="form-section-title">Shipment Details</div>
             <div class="form-group">
               <label class="form-label" for="restockPartSelect">Select Part to Restock *</label>
               <select id="restockPartSelect" class="form-select">
@@ -6471,7 +6840,7 @@ function openRestockModal() {
 
           <!-- Add a brand-new part to the catalog -->
           <div id="restockNewSection" class="form-section" style="display:none;">
-            <div class="form-section-title">➕ New Catalog Entry</div>
+            <div class="form-section-title">New Catalog Entry</div>
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label" for="newPartCode">Part Code *</label>
@@ -6510,8 +6879,8 @@ function openRestockModal() {
 
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" onclick="closeRestockModal()">Cancel</button>
-          <button type="button" class="btn btn-secondary" onclick="closeRestockModal(); navigateTo('inventory');">📋 View Inventory</button>
-          <button type="submit" class="btn btn-primary">📥 Confirm Shipment</button>
+          <button type="button" class="btn btn-secondary" onclick="closeRestockModal(); navigateTo('inventory');">View Inventory</button>
+          <button type="submit" class="btn btn-primary">Confirm Shipment</button>
         </div>
       </form>
     </div>
@@ -6588,7 +6957,7 @@ async function submitRestockShipment() {
       });
       const data = await res.json();
       if (data.success) {
-        showToast(`✅ Added +${addQty} units to ${part.name} (Total: ${newTotal})`, 'success');
+        showToast(`Added +${addQty} units to ${part.name} (Total: ${newTotal})`, 'success');
         document.getElementById('restockModalOverlay')?.remove();
         await fetchAllData();
       } else {
@@ -6618,7 +6987,7 @@ async function submitRestockShipment() {
       });
       const data = await res.json();
       if (data.success) {
-        showToast(`✅ New part "${name}" registered with ${stockQuantity} units!`, 'success');
+        showToast(`New part "${name}" registered with ${stockQuantity} units!`, 'success');
         document.getElementById('restockModalOverlay')?.remove();
         await fetchAllData();
       } else {
@@ -6716,7 +7085,7 @@ async function verifyWarrantyFromInput() {
       resultBox.innerHTML = `
         <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.4); padding: 18px; border-radius: 12px;">
           <div style="display: flex; justify-content: space-between; align-items: center;">
-            <h3 style="color: var(--accent-green-text); font-size: 1.15rem; font-weight: 800;">VERIFIED: UNDER WARRANTY ✅</h3>
+            <h3 style="color: var(--accent-green-text); font-size: 1.15rem; font-weight: 800;">VERIFIED: UNDER WARRANTY </h3>
             <span class="status-pill status-online">${w.daysRemaining} Days Remaining</span>
           </div>
           <div style="font-size: 0.88rem; margin-top: 8px; color: var(--text-primary);">
@@ -6730,7 +7099,7 @@ async function verifyWarrantyFromInput() {
     } else {
       resultBox.innerHTML = `
         <div style="background: rgba(244, 63, 94, 0.15); border: 1px solid rgba(244, 63, 94, 0.4); padding: 18px; border-radius: 12px;">
-          <h3 style="color: #fb7185; font-size: 1.15rem; font-weight: 800;">WARRANTY EXPIRED OR NOT FOUND ⚠️</h3>
+          <h3 style="color: #fb7185; font-size: 1.15rem; font-weight: 800;">WARRANTY EXPIRED OR NOT FOUND </h3>
           <p style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 4px;">
             Device ID "${id}" is either beyond its 2-year warranty window or unregistered. On-site repairs are billable.
           </p>
@@ -6804,21 +7173,117 @@ async function submitCmsForm(e) {
   }
 }
 
-// Quick Stock Adjust
-async function quickAdjustStock(partId, newStock) {
+/* -------------------------------------------------------------------------
+   Inventory card actions — restock by one, and edit the unit cost inline
+   ------------------------------------------------------------------------- */
+
+/**
+ * Add exactly one unit to a part.
+ *
+ * The server increments in SQL rather than accepting an absolute quantity, so
+ * two admins tapping at the same moment both land and a stale card can never
+ * push the count backwards. Only the grid is repainted, which keeps the page
+ * scroll position where the user left it.
+ *
+ * The button is deliberately NOT disabled while the request is in flight: this
+ * is a counter, so tapping it three times quickly must add three units. Losing
+ * a tap because the previous response had not arrived yet would read as a bug.
+ * The server is atomic, and the state merge below keeps the display monotonic
+ * even if the responses come back out of order.
+ */
+async function restockOne(partId) {
   try {
-    const res = await fetch(`${API_BASE}/inventory/${partId}/stock`, {
-      method: 'PATCH',
+    const res = await fetch(`${API_BASE}/inventory/${partId}/restock`, {
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ stockQuantity: newStock }),
+      body: JSON.stringify({ amount: 1 }),
     });
     const data = await res.json();
-    if (data.success) {
-      showToast(`Stock updated to ${newStock} units!`, 'success');
-      fetchAllData();
+    if (!res.ok || !data.success) throw new Error(data.error || 'Could not restock this part.');
+
+    const idx = (state.inventory || []).findIndex((p) => p.id === partId);
+    // An older snapshot must never lower the number on screen.
+    if (idx >= 0 && data.data.stockQuantity >= state.inventory[idx].stockQuantity) {
+      state.inventory[idx] = data.data;
     }
+    refreshInventoryGrid();
+    showToast(`+1 unit — ${data.data.name} is now at ${data.data.stockQuantity}.`, 'success');
   } catch (err) {
-    showToast('Failed to adjust stock', 'error');
+    showToast(err.message || 'Could not restock this part.', 'error');
+  }
+}
+
+/** Swap the unit-cost display for an inline editor. */
+function editPartPrice(partId) {
+  const part = (state.inventory || []).find((p) => p.id === partId);
+  const host = document.querySelector(`.inv-price-host[data-price-for="${partId}"]`);
+  if (!part || !host || host.classList.contains('is-editing')) return;
+
+  // The editor needs the full card width, so the card switches to edit mode and
+  // the footer collapses to one column (see .is-editing-price in the stylesheet).
+  host.closest('.inv-card')?.classList.add('is-editing-price');
+  host.classList.add('is-editing');
+  host.innerHTML = `<form class="inv-price-form" onsubmit="event.preventDefault(); savePartPrice('${partId}')">
+      <span class="inv-price-cur" aria-hidden="true">₱</span>
+      <input class="inv-price-input" id="invPriceInput" type="number" min="0" step="0.01"
+        inputmode="decimal" value="${Number(part.unitCost) || 0}"
+        aria-label="Unit cost for ${escapeHtml(part.name)}"
+        onkeydown="handlePartPriceKey(event, '${partId}')" />
+      <button type="submit" class="inv-price-save" title="Save price" aria-label="Save price"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-check"></use></svg></button>
+      <button type="button" class="inv-price-cancel" title="Cancel" aria-label="Cancel"
+        onclick="cancelPartPrice('${partId}')"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg></button>
+    </form>`;
+
+  const input = document.getElementById('invPriceInput');
+  if (input) {
+    input.focus();
+    input.select();
+  }
+}
+
+/** Escape backs out of the editor; Enter is handled by the form's submit. */
+function handlePartPriceKey(event, partId) {
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    cancelPartPrice(partId);
+  }
+}
+
+function cancelPartPrice() {
+  refreshInventoryGrid();
+}
+
+async function savePartPrice(partId) {
+  const input = document.getElementById('invPriceInput');
+  if (!input) return;
+
+  const raw = String(input.value).trim();
+  const value = Number(raw);
+  if (raw === '' || !Number.isFinite(value) || value < 0) {
+    showToast('Enter a unit cost of 0 or more.', 'error');
+    input.focus();
+    return;
+  }
+
+  const saveBtn = document.querySelector('.inv-price-save');
+  if (saveBtn) saveBtn.disabled = true;
+
+  try {
+    const res = await fetch(`${API_BASE}/inventory/${partId}/price`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ unitCost: value }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) throw new Error(data.error || 'Could not save the price.');
+
+    const idx = (state.inventory || []).findIndex((p) => p.id === partId);
+    if (idx >= 0) state.inventory[idx] = data.data;
+    refreshInventoryGrid();
+    showToast(`Unit cost updated to ₱${formatUnitCost(data.data.unitCost)}.`, 'success');
+  } catch (err) {
+    showToast(err.message || 'Could not save the price.', 'error');
+    if (saveBtn) saveBtn.disabled = false;
   }
 }
 
@@ -6838,13 +7303,13 @@ function openRegisterModal() {
     
     select.innerHTML = `
       <option value="">— Select Customer / Organization (${customers.length} Available) —</option>
-      ${schools.length > 0 ? `<optgroup label="🏫 Schools & Universities (${schools.length})">
+      ${schools.length > 0 ? `<optgroup label="Schools & Universities (${schools.length})">
         ${schools.map(c => `<option value="${c.id}">${c.organizationName} — ${c.city || 'Metro Manila'}</option>`).join('')}
       </optgroup>` : ''}
-      ${corporates.length > 0 ? `<optgroup label="🏢 Corporate Clients (${corporates.length})">
+      ${corporates.length > 0 ? `<optgroup label="Corporate Clients (${corporates.length})">
         ${corporates.map(c => `<option value="${c.id}">${c.organizationName} — ${c.city || 'Metro Manila'}</option>`).join('')}
       </optgroup>` : ''}
-      <option value="__custom__">➕ Register New Customer Organization...</option>
+      <option value="__custom__">Register New Customer Organization...</option>
     `;
     select.value = '';
   }
@@ -6858,7 +7323,7 @@ function openRegisterModal() {
   
   // Show success message to confirm customers loaded
   if (state.customers && state.customers.length > 0) {
-    showToast(`📋 ${state.customers.length} customer organizations loaded successfully`, 'info');
+    showToast(`${state.customers.length} customer organizations loaded successfully`, 'info');
   }
 }
 
@@ -6876,7 +7341,7 @@ function handleRegCustomerSelectChange() {
       customInput.required = true;
       customInput.focus();
     }
-    showToast('📝 Enter a new customer organization name to register', 'info');
+    showToast('Enter a new customer organization name to register', 'info');
   } else {
     if (customInput) {
       customInput.style.display = 'none';
@@ -6888,7 +7353,7 @@ function handleRegCustomerSelectChange() {
       if (cust) {
         if (clientTypeSelect) clientTypeSelect.value = cust.clientType;
         if (cityInput && cust.city) cityInput.value = cust.city;
-        showToast(`✅ Selected: ${cust.organizationName} (${cust.clientType === 'school' ? '🏫 School' : '🏢 Corporate'})`, 'success');
+        showToast(`Selected: ${cust.organizationName} (${cust.clientType === 'school' ? 'School' : 'Corporate'})`, 'success');
       }
     }
   }
@@ -6932,11 +7397,11 @@ async function submitRegisterDeviceForm(e) {
     });
     const data = await res.json();
     if (data.success) {
-      showToast(`✅ SmartBoard ${data.data.id} registered and connected to ${data.data.customerName}!`, 'success');
+      showToast(`SmartBoard ${data.data.id} registered and connected to ${data.data.customerName}!`, 'success');
       closeRegisterModal();
       await fetchAllData();
     } else {
-      showToast(`❌ ${data.error || 'Failed to register device.'}`, 'error');
+      showToast(`${data.error || 'Failed to register device.'}`, 'error');
     }
   } catch (err) {
     showToast('Network error. Failed to register device.', 'error');
@@ -7026,7 +7491,7 @@ async function startWarrantyScanner() {
   // The library is loaded from a CDN — if it is blocked/offline, fail clearly
   // instead of throwing a ReferenceError and leaving a blank modal.
   if (!isScannerLibraryAvailable()) {
-    updateScannerStatus('❌ Scanner library failed to load (offline?).', 'error');
+    updateScannerStatus('Scanner library failed to load (offline?).', 'error');
     showToast('Scanner library unavailable. Check your connection, or use "Upload Image" / manual entry.', 'error');
     return;
   }
@@ -7080,12 +7545,12 @@ async function startWarrantyScanner() {
     const camLabel = Array.isArray(scannerCameras) && scannerCameras.length > 1
       ? ` (${scannerCameras.length} cameras detected)`
       : '';
-    updateScannerStatus('🔍 Scanning... Point camera at QR code or barcode' + camLabel, 'scanning');
+    updateScannerStatus('Scanning... Point camera at QR code or barcode' + camLabel, 'scanning');
     
   } catch (err) {
     console.error('Failed to start scanner:', err);
     const friendly = describeCameraError(err);
-    updateScannerStatus('❌ ' + friendly, 'error');
+    updateScannerStatus('' + friendly, 'error');
     showToast(friendly, 'error');
 
     // Return to the instructions panel so the alternative methods stay reachable.
@@ -7119,7 +7584,7 @@ function onScanSuccess(decodedText, decodedResult) {
   stopWarrantyScanner();
 
   // Update status
-  updateScannerStatus('✅ Code detected! Validating warranty...', 'success');
+  updateScannerStatus('Code detected! Validating warranty...', 'success');
 
   // Validate the scanned code
   Promise.resolve(validateWarrantyBySerial(decodedText)).finally(() => {
@@ -7142,12 +7607,12 @@ function updateScannerStatus(message, type = 'scanning') {
   if (!statusDiv) return;
   
   const iconMap = {
-    scanning: '🔍',
-    success: '✅',
-    error: '❌',
+    scanning: '',
+    success: '',
+    error: '',
   };
   
-  const icon = iconMap[type] || '🔍';
+  const icon = iconMap[type] || '';
   statusDiv.innerHTML = `
     <span class="scanner-status-icon">${icon}</span>
     <span class="scanner-status-text">${message}</span>
@@ -7205,7 +7670,7 @@ function handleBarcodeImageUpload(event) {
   if (!looksLikeImage) {
     showToast('Please upload a valid image file', 'error');
     if (statusDiv) {
-      statusDiv.innerHTML = '<span style="color: var(--danger);">❌ That file is not an image.</span>';
+      statusDiv.innerHTML = '<span style="color: var(--danger);">That file is not an image.</span>';
     }
     return;
   }
@@ -7214,7 +7679,7 @@ function handleBarcodeImageUpload(event) {
   if (file.size > 10 * 1024 * 1024) {
     showToast('Image file is too large. Maximum size is 10MB', 'error');
     if (statusDiv) {
-      statusDiv.innerHTML = '<span style="color: var(--danger);">❌ Image is larger than 10MB.</span>';
+      statusDiv.innerHTML = '<span style="color: var(--danger);">Image is larger than 10MB.</span>';
     }
     return;
   }
@@ -7239,7 +7704,7 @@ function handleBarcodeImageUpload(event) {
   reader.onerror = function () {
     showToast('Failed to read image file', 'error');
     if (statusDiv) {
-      statusDiv.innerHTML = '<span style="color: var(--danger);">❌ Could not read that image file.</span>';
+      statusDiv.innerHTML = '<span style="color: var(--danger);">Could not read that image file.</span>';
     }
   };
 
@@ -7283,7 +7748,7 @@ async function scanUploadedImage() {
   // The decoding library is CDN-hosted — degrade gracefully if it never loaded.
   if (!isScannerLibraryAvailable()) {
     if (statusDiv) {
-      statusDiv.innerHTML = '<span style="color: var(--danger);">❌ Scanner library failed to load (offline?). Type the serial number instead.</span>';
+      statusDiv.innerHTML = '<span style="color: var(--danger);">Scanner library failed to load (offline?). Type the serial number instead.</span>';
     }
     showToast('Scanner library unavailable. Check your connection, or type the serial number manually.', 'error');
     return;
@@ -7291,7 +7756,7 @@ async function scanUploadedImage() {
 
   // Update status
   if (statusDiv) {
-    statusDiv.innerHTML = '<span style="color: var(--primary);">🔍 Scanning image for barcode...</span>';
+    statusDiv.innerHTML = '<span style="color: var(--primary);">Scanning image for barcode...</span>';
   }
 
   const imageFile = document.getElementById('barcodeImageInput')?.files?.[0] || null;
@@ -7299,7 +7764,7 @@ async function scanUploadedImage() {
 
   if (decode.text) {
     if (statusDiv) {
-      statusDiv.innerHTML = '<span style="color: var(--success);">✅ Barcode detected! Validating warranty...</span>';
+      statusDiv.innerHTML = '<span style="color: var(--success);">Barcode detected! Validating warranty...</span>';
     }
     showToast('Barcode detected successfully', 'success');
 
@@ -7313,7 +7778,7 @@ async function scanUploadedImage() {
 
   // All methods failed
   if (statusDiv) {
-    statusDiv.innerHTML = '<span style="color: var(--danger);">❌ No barcode detected in image. Try a clearer image or use camera scanner.</span>';
+    statusDiv.innerHTML = '<span style="color: var(--danger);">No barcode detected in image. Try a clearer image or use camera scanner.</span>';
   }
   showToast('No barcode found in image. Please try a clearer image or use the camera scanner.', 'error');
 }
@@ -7603,7 +8068,7 @@ async function validateWarrantyBySerial(serialNumber) {
     console.error('Warranty validation error:', error);
     resultsDiv.innerHTML = `
       <div class="validation-result validation-error">
-        <div style="font-size: 3rem; margin-bottom: 10px;">❌</div>
+        <div style="font-size: 3rem; margin-bottom: 10px;"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-x-circle"></use></svg></div>
         <h3 style="color: var(--error); margin-bottom: 10px;">Validation Error</h3>
         <p style="color: var(--text-secondary);">
           Unable to validate warranty. Please check your connection and try again.
@@ -7636,16 +8101,16 @@ function calculateWarrantyDetails(warranty, device) {
   // Determine warranty status
   let status = 'Under Warranty';
   let statusColor = 'success';
-  let statusIcon = '✅';
+  let statusIcon = '';
   
   if (daysRemaining < 0) {
     status = 'Warranty Expired';
     statusColor = 'error';
-    statusIcon = '❌';
+    statusIcon = '';
   } else if (daysRemaining <= 30) {
     status = 'Expiring Soon';
     statusColor = 'warning';
-    statusIcon = '⚠️';
+    statusIcon = '';
   }
   
   // Format dates
@@ -7735,7 +8200,7 @@ function displayWarrantyResults(details) {
       <!-- Device Information -->
       <div style="padding: 20px; background: rgba(0, 0, 0, 0.2); border-radius: 8px; margin: 20px 0;">
         <h4 style="font-size: 0.9rem; font-weight: 700; color: var(--text-muted); margin-bottom: 15px; text-transform: uppercase; letter-spacing: 0.5px;">
-          📱 Device Information
+          Device Information
         </h4>
         <div class="warranty-info-grid">
           <div class="warranty-info-item">
@@ -7764,7 +8229,7 @@ function displayWarrantyResults(details) {
       <!-- Warranty Coverage Details -->
       <div style="padding: 20px; background: rgba(0, 0, 0, 0.2); border-radius: 8px; margin: 20px 0;">
         <h4 style="font-size: 0.9rem; font-weight: 700; color: var(--text-muted); margin-bottom: 15px; text-transform: uppercase; letter-spacing: 0.5px;">
-          📅 Warranty Coverage
+          Warranty Coverage
         </h4>
         <div class="warranty-info-grid">
           <div class="warranty-info-item">
@@ -7797,7 +8262,7 @@ function displayWarrantyResults(details) {
       <!-- Time Remaining Progress -->
       <div style="padding: 20px; background: rgba(0, 0, 0, 0.2); border-radius: 8px;">
         <h4 style="font-size: 0.9rem; font-weight: 700; color: var(--text-muted); margin-bottom: 15px; text-transform: uppercase; letter-spacing: 0.5px;">
-          ⏱️ Warranty Timeline
+          ${ico('clock')} Warranty Timeline
         </h4>
         <div style="margin-bottom: 15px;">
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 0.85rem;">
@@ -7830,13 +8295,13 @@ function displayWarrantyResults(details) {
         ${isValid ? `
           <div style="padding: 12px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; margin-top: 15px;">
             <p style="font-size: 0.85rem; color: var(--success); margin: 0;">
-              ✅ <strong>Warranty is active.</strong> Device is covered for repairs and replacements.
+              <strong>Warranty is active.</strong> Device is covered for repairs and replacements.
             </p>
           </div>
         ` : `
           <div style="padding: 12px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; margin-top: 15px;">
             <p style="font-size: 0.85rem; color: var(--error); margin: 0;">
-              ❌ <strong>Warranty has expired.</strong> Service may require payment. Contact support for renewal options.
+              <strong>Warranty has expired.</strong> Service may require payment. Contact support for renewal options.
             </p>
           </div>
         `}
@@ -7856,7 +8321,7 @@ function displayWarrantyNotFound(serialNumber) {
   resultsDiv.innerHTML = `
     <div class="validation-result validation-error">
       <div style="text-align: center; padding: 40px;">
-        <div style="font-size: 4rem; margin-bottom: 15px;">🔍</div>
+        <div style="font-size: 4rem; margin-bottom: 15px;"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-search"></use></svg></div>
         <h3 style="font-size: 1.2rem; font-weight: 800; color: var(--error); margin-bottom: 10px;">
           Device Not Found
         </h3>
@@ -7884,7 +8349,7 @@ function displayNoWarrantyRecord(device) {
   resultsDiv.innerHTML = `
     <div class="validation-result validation-warning">
       <div style="text-align: center; padding: 40px;">
-        <div style="font-size: 4rem; margin-bottom: 15px;">⚠️</div>
+        <div style="font-size: 4rem; margin-bottom: 15px;"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-alert"></use></svg></div>
         <h3 style="font-size: 1.2rem; font-weight: 800; color: var(--warning); margin-bottom: 10px;">
           No Warranty Record
         </h3>
@@ -7991,71 +8456,87 @@ function generateWarrantyBarcode(warranty, device) {
       return;
     }
 
-    // Generate barcode using JsBarcode with reduced width for better fit
-    JsBarcode("#warrantyBarcode", barcodeValue, {
-      format: "CODE128",
-      width: 1.5,
-      height: 70,
+    const svgEl = document.getElementById('warrantyBarcode');
+
+    JsBarcode('#warrantyBarcode', barcodeValue, {
+      format: 'CODE128',
+      width: 1.6,
+      height: 62,
       displayValue: true,
-      fontSize: 14,
-      fontOptions: "bold",
-      textMargin: 6,
-      margin: 5,
-      background: "#ffffff",
-      lineColor: "#000000"
+      fontSize: 13,
+      fontOptions: 'bold',
+      textMargin: 5,
+      margin: 0,
+      background: '#ffffff',
+      lineColor: '#000000',
     });
-    
-    // Update modal content
-    document.getElementById('barcodeWarrantyTitle').textContent = `Warranty Contract ${warranty.id}`;
-    document.getElementById('barcodeWarrantySubtitle').textContent = `${warranty.status} - ${warranty.coverageType}`;
-    document.getElementById('barcodeDeviceId').textContent = device.id;
-    document.getElementById('barcodeDeviceInfo').textContent = `${device.model} • ${device.customerName}`;
-    
-    // Calculate warranty details
+
+    // JsBarcode emits fixed pixel width/height and no viewBox, so a long serial
+    // silently overflowed the sticker (and got clipped by the card's padding)
+    // instead of shrinking. Adding a viewBox makes the SVG scale to its box.
+    if (svgEl) {
+      const w = Number(svgEl.getAttribute('width')) || svgEl.getBBox?.().width || 0;
+      const h = Number(svgEl.getAttribute('height')) || 0;
+      if (w && h && !svgEl.getAttribute('viewBox')) {
+        svgEl.setAttribute('viewBox', `0 0 ${w} ${h}`);
+      }
+      svgEl.removeAttribute('width');
+      svgEl.removeAttribute('height');
+      svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+    }
+
     const today = new Date();
     const expiryDate = new Date(warranty.expiryDate);
-    const daysRemaining = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 3600 * 24));
-    
-    let statusIcon = '✅';
-    let statusText = 'Active Coverage';
-    let statusColor = 'var(--success)';
-    
+    const daysRemaining = Math.ceil((expiryDate.getTime() - today.getTime()) / 86400000);
+
+    // One state machine for the pill: the old code carried an emoji icon plus a
+    // colour, which meant the same contract could read "green" in the summary
+    // and "amber" in the detail list.
+    let stateLabel = 'Active';
+    let stateClass = 'is-active';
     if (daysRemaining < 0) {
-      statusIcon = '❌';
-      statusText = 'Expired';
-      statusColor = 'var(--danger)';
+      stateLabel = 'Expired';
+      stateClass = 'is-expired';
     } else if (daysRemaining <= 30) {
-      statusIcon = '⚠️';
-      statusText = 'Expiring Soon';
-      statusColor = 'var(--warning)';
+      stateLabel = 'Expiring soon';
+      stateClass = 'is-soon';
     }
-    
-    // Update warranty details
-    document.getElementById('barcodeWarrantyDetails').innerHTML = `
-      <div style="display: grid; gap: 10px;">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <span style="font-size: 0.85rem; color: var(--text-muted);">Status:</span>
-          <span style="font-size: 0.9rem; font-weight: 700; color: ${statusColor};">${statusIcon} ${statusText}</span>
-        </div>
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <span style="font-size: 0.85rem; color: var(--text-muted);">Days Remaining:</span>
-          <span style="font-size: 0.9rem; font-weight: 700; color: ${statusColor};">${Math.max(0, daysRemaining)} days</span>
-        </div>
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <span style="font-size: 0.85rem; color: var(--text-muted);">Purchase Date:</span>
-          <span style="font-size: 0.9rem; font-weight: 600;">${warranty.purchaseDate}</span>
-        </div>
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <span style="font-size: 0.85rem; color: var(--text-muted);">Expiry Date:</span>
-          <span style="font-size: 0.9rem; font-weight: 600;">${warranty.expiryDate}</span>
-        </div>
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <span style="font-size: 0.85rem; color: var(--text-muted);">Location:</span>
-          <span style="font-size: 0.9rem; font-weight: 600;">${device.location}, ${device.city}</span>
-        </div>
-      </div>
-    `;
-    
+
+    const setText = (id, value) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = value;
+    };
+
+    setText('barcodeWarrantyTitle', `Contract ${warranty.id}`);
+    // The coverage type has its own row below — repeating it here made the
+    // heading read the same sentence twice.
+    setText('barcodeWarrantySubtitle', warranty.status || 'Warranty coverage');
+    setText('barcodeDeviceId', device.id || '—');
+    setText('barcodeDeviceInfo', [device.model, device.customerName].filter(Boolean).join(' · '));
+
+    const pill = document.getElementById('barcodeStatusPill');
+    if (pill) {
+      pill.textContent = stateLabel;
+      pill.className = `bc-state ${stateClass}`;
+    }
+
+    const rows = [
+      ['Coverage', warranty.coverageType || '—'],
+      ['Purchased', formatShortDate(warranty.purchaseDate)],
+      ['Expires', formatShortDate(warranty.expiryDate)],
+      ['Remaining', daysRemaining < 0 ? 'Expired' : `${daysRemaining} day${daysRemaining === 1 ? '' : 's'}`],
+      ['Serial', device.serialNumber || '—'],
+      ['Location', [device.location, device.city].filter(Boolean).join(', ') || '—'],
+    ];
+
+    const details = document.getElementById('barcodeWarrantyDetails');
+    if (details) {
+      details.innerHTML = rows.map(([label, value], index) => `
+        <div class="bc-row${index === 3 && daysRemaining < 0 ? ' is-alert' : ''}">
+          <dt>${escapeHtml(label)}</dt>
+          <dd>${escapeHtml(String(value))}</dd>
+        </div>`).join('');
+    }
   } catch (error) {
     console.error('Failed to generate barcode:', error);
     showToast('Failed to generate barcode', 'error');
@@ -8261,16 +8742,23 @@ function downloadWarrantyBarcode() {
 
 function exportAnalyticsReport() {
   const s = state.stats;
+  const displayStatuses = (state.devices || []).map(getDeviceDisplayStatus);
+  const onlineDevices   = displayStatuses.filter(status => status === 'online').length;
+  const offlineDevices  = displayStatuses.filter(status => status === 'offline').length;
+  const problemDevices  = displayStatuses.filter(status => status === 'warning').length;
+  const pendingRepairs  = displayStatuses.filter(status => status === 'maintenance').length;
+  const totalDevices    = displayStatuses.length;
+  const fleetHealthScore = totalDevices > 0 ? Math.round((onlineDevices / totalDevices) * 100) : 0;
   const csvContent = `MILLENNIUM SMARTBOARD SYSTEM - EXECUTIVE REPORT
 Generated: ${new Date().toLocaleString()}
-Online Devices: ${s.onlineDevices}
-Offline Devices: ${s.offlineDevices}
-Devices with Problems: ${s.problemDevices}
-Pending Repairs: ${s.pendingRepairs}
+Online Devices: ${onlineDevices}
+Offline Devices: ${offlineDevices}
+Devices with Problems: ${problemDevices}
+Pending Repairs: ${pendingRepairs}
 Total Units Sold: ${s.unitsSold}
 Partner Schools: ${s.schoolsCount}
 Corporate Clients: ${s.corporateCount}
-Fleet Health Score: ${s.fleetHealthScore}%
+Fleet Health Score: ${fleetHealthScore}%
 `;
 
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -8414,13 +8902,13 @@ function renderRentalsView() {
   return `
     <div class="page-header-row">
       <div>
-        <h1 class="page-title">📅 Device Rental Scheduling</h1>
+        <h1 class="page-title">Device Rental Scheduling</h1>
         <p class="page-description">Manage device rentals, bookings, deliveries, and returns for the Millennium SmartBoard.</p>
       </div>
       <div class="page-actions">
-        ${isAdmin || isCustomer ? `<button class="btn btn-primary" onclick="openRentalModal()">📅 New Booking</button>` : ''}
+        ${isAdmin || isCustomer ? `<button class="btn btn-primary" onclick="openRentalModal()">New Booking</button>` : ''}
         <button class="btn btn-secondary" onclick="toggleRentalViewMode()">
-          ${state.rentalViewMode === 'list' ? '🗓️ Calendar View' : '📋 List View'}
+          ${state.rentalViewMode === 'list' ? 'Calendar View' : 'List View'}
         </button>
       </div>
     </div>
@@ -8517,7 +9005,7 @@ function renderRentalList(rentals, isAdmin) {
     return `
       ${filterBar}
       <div class="glass-panel rental-empty">
-        <div class="rental-empty-ico" aria-hidden="true">📅</div>
+        <div class="rental-empty-ico" aria-hidden="true"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-calendar"></use></svg></div>
         <h3 class="rental-empty-title">${filtered ? `No ${activeFilter.toLowerCase()} bookings` : 'No bookings yet'}</h3>
         <p class="rental-empty-text">
           ${filtered
@@ -8529,7 +9017,7 @@ function renderRentalList(rentals, isAdmin) {
         ${(isAdmin || state.currentRole === 'customer') ? `
           <div class="rental-empty-actions">
             ${filtered ? `<button type="button" class="btn btn-secondary" onclick="setRentalFilter('')">Clear filter</button>` : ''}
-            <button type="button" class="btn btn-primary" onclick="openRentalModal()">📅 New booking</button>
+            <button type="button" class="btn btn-primary" onclick="openRentalModal()">New booking</button>
           </div>` : ''}
       </div>
     `;
@@ -8583,10 +9071,10 @@ function renderRentalList(rentals, isAdmin) {
                   ${isAdmin ? `
                   <td class="col-actions" onclick="event.stopPropagation();">
                     <div class="dm-actions">
-                      ${r.status === 'Pending' ? `<button class="action-btn action-btn-ok" title="Approve this booking" aria-label="Approve booking" onclick="approveRental('${r.id}')">✓</button>` : ''}
-                      ${r.status === 'Approved' ? `<button class="action-btn action-btn-go" title="Activate — mark as rented out" aria-label="Activate booking" onclick="activateRental('${r.id}')">▶</button>` : ''}
-                      ${r.status === 'Active' ? `<button class="action-btn" title="Mark as returned" aria-label="Return device" onclick="returnRental('${r.id}')">↩</button>` : ''}
-                      <button class="action-btn" title="Edit booking" aria-label="Edit booking" onclick="editRental('${r.id}')">✏️</button>
+                      ${r.status === 'Pending' ? `<button class="action-btn action-btn-ok" title="Approve this booking" aria-label="Approve booking" onclick="approveRental('${r.id}')"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-check"></use></svg></button>` : ''}
+                      ${r.status === 'Approved' ? `<button class="action-btn action-btn-go" title="Activate — mark as rented out" aria-label="Activate booking" onclick="activateRental('${r.id}')">${ico('play')}</button>` : ''}
+                      ${r.status === 'Active' ? `<button class="action-btn" title="Mark as returned" aria-label="Return device" onclick="returnRental('${r.id}')">${ico('undo')}</button>` : ''}
+                      <button class="action-btn" title="Edit booking" aria-label="Edit booking" onclick="editRental('${r.id}')"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-pencil"></use></svg></button>
                     </div>
                   </td>
                   ` : ''}
@@ -8645,9 +9133,9 @@ function renderRentalCalendar(rentals) {
     <div class="glass-panel" style="padding:20px;">
       <!-- Calendar Header -->
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-        <button class="btn btn-secondary btn-sm" onclick="changeRentalMonth(-1)">◀ Prev</button>
+        <button class="btn btn-secondary btn-sm" onclick="changeRentalMonth(-1)">${ico('chevron-left')} Prev</button>
         <h3 style="font-size:1.15rem;font-weight:800;">${monthNames[month]} ${year}</h3>
-        <button class="btn btn-secondary btn-sm" onclick="changeRentalMonth(1)">Next ▶</button>
+        <button class="btn btn-secondary btn-sm" onclick="changeRentalMonth(1)">Next ${ico('chevron-right')}</button>
       </div>
 
       <!-- Calendar Grid -->
@@ -8760,7 +9248,7 @@ function openRentalModal(rentalId, prefillDeviceId) {
     <div class="modal-content modal-form modal-wide" role="dialog" aria-modal="true" aria-labelledby="rentalModalTitle">
       <div class="modal-header">
         <h3 class="modal-title" id="rentalModalTitle">
-          ${editing ? '✏️ Edit Rental Booking' : '📅 New Device Rental Booking'}
+          ${editing ? 'Edit Rental Booking' : 'New Device Rental Booking'}
         </h3>
         <button type="button" class="modal-close" aria-label="Close"
           onclick="document.getElementById('rentalModalOverlay').remove()">×</button>
@@ -8770,7 +9258,7 @@ function openRentalModal(rentalId, prefillDeviceId) {
         <div class="form-body">
 
           <section class="form-section">
-            <div class="form-section-title">🏢 Booking Details</div>
+            <div class="form-section-title">Booking Details</div>
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label" for="rentalCustomer">Customer / Company *</label>
@@ -8800,7 +9288,7 @@ function openRentalModal(rentalId, prefillDeviceId) {
           </section>
 
           <section class="form-section">
-            <div class="form-section-title">🗓️ Schedule</div>
+            <div class="form-section-title">Schedule</div>
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label" for="rentalStart">Start Date *</label>
@@ -8844,7 +9332,7 @@ function openRentalModal(rentalId, prefillDeviceId) {
 
           ${isAdmin ? `
           <section class="form-section">
-            <div class="form-section-title">💰 Pricing</div>
+            <div class="form-section-title">Pricing</div>
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label" for="rentalRate">Daily Rate (₱)</label>
@@ -8860,16 +9348,16 @@ function openRentalModal(rentalId, prefillDeviceId) {
           </section>
           ` : `
           <section class="form-section">
-            <div class="form-section-title">💰 Pricing</div>
+            <div class="form-section-title">Pricing</div>
             <div class="form-hint" style="margin-top:0;">
-              💡 The daily rate and deposit are set by our admin team after your booking is reviewed.
+              The daily rate and deposit are set by our admin team after your booking is reviewed.
               You will be notified once it is approved.
             </div>
           </section>
           `}
 
           <section class="form-section">
-            <div class="form-section-title">📍 Delivery &amp; Contact</div>
+            <div class="form-section-title">Delivery &amp; Contact</div>
             <div class="form-group">
               <label class="form-label" for="rentalAddress">Delivery Address</label>
               <input class="form-input" id="rentalAddress" type="text" name="deliveryAddress"
@@ -8898,7 +9386,7 @@ function openRentalModal(rentalId, prefillDeviceId) {
           </section>
 
           <section class="form-section">
-            <div class="form-section-title">📝 Notes</div>
+            <div class="form-section-title">Notes</div>
             <div class="form-group">
               <textarea class="form-textarea" name="notes" rows="3"
                 placeholder="Any special instructions or remarks…">${esc(editing ? editing.notes : '')}</textarea>
@@ -8911,7 +9399,7 @@ function openRentalModal(rentalId, prefillDeviceId) {
           <button type="button" class="btn btn-secondary"
             onclick="document.getElementById('rentalModalOverlay').remove()">Cancel</button>
           <button type="submit" class="btn btn-primary">
-            ${editing ? '💾 Update Booking' : '📅 Create Booking'}
+            ${editing ? 'Update Booking' : 'Create Booking'}
           </button>
         </div>
       </form>
@@ -8970,11 +9458,11 @@ async function submitRentalForm(event, rentalId) {
     json = await res.json();
 
     if (json.success) {
-      showToast(`✅ Rental ${rentalId ? 'updated' : 'created'} successfully!`, 'success');
+      showToast(`Rental ${rentalId ? 'updated' : 'created'} successfully!`, 'success');
       document.getElementById('rentalModalOverlay')?.remove();
       await fetchAllData();
     } else {
-      showToast(`❌ ${json.error}`, 'error');
+      showToast(`${json.error}`, 'error');
     }
   } catch (err) {
     showToast('Network error. Could not save rental.', 'error');
@@ -9084,7 +9572,7 @@ function viewRentalDetail(id) {
 
         ${rental.actualReturnDate ? `
           <div class="detail-tile detail-tile-success">
-            <div class="detail-tile-label" style="color:#22c55e;">✓ Device Returned</div>
+            <div class="detail-tile-label" style="color:#22c55e;">Device Returned</div>
             <div class="detail-tile-value">Return Date: ${formatDate(rental.actualReturnDate)}</div>
           </div>
         ` : ''}
@@ -9092,13 +9580,13 @@ function viewRentalDetail(id) {
 
       ${isAdmin ? `
         <div class="modal-footer" style="flex-wrap:wrap;justify-content:flex-end;">
-          ${rental.status === 'Pending' ? `<button class="btn btn-success btn-sm" onclick="approveRental('${esc(rental.id)}')">✓ Approve</button>` : ''}
-          ${rental.status === 'Approved' ? `<button class="btn btn-primary btn-sm" onclick="activateRental('${esc(rental.id)}')">▶ Activate</button>` : ''}
-          ${rental.status === 'Active' ? `<button class="btn btn-secondary btn-sm" onclick="returnRental('${esc(rental.id)}')">↩ Mark Returned</button>` : ''}
-          ${rental.status === 'Active' ? `<button class="btn btn-warning btn-sm" onclick="markOverdue('${esc(rental.id)}')">⚠ Mark Overdue</button>` : ''}
-          ${(rental.status === 'Pending' || rental.status === 'Approved') ? `<button class="btn btn-secondary btn-sm" onclick="cancelRental('${esc(rental.id)}')">✕ Cancel</button>` : ''}
-          <button class="btn btn-secondary btn-sm" onclick="editRental('${esc(rental.id)}')">✏️ Edit</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteRental('${esc(rental.id)}')">🗑️ Delete</button>
+          ${rental.status === 'Pending' ? `<button class="btn btn-success btn-sm" onclick="approveRental('${esc(rental.id)}')">Approve</button>` : ''}
+          ${rental.status === 'Approved' ? `<button class="btn btn-primary btn-sm" onclick="activateRental('${esc(rental.id)}')">${ico('play')} Activate</button>` : ''}
+          ${rental.status === 'Active' ? `<button class="btn btn-secondary btn-sm" onclick="returnRental('${esc(rental.id)}')">${ico('undo')} Mark Returned</button>` : ''}
+          ${rental.status === 'Active' ? `<button class="btn btn-warning btn-sm" onclick="markOverdue('${esc(rental.id)}')">Mark Overdue</button>` : ''}
+          ${(rental.status === 'Pending' || rental.status === 'Approved') ? `<button class="btn btn-secondary btn-sm" onclick="cancelRental('${esc(rental.id)}')">Cancel</button>` : ''}
+          <button class="btn btn-secondary btn-sm" onclick="editRental('${esc(rental.id)}')">Edit</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteRental('${esc(rental.id)}')">Delete</button>
         </div>
       ` : `
         <div class="modal-footer">
@@ -9132,11 +9620,11 @@ async function approveRental(id) {
     });
     const data = await res.json();
     if (data.success) {
-      showToast('✅ Rental approved.', 'success');
+      showToast('Rental approved.', 'success');
       document.getElementById('rentalDetailOverlay')?.remove();
       await fetchAllData();
     } else {
-      showToast(`❌ ${data.error}`, 'error');
+      showToast(`${data.error}`, 'error');
     }
   } catch (e) {
     showToast('Network error.', 'error');
@@ -9152,11 +9640,11 @@ async function activateRental(id) {
     });
     const data = await res.json();
     if (data.success) {
-      showToast('▶ Rental activated. Device is now rented out.', 'success');
+      showToast('Rental activated. Device is now rented out.', 'success');
       document.getElementById('rentalDetailOverlay')?.remove();
       await fetchAllData();
     } else {
-      showToast(`❌ ${data.error}`, 'error');
+      showToast(`${data.error}`, 'error');
     }
   } catch (e) {
     showToast('Network error.', 'error');
@@ -9175,11 +9663,11 @@ async function returnRental(id) {
         });
         const data = await res.json();
         if (data.success) {
-          showToast('↩ Rental marked as returned.', 'success');
+          showToast('Rental marked as returned.', 'success');
           document.getElementById('rentalDetailOverlay')?.remove();
           await fetchAllData();
         } else {
-          showToast(`❌ ${data.error}`, 'error');
+          showToast(`${data.error}`, 'error');
         }
       } catch (e) {
         showToast('Network error.', 'error');
@@ -9197,11 +9685,11 @@ async function markOverdue(id) {
     });
     const data = await res.json();
     if (data.success) {
-      showToast('⚠ Rental marked as overdue.', 'warning');
+      showToast('Rental marked as overdue.', 'warning');
       document.getElementById('rentalDetailOverlay')?.remove();
       await fetchAllData();
     } else {
-      showToast(`❌ ${data.error}`, 'error');
+      showToast(`${data.error}`, 'error');
     }
   } catch (e) {
     showToast('Network error.', 'error');
@@ -9220,11 +9708,11 @@ async function cancelRental(id) {
         });
         const data = await res.json();
         if (data.success) {
-          showToast('✕ Rental cancelled.', 'info');
+          showToast('Rental cancelled.', 'info');
           document.getElementById('rentalDetailOverlay')?.remove();
           await fetchAllData();
         } else {
-          showToast(`❌ ${data.error}`, 'error');
+          showToast(`${data.error}`, 'error');
         }
       } catch (e) {
         showToast('Network error.', 'error');
@@ -9249,11 +9737,11 @@ async function deleteRental(id) {
         const res = await fetch(`${API_BASE}/rentals/${id}`, { method: 'DELETE' });
         const data = await res.json();
         if (data.success) {
-          showToast(`✅ Rental ${rental.rentalNumber} deleted.`, 'success');
+          showToast(`Rental ${rental.rentalNumber} deleted.`, 'success');
           document.getElementById('rentalDetailOverlay')?.remove();
           await fetchAllData();
         } else {
-          showToast(`❌ ${data.error}`, 'error');
+          showToast(`${data.error}`, 'error');
         }
       } catch (e) {
         showToast('Network error. Could not delete rental.', 'error');
@@ -9274,14 +9762,14 @@ function showDeleteConfirm(message, onConfirm) {
   overlay.className = 'modal-backdrop';
   overlay.innerHTML = `
     <div class="modal-content" style="max-width:420px;text-align:center;border-color:rgba(244,63,94,0.35);" role="alertdialog" aria-modal="true">
-      <div style="font-size:2.5rem;margin-bottom:12px;">🗑️</div>
+      <div style="font-size:2.5rem;margin-bottom:12px;"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-trash"></use></svg></div>
       <h3 style="font-size:1.15rem;font-weight:800;color:#f43f5e;margin-bottom:10px;">Confirm Deletion</h3>
       <p style="font-size:0.88rem;color:var(--text-secondary);margin-bottom:24px;line-height:1.5;">${message}</p>
       <div class="modal-footer" style="border-top:none;background:transparent;padding:0;justify-content:center;">
         <button type="button" id="deleteCancelBtn" class="btn btn-secondary">Cancel</button>
         <button type="button" id="deleteConfirmBtn" class="btn btn-primary"
           style="background:linear-gradient(135deg,#f43f5e,#dc2626);box-shadow:0 4px 15px rgba(244,63,94,0.4);">
-          🗑️ Delete Permanently
+          Delete Permanently
         </button>
       </div>
     </div>
@@ -9308,10 +9796,10 @@ async function deleteDevice(id) {
         const res = await fetch(`${API_BASE}/devices/${id}`, { method: 'DELETE' });
         const data = await res.json();
         if (data.success) {
-          showToast(`✅ Device ${id} deleted successfully.`, 'success');
+          showToast(`Device ${id} deleted successfully.`, 'success');
           await fetchAllData();
         } else {
-          showToast(`❌ ${data.error}`, 'error');
+          showToast(`${data.error}`, 'error');
         }
       } catch (e) {
         showToast('Network error. Could not delete device.', 'error');
@@ -9333,10 +9821,10 @@ async function deleteTicket(id) {
           // Close any open modal
           const modal = document.getElementById('ticketDetailModal');
           if (modal) modal.remove();
-          showToast(`✅ Ticket ${tck.ticketNumber} deleted.`, 'success');
+          showToast(`Ticket ${tck.ticketNumber} deleted.`, 'success');
           await fetchAllData();
         } else {
-          showToast(`❌ ${data.error}`, 'error');
+          showToast(`${data.error}`, 'error');
         }
       } catch (e) {
         showToast('Network error. Could not delete ticket.', 'error');
@@ -9355,10 +9843,10 @@ async function deleteInventoryPart(id) {
         const res = await fetch(`${API_BASE}/inventory/${id}`, { method: 'DELETE' });
         const data = await res.json();
         if (data.success) {
-          showToast(`✅ Part "${part.name}" deleted from inventory.`, 'success');
+          showToast(`Part "${part.name}" deleted from inventory.`, 'success');
           await fetchAllData();
         } else {
-          showToast(`❌ ${data.error}`, 'error');
+          showToast(`${data.error}`, 'error');
         }
       } catch (e) {
         showToast('Network error. Could not delete inventory part.', 'error');
@@ -9381,35 +9869,162 @@ function applyTheme(theme) {
   }
   localStorage.setItem('millennium-theme', theme);
 
-  // The sidebar Settings row shows the active mode as its status line, so it is
-  // synced here rather than at every call site (boot, tile click, landing page).
-  const label = document.getElementById('themeToggleLabel');
-  if (label) {
-    label.textContent = theme === 'dark' ? 'Dark mode' : 'Light mode';
+  // The Light-mode pill lives inside Settings now. Its knob position and
+  // highlight are synced here so the pill and the document can never disagree,
+  // whichever of them triggered the change.
+  const pill = document.getElementById('settingsThemeToggle');
+  if (pill) {
+    const isLight = theme === 'light';
+    pill.classList.toggle('is-on', isLight);
+    pill.setAttribute('aria-checked', isLight ? 'true' : 'false');
+    pill.setAttribute('aria-label', isLight ? 'Light mode is on — switch to dark' : 'Light mode is off — switch to light');
   }
-
-  // The Settings dialog carries its own Light/Dark tiles, so they are synced
-  // here too — that keeps the dialog, the sidebar row and the document in step
-  // no matter which of them triggered the change.
-  document.querySelectorAll('[data-theme-option]').forEach((el) => {
-    const on = el.getAttribute('data-theme-option') === theme;
-    el.classList.toggle('is-active', on);
-    el.setAttribute('aria-pressed', on ? 'true' : 'false');
-  });
 }
 
-/** Apply a specific theme from the Settings dialog's Light/Dark tiles. */
+/** Flip the theme from the Settings pill. */
+function toggleThemeFromSettings() {
+  const isLight = document.documentElement.getAttribute('data-theme') !== 'dark';
+  setThemeFromSettings(isLight ? 'dark' : 'light');
+}
+
+/** Apply a specific theme from the Settings dialog's Light-mode pill. */
 function setThemeFromSettings(theme) {
   if (theme !== 'light' && theme !== 'dark') return;
   applyTheme(theme);
-  showToast(`Switched to ${theme === 'dark' ? '🌙 Dark Mode' : '☀️ Light Mode'}`, 'info');
+  showToast(`Switched to ${theme === 'dark' ? 'Dark Mode' : 'Light Mode'}`, 'info');
 }
 
 function toggleTheme() {
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
   const newTheme = isDark ? 'light' : 'dark';
   applyTheme(newTheme);
-  showToast(`Switched to ${newTheme === 'dark' ? '🌙 Dark Mode' : '☀️ Light Mode'}`, 'info');
+  showToast(`Switched to ${newTheme === 'dark' ? 'Dark Mode' : 'Light Mode'}`, 'info');
+}
+
+/* ==========================================================================
+   PER-ACCOUNT USER PREFERENCES
+   ==========================================================================
+   Notification and accessibility choices are stored per user id, so two people
+   signing in on the same browser never inherit each other's settings. They are
+   purely local display preferences — the server still decides what a role is
+   allowed to see, so nothing here can widen access.
+   ========================================================================== */
+
+const PREFS_DEFAULTS = {
+  notifyTickets: true,
+  notifyMessages: true,
+  notifyStock: true,
+  showBadge: true,
+  reduceMotion: false,
+  compact: false,
+  largeText: false,
+};
+
+const PREFS_ALLOWED = Object.keys(PREFS_DEFAULTS);
+
+function prefsStorageKey(userId) {
+  return `millennium-prefs-${userId || 'anonymous'}`;
+}
+
+/** Read this account's preferences, merged over the defaults. */
+function getUserPrefs(userId) {
+  const id = userId || state.currentUser?.id;
+  let stored = {};
+  try {
+    stored = JSON.parse(localStorage.getItem(prefsStorageKey(id)) || '{}') || {};
+  } catch {
+    stored = {};
+  }
+  const out = { ...PREFS_DEFAULTS };
+  PREFS_ALLOWED.forEach((key) => {
+    if (typeof stored[key] === 'boolean') out[key] = stored[key];
+  });
+  return out;
+}
+
+/** Persist one preference and apply the display side-effects immediately. */
+function setUserPref(key, value) {
+  if (!PREFS_ALLOWED.includes(key)) return;
+  const id = state.currentUser?.id;
+  const prefs = getUserPrefs(id);
+  prefs[key] = !!value;
+  try {
+    localStorage.setItem(prefsStorageKey(id), JSON.stringify(prefs));
+  } catch {
+    // Storage can be full or blocked; the in-memory result still applies.
+  }
+  applyUserPrefs(prefs);
+  renderNotifications();
+}
+
+/**
+ * Reflect accessibility preferences onto <html> as data attributes. The CSS
+ * does the rest, which keeps every view consistent without touching render
+ * functions one by one.
+ */
+function applyUserPrefs(prefs) {
+  const p = prefs || getUserPrefs();
+  const root = document.documentElement;
+  root.setAttribute('data-reduce-motion', p.reduceMotion ? 'on' : 'off');
+  root.setAttribute('data-density', p.compact ? 'compact' : 'comfortable');
+  root.setAttribute('data-text-size', p.largeText ? 'large' : 'normal');
+}
+
+/** Download a JSON snapshot of the signed-in account and its local preferences. */
+function downloadMyAccountData() {
+  const me = state.currentUser || {};
+  const payload = {
+    exportedAt: new Date().toISOString(),
+    account: {
+      id: me.id,
+      username: me.username,
+      fullName: me.fullName,
+      email: me.email,
+      role: me.role,
+      organization: me.organization || null,
+      location: me.location || null,
+      createdAt: me.createdAt || null,
+    },
+    preferences: getUserPrefs(me.id),
+    theme: localStorage.getItem('millennium-theme') || 'dark',
+  };
+
+  try {
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `millennium-account-${me.username || 'export'}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    showToast('Account data downloaded', 'success');
+  } catch (err) {
+    console.error('Export failed:', err);
+    showToast('Could not export account data', 'error');
+  }
+}
+
+/** Restore notification and accessibility defaults for this account. */
+function resetMyPreferences() {
+  const id = state.currentUser?.id;
+  try {
+    localStorage.removeItem(prefsStorageKey(id));
+  } catch {
+    // Ignore storage failures — applying defaults below is still correct.
+  }
+  const defaults = { ...PREFS_DEFAULTS };
+  applyUserPrefs(defaults);
+  renderNotifications();
+  showToast('Preferences reset to defaults', 'info');
+
+  // Keep the open dialog in step with the reset.
+  document.querySelectorAll('[data-pref-toggle]').forEach((btn) => {
+    const on = !!defaults[btn.dataset.prefToggle];
+    btn.classList.toggle('is-on', on);
+    btn.setAttribute('aria-checked', on ? 'true' : 'false');
+  });
 }
 
 // --- Mobile Sidebar Drawer Controller ---
@@ -9428,6 +10043,10 @@ window.addEventListener('DOMContentLoaded', async () => {
   // The inline boot script in index.html already applied the saved theme
   // before the first paint; this just syncs the toggle icon.
   initTheme();
+
+  // Accessibility preferences (reduced motion, density, text size) are stored
+  // per account but must be on <html> before the first view renders.
+  applyUserPrefs();
 
   // --- AUTH GATE: check for existing session ---
   let savedUser = getAuthSession();
@@ -9450,6 +10069,9 @@ window.addEventListener('DOMContentLoaded', async () => {
     updateSidebarRole(savedUser.role);
     hideAuthOverlay();
     applyRoleUI();
+    // Re-apply now that the account id is known, so the correct per-account
+    // preferences are used instead of the anonymous defaults.
+    applyUserPrefs();
     fetchAllData();
   } else {
     // Show login overlay, don't load data yet

@@ -246,6 +246,24 @@ const GEOMETRY = () => {
     await openTickets(page);
     await sleep(400);
     await page.evaluate(() => document.querySelector('.ticket-card')?.click());
+    await sleep(900);
+
+    // The conversation is gated behind "Open chat" now, so the panel — and its
+    // message list — only exists once the gate is opened. Checking colours
+    // before that would measure a display:none container.
+    const gate = await page.evaluate(() => {
+      const panel = document.getElementById('tixConvoPanel');
+      const bar = document.getElementById('tixConvoBar');
+      return {
+        hasGate: !!bar,
+        panelHidden: panel ? getComputedStyle(panel).display === 'none' : null,
+        label: bar ? bar.textContent.trim() : '',
+      };
+    });
+    check('the ticket dialog gates its chat behind an "Open chat" control', gate.hasGate && gate.panelHidden);
+    check('the gate is labelled', /Open chat/i.test(gate.label), gate.label);
+
+    await page.click('#tixConvoBar');
     await sleep(1800);
 
     const m = await page.evaluate(() => {
@@ -256,20 +274,23 @@ const GEOMETRY = () => {
         if (!m2) return -1;
         return 0.2126 * +m2[1] + 0.7152 * +m2[2] + 0.0722 * +m2[3];
       };
-      const bubbles = Array.from(chat.querySelectorAll('div')).filter((d) => d.style.background || d.style.backgroundColor);
+      const bubbles = Array.from(chat.querySelectorAll('.tix-chat-bubble'));
       return {
         chatBg: getComputedStyle(chat).backgroundColor,
         chatLum: lum(getComputedStyle(chat).backgroundColor),
         bubbleText: bubbles.length ? getComputedStyle(bubbles[bubbles.length - 1]).color : '',
         bubbleTextLum: bubbles.length ? lum(getComputedStyle(bubbles[bubbles.length - 1]).color) : -1,
         bubbles: bubbles.length,
+        open: document.getElementById('tixConvo')?.classList.contains('is-open'),
       };
     });
     console.log(`        ${JSON.stringify(m)}`);
+    check('opening the gate reveals the conversation', m.open === true);
     check('the chat panel is light in light mode (regression: was hardcoded #070c1d)',
       m.chatLum > 150, `chat bg=${m.chatBg} luminance=${m.chatLum}`);
     check('message text is dark in light mode (regression: was #f1f5f9, white-on-white)',
-      m.bubbleTextLum >= 0 && m.bubbleTextLum < 120, `text=${m.bubbleText} luminance=${m.bubbleTextLum}`);
+      m.bubbles > 0 && m.bubbleTextLum >= 0 && m.bubbleTextLum < 120,
+      `bubbles=${m.bubbles} text=${m.bubbleText} luminance=${m.bubbleTextLum}`);
 
     await ctx.close();
   }

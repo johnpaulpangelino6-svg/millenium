@@ -1,0 +1,114 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" width="320" height="200" role="img" aria-label="Millennium smart board remote control with air mouse">
+  <defs>
+    <linearGradient id="rcBody" x1="0" y1="0" x2="1" y2="0.25">
+      <stop offset="0" stop-color="#0b0e12"/>
+      <stop offset="0.14" stop-color="#2b3138"/>
+      <stop offset="0.30" stop-color="#5d666f"/>
+      <stop offset="0.44" stop-color="#39414a"/>
+      <stop offset="0.72" stop-color="#1a2026"/>
+      <stop offset="0.92" stop-color="#0a0d10"/>
+      <stop offset="1" stop-color="#191f25"/>
+    </linearGradient>
+    <linearGradient id="rcFace" x1="0" y1="0" x2="1" y2="0.4">
+      <stop offset="0" stop-color="#161b21"/>
+      <stop offset="0.2" stop-color="#242b33"/>
+      <stop offset="0.5" stop-color="#2e363f"/>
+      <stop offset="0.8" stop-color="#1b2128"/>
+      <stop offset="1" stop-color="#0d1116"/>
+    </linearGradient>
+    <linearGradient id="rcBtn" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4a545e"/>
+      <stop offset="0.35" stop-color="#2a3138"/>
+      <stop offset="1" stop-color="#11161b"/>
+    </linearGradient>
+    <!-- Smoked IR window: near-black with a faint amber cast, not the
+         plum-coloured band the earlier pass used. -->
+    <linearGradient id="rcIr" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a1f18"/>
+      <stop offset="0.45" stop-color="#15100d"/>
+      <stop offset="1" stop-color="#0a0c10"/>
+    </linearGradient>
+    <linearGradient id="rcSheen" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.30"/>
+      <stop offset="0.4" stop-color="#ffffff" stop-opacity="0.04"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+
+    <filter id="rcSoft" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="5"/>
+    </filter>
+    <filter id="rcSoftS" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="1.2"/>
+    </filter>
+
+    <clipPath id="rcClip">
+      <rect x="135" y="24" width="50" height="150" rx="15"/>
+    </clipPath>
+  </defs>
+
+  <ellipse cx="164" cy="180" rx="34" ry="7" fill="#04070c" opacity="0.5" filter="url(#rcSoft)"/>
+
+  <g transform="translate(160 100) scale(1.14) translate(-160 -100) rotate(-7 160 100)">
+    <!-- body silhouette -->
+    <rect x="135" y="24" width="50" height="150" rx="15" fill="url(#rcBody)"/>
+
+    <g clip-path="url(#rcClip)">
+      <!-- face plate inset -->
+      <rect x="139" y="28" width="42" height="142" rx="12" fill="url(#rcFace)"/>
+      <rect x="139" y="28" width="42" height="142" rx="12" fill="none" stroke="#000000" stroke-opacity="0.45"/>
+
+      <!-- IR / mic window -->
+      <rect x="147" y="33" width="26" height="11" rx="5.5" fill="url(#rcIr)"/>
+      <rect x="147" y="33" width="26" height="11" rx="5.5" fill="none" stroke="#000000" stroke-opacity="0.55"/>
+      <rect x="150" y="34.6" width="20" height="1.4" rx="0.7" fill="#ffffff" opacity="0.14"/>
+
+      <!-- power -->
+      <circle cx="160" cy="57" r="7.2" fill="url(#rcBtn)"/>
+      <circle cx="160" cy="57" r="7.2" fill="none" stroke="#000000" stroke-opacity="0.5"/>
+      <path d="M160 53.4 v3.4" stroke="#c9d3dd" stroke-width="1.2" stroke-linecap="round" opacity="0.85"/>
+      <path d="M157 55.2 a4.2 4.2 0 1 0 6 0" fill="none" stroke="#c9d3dd" stroke-width="1.2"
+        stroke-linecap="round" opacity="0.85"/>
+
+      <!-- d-pad -->
+      <circle cx="160" cy="86" r="19" fill="#0c1015" opacity="0.9"/>
+      <circle cx="160" cy="86" r="18.2" fill="url(#rcBtn)"/>
+      <circle cx="160" cy="86" r="18.2" fill="none" stroke="#000000" stroke-opacity="0.5"/>
+      <circle cx="160" cy="86" r="8.4" fill="#151b21"/>
+      <circle cx="160" cy="86" r="8.4" fill="none" stroke="#4a545e" stroke-opacity="0.6"/>
+      <path d="M160 74.6 l2.6 3.4 h-5.2 Z" fill="#c9d3dd" opacity="0.8"/>
+      <path d="M160 97.4 l2.6 -3.4 h-5.2 Z" fill="#c9d3dd" opacity="0.55"/>
+      <path d="M148.6 86 l3.4 2.6 v-5.2 Z" fill="#c9d3dd" opacity="0.55"/>
+      <path d="M171.4 86 l-3.4 2.6 v-5.2 Z" fill="#c9d3dd" opacity="0.55"/>
+      <circle cx="160" cy="86" r="3" fill="#2a323a"/>
+
+      <!-- volume rocker -->
+      <rect x="152" y="110" width="16" height="18" rx="6" fill="url(#rcBtn)"/>
+      <rect x="152" y="110" width="16" height="18" rx="6" fill="none" stroke="#000000" stroke-opacity="0.5"/>
+      <path d="M160 110 v18" stroke="#000000" stroke-opacity="0.45"/>
+      <path d="M157.4 115 h5.2M160 112.4 v5.2" stroke="#c9d3dd" stroke-width="1" stroke-linecap="round" opacity="0.75"/>
+      <path d="M157.4 123.4 h5.2" stroke="#c9d3dd" stroke-width="1" stroke-linecap="round" opacity="0.6"/>
+
+      <!-- home / back -->
+      <circle cx="150" cy="140" r="5.6" fill="url(#rcBtn)"/>
+      <circle cx="150" cy="140" r="5.6" fill="none" stroke="#000000" stroke-opacity="0.5"/>
+      <path d="M147.2 140.6 l2.8 -2.8 2.8 2.8 M148.4 139.6 v3" fill="none" stroke="#c9d3dd"
+        stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
+      <circle cx="170" cy="140" r="5.6" fill="url(#rcBtn)"/>
+      <circle cx="170" cy="140" r="5.6" fill="none" stroke="#000000" stroke-opacity="0.5"/>
+      <path d="M172.4 138 l-3.2 2 3.2 2" fill="none" stroke="#c9d3dd" stroke-width="1"
+        stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
+
+      <!-- mic key -->
+      <rect x="154" y="155" width="12" height="5" rx="2.5" fill="#1b222a"/>
+      <rect x="154" y="155" width="12" height="1.2" rx="0.6" fill="#ffffff" opacity="0.18"/>
+
+      <!-- long soft specular down the left cheek -->
+      <path d="M141 34 Q 137 100 143 168 L147 168 Q 141 100 145 34 Z" fill="url(#rcSheen)" opacity="0.55"/>
+    </g>
+
+    <!-- outer edge light -->
+    <rect x="135" y="24" width="50" height="150" rx="15" fill="none" stroke="#ffffff" stroke-opacity="0.12"/>
+    <path d="M137 40 Q 135 100 138 160" fill="none" stroke="#ffffff" stroke-opacity="0.35" stroke-width="1.2"
+      stroke-linecap="round"/>
+  </g>
+</svg>

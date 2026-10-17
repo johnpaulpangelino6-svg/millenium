@@ -1330,6 +1330,7 @@ class MillenniumDatabase {
     const values: any[] = [];
     let paramCount = 1;
 
+    if (data.name !== undefined) { updates.push(`name = $${paramCount++}`); values.push(data.name); }
     if (data.stockQuantity !== undefined) { updates.push(`stock_quantity = $${paramCount++}`); values.push(data.stockQuantity); }
     if (data.minThreshold !== undefined) { updates.push(`min_threshold = $${paramCount++}`); values.push(data.minThreshold); }
     if (data.unitCost !== undefined) { updates.push(`unit_cost = $${paramCount++}`); values.push(data.unitCost); }
@@ -1346,6 +1347,33 @@ class MillenniumDatabase {
   async deleteInventoryPart(id: string): Promise<boolean> {
     const result = await pool.query('DELETE FROM inventory_parts WHERE id = $1', [id]);
     return (result.rowCount || 0) > 0;
+  }
+
+  /**
+   * Add stock in a single statement.
+   *
+   * The card's Restock button used to send an absolute quantity the client had
+   * computed (`stockQuantity + 5`). That loses an increment whenever two admins
+   * click at the same time, and it can even *reduce* stock when the card is
+   * showing a stale number. Incrementing in SQL keeps the result correct under
+   * concurrency, and recomputing `status` in the same statement means the badge
+   * can never disagree with the quantity.
+   */
+  async restockInventoryPart(id: string, amount: number = 1): Promise<InventoryPart | null> {
+    const delta = Number.isFinite(amount) ? Math.trunc(amount) : 1;
+    await pool.query(
+      `UPDATE inventory_parts
+          SET stock_quantity = stock_quantity + $1,
+              status = CASE
+                         WHEN stock_quantity + $1 <= 0 THEN 'Out of Stock'
+                         WHEN stock_quantity + $1 < COALESCE(min_threshold, 5) THEN 'Low Stock'
+                         ELSE 'In Stock'
+                       END,
+              last_restocked = CURRENT_TIMESTAMP
+        WHERE id = $2`,
+      [delta, id]
+    );
+    return this.getInventoryPartById(id);
   }
 
   // -------------------------------------------------------------------------
@@ -1581,15 +1609,17 @@ class MillenniumDatabase {
   // -------------------------------------------------------------------------
   // NOTIFICATIONS
   // -------------------------------------------------------------------------
-  async getRecentTicketMessages(limit: number = 20): Promise<any[]> {
+  async getRecentTicketMessages(limit: number = 20, chatType?: 'staff' | 'customer'): Promise<any[]> {
     const query = `
       SELECT id, ticket_id as "ticketId", sender_id as "senderId", sender_name as "senderName",
-             sender_role as "senderRole", message, created_at as "createdAt"
+             sender_role as "senderRole", message, chat_type as "chatType", created_at as "createdAt"
       FROM ticket_messages
+      ${chatType ? 'WHERE chat_type = $2' : ''}
       ORDER BY created_at DESC
       LIMIT $1
     `;
-    const result = await pool.query(query, [limit]);
+    const params = chatType ? [limit, chatType] : [limit];
+    const result = await pool.query(query, params);
     return result.rows;
   }
 

@@ -1,0 +1,161 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" width="320" height="200" role="img" aria-label="Millennium 350 watt power supply board">
+  <defs>
+    <linearGradient id="pcbFace" x1="0.1" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#256b47"/>
+      <stop offset="0.35" stop-color="#175033"/>
+      <stop offset="0.75" stop-color="#114029"/>
+      <stop offset="1" stop-color="#0a2e1c"/>
+    </linearGradient>
+    <linearGradient id="pcbEdge" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#123b26"/>
+      <stop offset="1" stop-color="#07200f"/>
+    </linearGradient>
+    <linearGradient id="capBody" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0a1a2c"/>
+      <stop offset="0.22" stop-color="#1f4b7a"/>
+      <stop offset="0.38" stop-color="#5f9fd4"/>
+      <stop offset="0.55" stop-color="#22496f"/>
+      <stop offset="1" stop-color="#0a1626"/>
+    </linearGradient>
+    <linearGradient id="capTop" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#b9c3cc"/>
+      <stop offset="0.5" stop-color="#7b858f"/>
+      <stop offset="1" stop-color="#3d444b"/>
+    </linearGradient>
+    <linearGradient id="xfmr" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a2f36"/>
+      <stop offset="0.2" stop-color="#151a20"/>
+      <stop offset="1" stop-color="#070a0d"/>
+    </linearGradient>
+    <linearGradient id="heatsink" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#5c656e"/>
+      <stop offset="0.2" stop-color="#c3ccd6"/>
+      <stop offset="0.45" stop-color="#7e8892"/>
+      <stop offset="0.72" stop-color="#aab4be"/>
+      <stop offset="1" stop-color="#464e57"/>
+    </linearGradient>
+    <linearGradient id="copper" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#d9a35a"/>
+      <stop offset="0.5" stop-color="#a9722f"/>
+      <stop offset="1" stop-color="#7a4f1c"/>
+    </linearGradient>
+
+    <filter id="pcbSoft" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="6"/>
+    </filter>
+    <filter id="pcbSoftS" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="1.5"/>
+    </filter>
+
+    <clipPath id="pcbClip">
+      <rect x="44" y="64" width="232" height="82" rx="3"/>
+    </clipPath>
+  </defs>
+
+  <!-- Drop shadow: the board sits a few millimetres off the surface -->
+  <ellipse cx="166" cy="158" rx="120" ry="13" fill="#04070c" opacity="0.45" filter="url(#pcbSoft)"/>
+
+  <g transform="rotate(-7 160 105)">
+    <!-- board thickness -->
+    <rect x="44" y="68" width="232" height="82" rx="3" fill="url(#pcbEdge)"/>
+    <rect x="44" y="67.2" width="232" height="2.4" rx="1.2" fill="#000000" opacity="0.55"/>
+
+    <g clip-path="url(#pcbClip)">
+      <rect x="44" y="64" width="232" height="82" fill="url(#pcbFace)"/>
+
+      <!-- copper pour + traces, visible through the solder mask -->
+      <g stroke="#2f8a5c" stroke-width="1.1" fill="none" opacity="0.55">
+        <path d="M52 132 H96 V96 H140"/>
+        <path d="M52 138 H104 V118 H150 V140"/>
+        <path d="M186 70 V88 H236 V112"/>
+        <path d="M196 146 H244 V120"/>
+        <path d="M60 76 H120 V92"/>
+      </g>
+      <g stroke="#0c2f1e" stroke-width="0.6" fill="none" opacity="0.6">
+        <path d="M52 134.5 H94 V98.5 H138"/>
+        <path d="M188 72 V90 H238 V114"/>
+      </g>
+      <!-- ground stitching vias -->
+      <g fill="#c9a05a" opacity="0.55">
+        <circle cx="56" cy="70" r="1.1"/><circle cx="72" cy="70" r="1.1"/>
+        <circle cx="252" cy="140" r="1.1"/><circle cx="266" cy="140" r="1.1"/>
+        <circle cx="56" cy="140" r="1.1"/>
+      </g>
+
+      <!-- heatsink -->
+      <g>
+        <rect x="196" y="72" width="46" height="26" rx="2" fill="#000000" opacity="0.35" filter="url(#pcbSoftS)"/>
+        <rect x="194" y="70" width="46" height="26" rx="2" fill="url(#heatsink)"/>
+        <g stroke="#3d444b" stroke-width="1.4" opacity="0.75">
+          <path d="M199 70 V96M205 70 V96M211 70 V96M217 70 V96M223 70 V96M229 70 V96M235 70 V96"/>
+        </g>
+        <rect x="194" y="70" width="46" height="1.4" rx="0.7" fill="#ffffff" opacity="0.55"/>
+        <rect x="194" y="94.6" width="46" height="1.4" rx="0.7" fill="#000000" opacity="0.45"/>
+      </g>
+
+      <!-- transformer -->
+      <g>
+        <rect x="72" y="74" width="52" height="34" rx="2" fill="#000000" opacity="0.4" filter="url(#pcbSoftS)"/>
+        <rect x="70" y="72" width="52" height="34" rx="2" fill="url(#xfmr)"/>
+        <rect x="74" y="76" width="44" height="26" rx="1.5" fill="none" stroke="url(#copper)" stroke-width="1.6" opacity="0.9"/>
+        <rect x="78" y="80" width="36" height="18" rx="1" fill="none" stroke="url(#copper)" stroke-width="1.2" opacity="0.7"/>
+        <rect x="70" y="72" width="52" height="1.2" rx="0.6" fill="#ffffff" opacity="0.22"/>
+        <text x="96" y="110" text-anchor="middle" font-family="Arial, sans-serif" font-size="4"
+          fill="#cfe6d8" opacity="0.55" letter-spacing="0.6">350W</text>
+      </g>
+
+      <!-- electrolytic capacitors -->
+      <g>
+        <g>
+          <circle cx="140" cy="84" r="12.5" fill="#000000" opacity="0.4" filter="url(#pcbSoftS)"/>
+          <circle cx="140" cy="82" r="12" fill="url(#capBody)"/>
+          <circle cx="140" cy="82" r="9.4" fill="url(#capTop)"/>
+          <circle cx="140" cy="82" r="9.4" fill="none" stroke="#000000" stroke-opacity="0.45"/>
+          <path d="M133 82 h14" stroke="#2b3238" stroke-width="1.1" opacity="0.8"/>
+          <ellipse cx="136" cy="77.5" rx="3.4" ry="2" fill="#ffffff" opacity="0.45"/>
+        </g>
+        <g>
+          <circle cx="170" cy="92" r="10.5" fill="#000000" opacity="0.4" filter="url(#pcbSoftS)"/>
+          <circle cx="170" cy="90" r="10" fill="url(#capBody)"/>
+          <circle cx="170" cy="90" r="7.6" fill="url(#capTop)"/>
+          <circle cx="170" cy="90" r="7.6" fill="none" stroke="#000000" stroke-opacity="0.45"/>
+          <ellipse cx="167" cy="86.4" rx="2.8" ry="1.7" fill="#ffffff" opacity="0.45"/>
+        </g>
+      </g>
+
+      <!-- small SMD parts -->
+      <g>
+        <rect x="122" y="112" width="16" height="8" rx="1" fill="#0d1116"/>
+        <rect x="122" y="112" width="16" height="1.4" rx="0.7" fill="#ffffff" opacity="0.22"/>
+        <rect x="146" y="112" width="10" height="8" rx="1" fill="#1b232b"/>
+        <rect x="162" y="112" width="12" height="8" rx="1" fill="#0d1116"/>
+        <rect x="180" y="108" width="9" height="6" rx="1" fill="#242c34"/>
+        <rect x="122" y="128" width="22" height="7" rx="1" fill="#0a0e12"/>
+        <rect x="150" y="128" width="14" height="7" rx="1" fill="#1a2129"/>
+      </g>
+
+      <!-- output terminal block -->
+      <g>
+        <rect x="212" y="112" width="52" height="24" rx="2" fill="#000000" opacity="0.4" filter="url(#pcbSoftS)"/>
+        <rect x="210" y="110" width="52" height="24" rx="2" fill="#123a22"/>
+        <rect x="210" y="110" width="52" height="1.2" rx="0.6" fill="#ffffff" opacity="0.18"/>
+        <g fill="#0a0d11">
+          <rect x="215" y="115" width="8" height="14" rx="1.4"/>
+          <rect x="226" y="115" width="8" height="14" rx="1.4"/>
+          <rect x="237" y="115" width="8" height="14" rx="1.4"/>
+          <rect x="248" y="115" width="8" height="14" rx="1.4"/>
+        </g>
+        <g fill="#6f7a85" opacity="0.7">
+          <rect x="218" y="118" width="2" height="8" rx="1"/>
+          <rect x="229" y="118" width="2" height="8" rx="1"/>
+          <rect x="240" y="118" width="2" height="8" rx="1"/>
+          <rect x="251" y="118" width="2" height="8" rx="1"/>
+        </g>
+      </g>
+
+      <!-- board edge highlight -->
+      <rect x="44" y="64" width="232" height="82" rx="3" fill="none" stroke="#000000" stroke-opacity="0.5"/>
+      <rect x="44.5" y="64.5" width="231" height="81" rx="2.6" fill="none" stroke="#8fd6b0" stroke-opacity="0.18"/>
+    </g>
+  </g>
+</svg>

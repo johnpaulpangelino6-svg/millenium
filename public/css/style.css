@@ -11,11 +11,10 @@
   --bg-surface-elevated: #ffffff;
   --bg-hover: #f1f5f9;
   --bg-muted: #f8fafc;
-  /* Sidebar canvas. Exists as its own token because the nav rail is the one
-     surface that must NEVER inherit a stray literal colour — see the note on
-     `.app-sidebar` in the "Sidebar Redesign" block. */
-  --sidebar-bg: #ffffff;
-  --sidebar-border: #e2e8f0;
+  /* Sidebar canvas. Locked to the dark navy palette in both themes so the
+     nav rail never re-themes when the rest of the app switches to light mode. */
+  --sidebar-bg: #070d20;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
   
   --border-color: #e2e8f0;
   --border-hover: #cbd5e1;
@@ -366,10 +365,11 @@ body::before {
 }
 
 /* Brains Infinite Innovations Neural Network Emblem.
-   Presented as a WHITE tile, matching `.brand-logo` on the landing page
-   (public/landing.html) so the brand reads identically in both places. It used
-   to be a dark navy chip with a cyan glow, which made the same emblem look like
-   two different logos depending on where you were.
+   The mark is a transparent multi-colour SVG (magenta / violet / cyan paths,
+   no background plate), so it is presented bare — no tile, no border, no
+   shadow — exactly like `.brand-logo` on the landing page
+   (public/landing.html). It previously sat inside a white rounded chip, which
+   turned the logo into a "sticker" that read as a separate card on the navy.
    Deliberately NOT animated: this element used to carry
    `animation: float 3s ease-in-out infinite` (a -10px vertical bob, defined in
    the "Enhanced Logo Float Animation" block further down) plus
@@ -379,19 +379,13 @@ body::before {
   width: 46px;
   height: 46px;
   border-radius: 12px;
-  background: #ffffff;
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.14);
+  background: transparent;
+  border: none;
+  box-shadow: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: box-shadow 0.25s ease;
   cursor: default;
-}
-
-/* No transform here on purpose — see the note above. */
-.brains-emblem-box:hover {
-  box-shadow: 0 3px 12px rgba(15, 23, 42, 0.2);
 }
 
 /* Brand Text Container */
@@ -1135,6 +1129,76 @@ body::before {
   box-shadow: var(--shadow-lg);
   transform: translateY(-3px);
   border-color: var(--border-hover);
+}
+
+/* ---- Inventory card variants ---- */
+.stat-card.card-online::before  { background: #10b981; }
+.stat-card.card-warning::before { background: #f59e0b; }
+.stat-card.card-offline::before { background: #ef4444; }
+
+.inv-part-name {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.inv-part-category {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.inv-stock-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.inv-stock-number {
+  font-size: 2rem;
+  font-weight: 800;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.inv-stock-hint {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.inv-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.82rem;
+}
+
+.inv-unit-cost { color: var(--text-secondary); }
+.inv-unit-cost strong { color: var(--text-primary); }
+
+.inv-delete-row {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color);
+}
+
+.inv-delete-btn {
+  width: 100%;
+  padding: 7px;
+  border-radius: 7px;
+  border: 1px solid rgba(244, 63, 94, 0.35);
+  background: rgba(244, 63, 94, 0.08);
+  color: #f43f5e;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 700;
+  transition: all 0.2s;
+}
+
+.inv-delete-btn:hover {
+  background: rgba(244, 63, 94, 0.15);
+  border-color: rgba(244, 63, 94, 0.5);
 }
 
 .stat-header {
@@ -2677,6 +2741,15 @@ body::before {
   box-shadow: var(--shadow-sm);
 }
 
+/* Images that JS fills in later ship without a src attribute. Left visible,
+   the browser paints the alt text (or a broken-image glyph for src="") in the
+   gap before the real bitmap lands. Hiding the no-src state makes the rule
+   self-cancelling: the moment .src is assigned, :not([src]) stops matching. */
+#qrCodeImg:not([src]),
+#uploadedBarcodeImage:not([src]) {
+  visibility: hidden;
+}
+
 /* Toast */
 .toast-notification {
   position: fixed;
@@ -2707,6 +2780,16 @@ body::before {
   transform: translateY(0);
   opacity: 1;
 }
+
+/* Status icon. Colour carries the outcome, so the message text can stay
+   in --text-primary instead of shouting in red or green. */
+.toast-notification > .ico {
+  flex-shrink: 0;
+  font-size: 1.15rem;
+}
+.toast-notification.is-success > .ico { color: var(--success); }
+.toast-notification.is-error > .ico { color: var(--danger); }
+.toast-notification.is-info > .ico { color: var(--primary); }
 
 /* SmartBoard Display Simulator */
 /* ==========================================================================
@@ -6944,6 +7027,205 @@ body {
    Ticket Assignment & Chat Styling
    ========================================================================== */
 
+/* Ticket Assignment & Chat Styling
+   ========================================================================== */
+
+/* ---- Clean ticket chat container ---- */
+.tix-chat {
+  background: var(--bg-muted);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 18px;
+}
+
+.tix-chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.tix-chat-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tix-chat-title .tix-chat-sub {
+  font-size: 0.68rem;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.tix-chat-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 9999px;
+}
+
+.tix-chat-badge.green  { background: rgba(16,185,129,0.15);  color: var(--accent-green-text); }
+.tix-chat-badge.cyan   { background: rgba(0,242,254,0.12);   color: var(--neon-cyan); }
+.tix-chat-badge.purple { background: rgba(168,85,247,0.15);  color: var(--accent-purple-text); }
+
+.tix-chat-desc {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin: 0 0 14px;
+}
+
+/* ---- Chat tab switcher ---- */
+.tix-chat-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 10px;
+}
+
+.tix-chat-tab {
+  padding: 7px 16px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  transition: all 0.2s;
+}
+
+.tix-chat-tab.is-active {
+  background: rgba(0,242,254,0.12);
+  color: var(--neon-cyan);
+  border-color: rgba(0,242,254,0.35);
+}
+
+/* ---- Chat messages area ---- */
+.tix-chat-messages {
+  max-height: 300px;
+  min-height: 120px;
+  overflow-y: auto;
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 14px;
+  margin-bottom: 12px;
+}
+
+.tix-chat-msg {
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+}
+
+.tix-chat-msg.is-self { align-items: flex-end; }
+.tix-chat-msg.is-other { align-items: flex-start; }
+
+.tix-chat-msg-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.tix-chat-msg-meta strong { color: var(--text-primary); }
+.tix-chat-msg.is-self .tix-chat-msg-meta strong { color: var(--neon-cyan); }
+.tix-chat-msg-meta .tix-chat-time { font-size: 0.65rem; color: var(--text-muted); }
+
+.tix-chat-role {
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+.tix-chat-role.admin      { background: rgba(0,242,254,0.15);  color: var(--neon-cyan); }
+.tix-chat-role.customer   { background: rgba(16,185,129,0.15); color: var(--accent-green-text); }
+.tix-chat-role.technician { background: rgba(168,85,247,0.15); color: var(--accent-purple-text); }
+
+.tix-chat-bubble {
+  max-width: 80%;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 0.86rem;
+  color: var(--text-primary);
+  word-break: break-word;
+  line-height: 1.45;
+}
+
+.tix-chat-bubble.admin      { background: rgba(0,242,254,0.12);  border: 1px solid rgba(0,242,254,0.25); }
+.tix-chat-bubble.customer   { background: rgba(16,185,129,0.10); border: 1px solid rgba(16,185,129,0.22); }
+.tix-chat-bubble.technician { background: rgba(168,85,247,0.10); border: 1px solid rgba(168,85,247,0.22); }
+
+.tix-chat-msg.is-self .tix-chat-bubble.admin      { background: rgba(0,242,254,0.18); }
+.tix-chat-msg.is-self .tix-chat-bubble.customer   { background: rgba(16,185,129,0.18); }
+.tix-chat-msg.is-self .tix-chat-bubble.technician  { background: rgba(168,85,247,0.18); }
+
+/* ---- Chat input row ---- */
+.tix-chat-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.tix-chat-input-row .form-input { flex: 1; }
+
+.tix-chat-send {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  padding: 0 16px;
+  border: none;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: opacity 0.15s;
+}
+
+.tix-chat-send:hover { opacity: 0.88; }
+
+.tix-chat-send.green  { background: linear-gradient(135deg, #059669, #34d399); color: #fff; }
+.tix-chat-send.cyan   { background: linear-gradient(135deg, #0e7490, #22d3ee); color: #fff; }
+.tix-chat-send.purple { background: linear-gradient(135deg, #7c3aed, #c084fc); color: #fff; }
+
+/* ---- Chat empty / loading / error states ---- */
+.tix-chat-empty,
+.tix-chat-loading,
+.tix-chat-error {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  padding: 24px 16px;
+}
+
+.tix-chat-empty .tix-chat-emoji { display: block; font-size: 2rem; margin-bottom: 8px; opacity: 0.8; }
+.tix-chat-error { color: #f87171; }
+
+/* ---- Ticket detail info card ---- */
+.tix-detail-info {
+  background: var(--bg-muted);
+  padding: 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+}
+
+.tix-detail-info h3 { font-size: 1.05rem; font-weight: 800; color: var(--text-primary); margin: 0; }
+.tix-detail-info p { color: var(--text-secondary); font-size: 0.86rem; margin-top: 6px; margin-bottom: 0; }
+
+.tix-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  font-size: 0.85rem;
+}
+
 /* Chat messages container custom scrollbar */
 #ticketChatMessages::-webkit-scrollbar {
   width: 6px;
@@ -6965,8 +7247,8 @@ body {
 
 /* Chat input focus effect */
 #ticketChatInput:focus {
-  border-color: var(--neon-purple);
-  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.1);
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-glow);
 }
 
 /* Assignment select focus effect */
@@ -7499,10 +7781,34 @@ body {
 .nav-icon-sq {
   width: 32px;
   height: 32px;
-  border-radius: 8px;
+  border-radius: 9px;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex: none;
+  color: #ffffff;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.28);
+}
+
+/* Coloured icon tiles — one hue per destination, matching the reference
+   sidebar. The tint stays visible at rest and is overridden to translucent
+   white on the active row so the glyph reads against the gradient. */
+.nav-ico-blue   { background: linear-gradient(135deg, #3b82f6, #6366f1); }
+.nav-ico-cyan   { background: linear-gradient(135deg, #0ea5e9, #22d3ee); }
+.nav-ico-amber  { background: linear-gradient(135deg, #f59e0b, #fbbf24); }
+.nav-ico-green  { background: linear-gradient(135deg, #10b981, #34d399); }
+.nav-ico-purple { background: linear-gradient(135deg, #a855f7, #d946ef); }
+.nav-ico-slate  { background: linear-gradient(135deg, #64748b, #94a3b8); }
+.nav-ico-indigo { background: linear-gradient(135deg, #6366f1, #8b5cf6); }
+.nav-ico-violet { background: linear-gradient(135deg, #8b5cf6, #c084fc); }
+
+.nav-icon-sq svg { display: block; }
+
+/* Active row: flatten every tile to translucent white so the coloured glyphs
+   do not fight the blue→violet gradient behind them. */
+.app-sidebar .nav-item.active .nav-icon-sq {
+  background: rgba(255, 255, 255, 0.18);
+  box-shadow: none;
 }
 
 .nav-text-group {
@@ -8147,16 +8453,30 @@ body {
 }
 
 .stock-gauge-circle {
+  --gauge-pct: 50;
   width: 76px;
   height: 76px;
   border-radius: 50%;
-  border: 4px solid #10b981;
-  border-left-color: rgba(255, 255, 255, 0.1);
+  background: conic-gradient(#10b981 calc(var(--gauge-pct) * 1%), rgba(255, 255, 255, 0.08) 0);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  position: relative;
+}
+
+.stock-gauge-circle::before {
+  content: '';
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  background: #0a1228;
+}
+
+.stock-gauge-circle > * {
+  position: relative;
+  z-index: 1;
 }
 
 .stock-gauge-circle strong { font-size: 1.1rem; color: #fff; line-height: 1; }
@@ -8184,11 +8504,130 @@ body {
 .stock-alert-item strong { display: block; color: #cbd5e1; }
 .stock-alert-item small { color: #64748b; }
 
-.alert-pill { font-size: 0.65rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; }
+.alert-pill {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  /* inline-flex so the trailing chevron centres on the cap-height instead of
+     sitting on the text baseline like the old "›" character did. */
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.alert-pill .ico { font-size: 0.85em; }
 .alert-pill.out { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
 .alert-pill.low { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
 
 .view-inv-link { font-size: 0.75rem; color: #00f2fe; font-weight: 700; cursor: pointer; text-align: right; }
+
+/* Quick Actions — moved from the top grid into the Stock & Inventory widget
+   so the dashboard layout matches the reference screenshot. */
+.dash-quick-actions {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 14px;
+}
+
+.dash-quick-actions-title {
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: #f8fafc;
+  margin-bottom: 12px;
+}
+
+.dash-quick-actions-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+/* Mini device fleet table inside the Device Fleet Status widget */
+.dash-mini-table {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.dash-mini-table-head,
+.dash-mini-table-row {
+  display: grid;
+  grid-template-columns: 1.4fr 0.8fr 1fr;
+  gap: 10px;
+  align-items: center;
+  font-size: 0.72rem;
+  padding: 8px 10px;
+  border-radius: 10px;
+}
+
+.dash-mini-table-head {
+  color: #64748b;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding-bottom: 4px;
+}
+
+.dash-mini-table-row {
+  background: #060b19;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.dash-mini-table-row:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.dash-mini-table-row:focus-visible {
+  outline: 2px solid #00f2fe;
+  outline-offset: 2px;
+}
+
+.dash-mini-device {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dash-mini-ico {
+  font-size: 1rem;
+  flex: none;
+}
+
+.dash-mini-device strong {
+  display: block;
+  color: #f8fafc;
+  font-weight: 700;
+  font-size: 0.78rem;
+}
+
+.dash-mini-device small {
+  display: block;
+  color: #64748b;
+  font-size: 0.65rem;
+}
+
+.dash-mini-status {
+  font-weight: 700;
+  font-size: 0.72rem;
+}
+
+.dash-mini-status.is-online { color: #10b981; }
+.dash-mini-status.is-offline { color: #ef4444; }
+.dash-mini-status.is-warning { color: #f59e0b; }
+.dash-mini-status.is-service { color: #00f2fe; }
+
+.dash-mini-location {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dash-mini-table-foot {
+  text-align: right;
+  padding-top: 4px;
+}
 
 .recent-activity-box {
   border-top: 1px solid rgba(255, 255, 255, 0.08);
@@ -9846,6 +10285,179 @@ body {
   color: var(--text-muted);
 }
 
+/* ---- Settings toggle rows (Notifications / Accessibility) ---- */
+.settings-toggle-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.settings-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 14px;
+  background: var(--bg-surface);
+}
+
+.settings-toggle-row + .settings-toggle-row { border-top: 1px solid var(--border-color); }
+
+.settings-toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-toggle-text strong {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.settings-toggle-text span {
+  font-size: 0.73rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+/* Compact switch used by the preference rows. */
+.pref-switch {
+  flex: none;
+  width: 40px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 9999px;
+  background: var(--bg-muted);
+  cursor: pointer;
+  transition: background-color 0.18s ease, border-color 0.18s ease;
+}
+
+.pref-switch:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+.pref-switch-track {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.pref-switch-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: transform 0.18s ease, background-color 0.18s ease;
+}
+
+.pref-switch.is-on {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.pref-switch.is-on .pref-switch-knob {
+  background: #ffffff;
+  transform: translateX(18px);
+}
+
+/* The global `button:hover` rule lifts every button 2px and adds a cyan glow.
+   That reads as a broken layout on a 22px switch sitting in a settings row, so
+   the small toggles opt out of the lift. */
+.theme-switch-pill:hover,
+.theme-switch-pill:active,
+.pref-switch:hover,
+.pref-switch:active {
+  transform: none;
+  box-shadow: none;
+}
+
+/* ---- Settings action rows (Data & privacy) ---- */
+.settings-action-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.settings-action-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 14px;
+  background: var(--bg-surface);
+}
+
+.settings-action-row + .settings-action-row { border-top: 1px solid var(--border-color); }
+
+.settings-action-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-action-text strong {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.settings-action-text span {
+  font-size: 0.73rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+/* ---- Accessibility preference effects ---- */
+
+/* Reduced motion: kill animation and transition everywhere, including the
+   per-view entrance animations and the notification pulse. */
+html[data-reduce-motion="on"] *,
+html[data-reduce-motion="on"] *::before,
+html[data-reduce-motion="on"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* Compact density: trim vertical rhythm on the surfaces that repeat rows. */
+html[data-density="compact"] .stat-card,
+html[data-density="compact"] .device-card,
+html[data-density="compact"] .ticket-card,
+html[data-density="compact"] .warranty-card {
+  padding: 14px;
+}
+
+html[data-density="compact"] .dash-v2-container { gap: 14px; }
+
+html[data-density="compact"] .table-wrap td,
+html[data-density="compact"] .table-wrap th {
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+html[data-density="compact"] .nav-item { padding-top: 7px; padding-bottom: 7px; }
+
+/* Larger text: one step up on the root font size, so rem-based type scales. */
+html[data-text-size="large"] { font-size: 17.5px; }
+
+@media (max-width: 720px) {
+  .settings-toggle-row,
+  .settings-action-row {
+    align-items: flex-start;
+  }
+}
+
 .settings-footer-hint {
   margin-right: auto;
   align-self: center;
@@ -10351,10 +10963,8 @@ html:not([data-theme="dark"]) .app-header {
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border-color);
 }
-html:not([data-theme="dark"]) .app-sidebar {
-  background: var(--sidebar-bg);
-  border-right: 1px solid var(--sidebar-border);
-}
+/* Sidebar is theme-locked to dark navy via --sidebar-bg / --sidebar-border.
+   No light-mode override here; the rail stays visually identical in both themes. */
 
 html:not([data-theme="dark"]) .header-search-input {
   background: var(--bg-muted);
@@ -10399,18 +11009,37 @@ html:not([data-theme="dark"]) .system-status-pill {
   border-color: var(--success-border);
 }
 
-/* ---- Sidebar ---- */
-html:not([data-theme="dark"]) .sidebar-section-label { color: var(--text-muted); }
-html:not([data-theme="dark"]) .nav-item { color: var(--text-secondary); }
-html:not([data-theme="dark"]) .nav-item:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
+/* ---- Inventory card light-mode overrides ---- */
+html:not([data-theme="dark"]) .inv-part-name { color: var(--text-primary); }
+html:not([data-theme="dark"]) .inv-stock-number { color: var(--text-primary); }
+
+/* ---- Sidebar ----
+   The sidebar is locked to a dark navy surface in both themes. Text colours
+   therefore stay fixed to light values so they remain readable regardless of
+   the global light/dark mode. */
+html:not([data-theme="dark"]) .sidebar-section-label,
+html:not([data-theme="dark"]) .app-sidebar .nav-item,
+html:not([data-theme="dark"]) .sidebar-settings-row,
+html:not([data-theme="dark"]) .sidebar-search-input,
+html:not([data-theme="dark"]) .sidebar-search-input::placeholder,
+html:not([data-theme="dark"]) .sidebar-search svg { color: #94a3b8; }
+
+html:not([data-theme="dark"]) .app-sidebar .nav-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: #f8fafc;
 }
-/* (The light-mode active-nav override that used to live here targeted only
-   `.nav-item-main`, so the Dashboard tab and every other active tab were
-   styled by different rules — which is why the Reports tab could look wrong
-   while the Dashboard looked fine. Both themes now share one definition: see
-   "SIDEBAR NAV — SINGLE SOURCE OF TRUTH" at the end of the sheet.) */
+
+html:not([data-theme="dark"]) .sidebar-brand,
+html:not([data-theme="dark"]) .sidebar-settings { border-color: rgba(255, 255, 255, 0.07); }
+html:not([data-theme="dark"]) .sidebar-search {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+html:not([data-theme="dark"]) .sidebar-search:focus-within { border-color: #00f2fe; }
+html:not([data-theme="dark"]) .sidebar-settings-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: #f8fafc;
+}
 
 /* ---- Notifications ---- */
 html:not([data-theme="dark"]) .notif-dropdown {
@@ -10632,18 +11261,34 @@ html:not([data-theme="dark"]) .alert-pill.out { color: var(--accent-rose-text); 
 html:not([data-theme="dark"]) .alert-pill.low { color: var(--accent-amber-text); }
 
 /* ---- Stock gauge ---- */
-html:not([data-theme="dark"]) .stock-gauge-circle { border-left-color: rgba(15, 23, 42, 0.1); }
+html:not([data-theme="dark"]) .stock-gauge-circle {
+  background: conic-gradient(#10b981 calc(var(--gauge-pct) * 1%), rgba(15, 23, 42, 0.08) 0);
+}
+html:not([data-theme="dark"]) .stock-gauge-circle::before { background: var(--bg-card); }
 html:not([data-theme="dark"]) .stock-gauge-circle strong { color: var(--text-primary); }
 html:not([data-theme="dark"]) .stock-gauge-circle small { color: var(--text-muted); }
+
+/* ---- Dashboard mini-table and quick-actions light-mode ---- */
+html:not([data-theme="dark"]) .dash-mini-table-row { background: var(--bg-muted); color: var(--text-secondary); }
+html:not([data-theme="dark"]) .dash-mini-table-row:hover { background: var(--bg-hover); }
+html:not([data-theme="dark"]) .dash-mini-table-head { color: var(--text-muted); }
+html:not([data-theme="dark"]) .dash-mini-device strong { color: var(--text-primary); }
+html:not([data-theme="dark"]) .dash-mini-device small { color: var(--text-muted); }
+html:not([data-theme="dark"]) .dash-quick-actions-title { color: var(--text-primary); }
+html:not([data-theme="dark"]) .recent-activity-box { border-top-color: var(--border-color); }
+html:not([data-theme="dark"]) .dash-quick-actions { border-top-color: var(--border-color); }
+html:not([data-theme="dark"]) .stock-alert-item small { color: var(--text-muted); }
 
 /* ---- Mobile drawer scrim: the dark scrim reads as a shadow, keep it subtle --- */
 html:not([data-theme="dark"]) .sidebar-overlay { background: rgba(15, 23, 42, 0.35); }
 
 /* ---- Brand wordmark ----
    The pre-existing `[data-theme="light"] .millennium-word` rule at ~line 392 is
-   DEAD CODE: light mode is expressed by REMOVING data-theme, so that selector
+   DEAD CODE: light mode is expressed by REMOVING data_theme, so that selector
    never matches. Without this, light mode would clip the bright chrome gradient
-   (meant for a dark background) onto white, washing the wordmark out. */
+   (meant for a dark background) onto white, washing the wordmark out.
+   The sidebar stays dark navy in both themes, so its wordmark keeps the bright
+   chrome gradient for readability. */
 html:not([data-theme="dark"]) .millennium-word {
   background: linear-gradient(90deg,
     #525252 0%,
@@ -10663,6 +11308,44 @@ html:not([data-theme="dark"]) .millennium-word {
   color: transparent;
   filter: drop-shadow(0 1px 2px rgba(15, 23, 42, 0.18));
 }
+
+html:not([data-theme="dark"]) .sidebar-brand .millennium-word,
+html:not([data-theme="dark"]) .sidebar-brand .brand-tagline {
+  background: linear-gradient(90deg,
+    #737373 0%,
+    #9c9c9c 10%,
+    #dbdbdb 22%,
+    #f2f2f2 30%,
+    #d8d8d8 38%,
+    #787878 58%,
+    #999999 67%,
+    #c4c4c4 78%,
+    #9b9b9b 89%,
+    #737373 100%
+  );
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+}
+
+html:not([data-theme="dark"]) .sidebar-brand .smartboard-badge {
+  background: rgba(0, 242, 254, 0.12);
+  border: 1px solid rgba(0, 242, 254, 0.25);
+  color: #00f2fe;
+}
+
+/* ---- Clean ticket chat light-mode overrides ---- */
+html:not([data-theme="dark"]) .tix-chat { background: var(--bg-muted); }
+html:not([data-theme="dark"]) .tix-chat-messages { background: var(--bg-canvas); }
+html:not([data-theme="dark"]) .tix-chat-bubble.admin,
+html:not([data-theme="dark"]) .tix-chat-bubble.customer,
+html:not([data-theme="dark"]) .tix-chat-bubble.technician { background: rgba(15, 23, 42, 0.04); }
+html:not([data-theme="dark"]) .tix-chat-msg.is-self .tix-chat-bubble.admin { background: rgba(0,242,254,0.10); }
+html:not([data-theme="dark"]) .tix-chat-msg.is-self .tix-chat-bubble.customer { background: rgba(16,185,129,0.10); }
+html:not([data-theme="dark"]) .tix-chat-msg.is-self .tix-chat-bubble.technician { background: rgba(168,85,247,0.10); }
+html:not([data-theme="dark"]) .tix-chat-error { color: var(--accent-rose-text); }
 
 /* --------------------------------------------------------------------------
    Sidebar nav text + badges.
@@ -11558,21 +12241,21 @@ html:not([data-theme="dark"]) {
 }
 
 .sidebar-brand .brains-emblem-box {
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
   flex-shrink: 0;
 }
 
 /* The old header markup carried this sizing as inline styles on the <img>.
    Without it the 252×252 SVG renders at its intrinsic size and bursts out of
-   the 40px emblem box, dragging the wordmark off the sidebar.
-   The 6px inset is the same emblem-to-tile ratio the landing page uses
-   (26px mark in a 42px tile) so the mark is not cramped against the white. */
+   the 42px emblem box, dragging the wordmark off the sidebar.
+   No inset any more: with the white tile gone the mark is drawn edge-to-edge,
+   the same way the landing-page header renders it. */
 .sidebar-brand .brains-emblem-box img {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  padding: 6px;
+  padding: 0;
   box-sizing: border-box;
 }
 
@@ -11677,13 +12360,20 @@ html:not([data-theme="dark"]) {
   font-size: 0.82rem;
   text-align: left;
   cursor: pointer;
+  user-select: none;
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 .sidebar-settings-row:hover { background: rgba(255, 255, 255, 0.05); color: #f8fafc; }
 .sidebar-settings-row:focus-visible { outline: 2px solid #00f2fe; outline-offset: 2px; }
 
-.settings-row-icon { font-size: 1rem; line-height: 1; flex-shrink: 0; }
+.settings-row-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #94a3b8;
+}
 
 .settings-row-text {
   display: flex;
@@ -11695,21 +12385,62 @@ html:not([data-theme="dark"]) {
 .settings-row-title { font-size: 0.82rem; font-weight: 700; line-height: 1.25; }
 .settings-row-sub { font-size: 0.66rem; opacity: 0.85; }
 
-/* Current-mode badge on the Settings row. Kept as a chip rather than the row's
-   description: as a sub-label it read as "Settings: Dark mode", which is not
-   what the row does. */
-.settings-row-chip {
+/* Light-mode switch on the Settings row — a labelled pill with a track and
+   knob, matching the reference sidebar. Clicking it flips the theme without
+   opening the Settings dialog (the click is stopped at the button). */
+.theme-switch-pill {
   flex: none;
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
-  border: 1px solid var(--border-color);
-  background: var(--bg-muted);
-  font-size: 0.62rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 5px 4px 10px;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: #cbd5e1;
+  font-family: inherit;
+  font-size: 0.66rem;
   font-weight: 700;
-  letter-spacing: 0.02em;
+  line-height: 1;
   white-space: nowrap;
-  color: var(--text-muted);
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
+
+.theme-switch-pill:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.24);
+  color: #f8fafc;
+}
+
+.theme-switch-pill:focus-visible { outline: 2px solid #00f2fe; outline-offset: 2px; }
+
+.theme-switch-label { padding-bottom: 1px; }
+
+.theme-switch-track {
+  position: relative;
+  width: 26px;
+  height: 15px;
+  border-radius: 9999px;
+  background: rgba(148, 163, 184, 0.35);
+  transition: background-color 0.2s ease;
+}
+
+.theme-switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #f8fafc;
+  transition: transform 0.2s ease;
+}
+
+/* Knob slides right when light mode is on. */
+.theme-switch-pill.is-on { color: #f8fafc; border-color: rgba(0, 242, 254, 0.4); }
+.theme-switch-pill.is-on .theme-switch-track { background: linear-gradient(135deg, #00f2fe, #38bdf8); }
+.theme-switch-pill.is-on .theme-switch-knob { transform: translateX(11px); }
 
 /* Light/dark picker inside the Settings dialog.
    The old sidebar row carried a toggle switch; with the toggle moved into the
@@ -11946,24 +12677,27 @@ html:not([data-theme="dark"]) {
 /* --------------------------------------------------------------------------
    Light theme
    -------------------------------------------------------------------------- */
+/* Sidebar is locked to the dark navy palette in both themes; the rules below
+   keep its child elements readable on that dark surface when the rest of the
+   app is in light mode. */
 html:not([data-theme="dark"]) .sidebar-brand,
 html:not([data-theme="dark"]) .sidebar-settings {
-  border-color: var(--border-color);
+  border-color: rgba(255, 255, 255, 0.07);
 }
 
 html:not([data-theme="dark"]) .sidebar-search {
-  background: var(--bg-muted);
-  border-color: var(--border-color);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.08);
 }
-html:not([data-theme="dark"]) .sidebar-search:focus-within { border-color: var(--primary); }
-html:not([data-theme="dark"]) .sidebar-search svg { color: var(--text-muted); }
-html:not([data-theme="dark"]) .sidebar-search-input { color: var(--text-primary); }
-html:not([data-theme="dark"]) .sidebar-search-input::placeholder { color: var(--text-muted); }
+html:not([data-theme="dark"]) .sidebar-search:focus-within { border-color: #00f2fe; }
+html:not([data-theme="dark"]) .sidebar-search svg { color: #64748b; }
+html:not([data-theme="dark"]) .sidebar-search-input { color: #e2e8f0; }
+html:not([data-theme="dark"]) .sidebar-search-input::placeholder { color: #64748b; }
 
-html:not([data-theme="dark"]) .sidebar-settings-row { color: var(--text-secondary); }
+html:not([data-theme="dark"]) .sidebar-settings-row { color: #94a3b8; }
 html:not([data-theme="dark"]) .sidebar-settings-row:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.04);
+  color: #f8fafc;
 }
 
 html:not([data-theme="dark"]) .floating-menu-btn {
@@ -11994,22 +12728,33 @@ html:not([data-theme="dark"]) .floating-menu-btn:hover {
    inherit, `.nav-sub` picked up `--text-muted` and disappeared against it.
    ========================================================================== */
 
-/* --- Resting --- */
+/* --- Resting ---
+   Colours are fixed to light values because the sidebar stays dark navy in
+   both themes; using the theme tokens here would make light-mode unreadable. */
 .app-sidebar .nav-item {
   position: relative;
   gap: 12px;
-  padding: 10px 14px;
+  padding: 9px 12px;
   border-radius: 12px;
-  color: var(--text-secondary);
+  color: #94a3b8;
 }
+
+/* Two-line label hierarchy: the title carries the weight and a near-white
+   colour, the sub-label recedes. Both are fixed light values because the
+   sidebar stays dark navy in both themes. */
+.app-sidebar .nav-item .nav-title { color: #e2e8f0; }
+.app-sidebar .nav-item .nav-sub { color: #64748b; opacity: 1; }
+
+.app-sidebar .nav-item:hover .nav-title { color: #ffffff; }
+.app-sidebar .nav-item:hover .nav-sub { color: #94a3b8; }
 
 /* --- Hover: colour only. The old hover rule added `padding-left` and a
    `border-left`, which shoved the whole column sideways on every mouse-over. --- */
 .app-sidebar .nav-item:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.04);
+  color: #f8fafc;
   transform: none;
-  padding-left: 14px;
+  padding-left: 12px;
   border-left: none;
   box-shadow: none;
 }
@@ -12033,7 +12778,7 @@ html:not([data-theme="dark"]) .floating-menu-btn:hover {
   background: linear-gradient(135deg, #0284c7 0%, #2563eb 50%, #7c3aed 100%);
   color: #ffffff;
   transform: none;
-  padding-left: 14px;
+  padding-left: 12px;
   border-left: none;
   box-shadow: 0 4px 18px rgba(37, 99, 235, 0.35);
 }
@@ -12065,7 +12810,7 @@ html:not([data-theme="dark"]) .floating-menu-btn:hover {
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--text-muted);
+  color: #64748b;
 }
 
 /* --- Even rhythm between rows, and a scrollable middle so Settings and the
@@ -12073,7 +12818,7 @@ html:not([data-theme="dark"]) .floating-menu-btn:hover {
 .app-sidebar .sidebar-nav {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
@@ -13215,4 +13960,1390 @@ html:not([data-theme="dark"]) .floating-menu-btn:hover {
 
 @media (max-width: 560px) {
   .profile-preview-btn { margin-left: 0; width: 100%; justify-content: center; }
+}
+
+/* ==========================================================================
+   APP SHELL + TOP BAR
+   --------------------------------------------------------------------------
+   The shell is now sidebar + (top bar / content). The top bar owns the global
+   search, the notification bell and the signed-in account — all three used to
+   live in the sidebar or float over the content, which left the sidebar doing
+   two jobs and the bell overlapping page actions.
+
+   Everything here is token-driven so the bar is genuinely light in light mode
+   and dark in dark mode, unlike the old floating bell which was hard-coded to
+   the dark palette.
+   ========================================================================== */
+
+.app-shell {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 90;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 64px;
+  padding: 0 24px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-color);
+  transition: background-color 0.25s ease, border-color 0.25s ease;
+}
+
+/* --- Search --- */
+.topbar-search {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 1 1 auto;
+  max-width: 520px;
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 10px;
+  background: var(--bg-muted);
+  border: 1px solid var(--border-color);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+}
+
+.topbar-search svg { color: var(--text-muted); flex-shrink: 0; }
+
+.topbar-search:focus-within {
+  border-color: var(--primary);
+  background: var(--bg-surface);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+.topbar-search-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.84rem;
+}
+
+.topbar-search-input::placeholder { color: var(--text-muted); }
+
+/* --- Right-hand actions --- */
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  flex: none;
+}
+
+/* The bell is a sibling in the bar now, not a fixed overlay. */
+.app-topbar .notif-wrapper {
+  position: relative;
+  top: auto;
+  right: auto;
+  z-index: auto;
+  display: flex;
+  align-items: center;
+}
+
+.app-topbar .header-notif-btn {
+  width: 40px;
+  height: 40px;
+  background: var(--bg-muted);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  box-shadow: none;
+}
+
+.app-topbar .header-notif-btn:hover,
+.app-topbar .header-notif-btn.active {
+  background: var(--bg-hover);
+  border-color: var(--primary);
+  color: var(--primary);
+  box-shadow: none;
+  transform: none;
+}
+
+.app-topbar .notif-count-badge { border-color: var(--bg-surface); }
+
+/* --- Account button --- */
+.topbar-user-wrap { position: relative; }
+
+.topbar-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  padding: 4px 10px 4px 4px;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  background: transparent;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background-color 0.18s ease, border-color 0.18s ease;
+}
+
+.topbar-user:hover,
+.topbar-user.is-open {
+  background: var(--bg-muted);
+  border-color: var(--border-color);
+  transform: none;
+  box-shadow: none;
+}
+
+.topbar-user:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+.topbar-user .auth-user-avatar {
+  width: 34px;
+  height: 34px;
+  font-size: 0.88rem;
+  flex: none;
+}
+
+.topbar-user-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.2;
+  min-width: 0;
+  max-width: 160px;
+}
+
+.app-topbar .auth-user-name {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.topbar-user-role {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.topbar-user-caret {
+  color: var(--text-muted);
+  flex: none;
+  transition: transform 0.18s ease;
+}
+
+.topbar-user.is-open .topbar-user-caret { transform: rotate(180deg); }
+
+/* --- Account dropdown --- */
+.topbar-user-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 218px;
+  padding: 6px;
+  border-radius: 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-lg);
+  z-index: 120;
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  animation: notifSlideDown 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.topbar-user-menu.show { display: flex; }
+
+.topbar-user-menu-head {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 8px 10px 10px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.topbar-user-menu-head .auth-user-name {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.topbar-user-menu-head .auth-user-loc {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.topbar-user-menu button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 9px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transform: none;
+  box-shadow: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.topbar-user-menu button:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  transform: none;
+  box-shadow: none;
+}
+
+.topbar-user-menu button.is-danger { color: var(--accent-rose-text, #e11d48); }
+.topbar-user-menu button.is-danger:hover { background: rgba(244, 63, 94, 0.1); }
+
+/* --- Mobile hamburger, now inline in the bar --- */
+.topbar-menu-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-muted);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transform: none;
+  box-shadow: none;
+}
+
+.topbar-menu-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  transform: none;
+  box-shadow: none;
+}
+
+/* The bar replaces the old 64px top padding that reserved room for the
+   floating bell. */
+.app-main { padding-top: 28px; }
+
+@media (max-width: 900px) {
+  .app-topbar { height: 58px; padding: 0 14px; gap: 10px; }
+  .topbar-menu-btn { display: flex; }
+  .topbar-user-text { display: none; }
+  .topbar-user { padding: 4px; height: 40px; }
+  .topbar-search { height: 38px; }
+  .app-main { padding-top: 18px; }
+}
+
+@media (max-width: 560px) {
+  .topbar-search { max-width: none; }
+  .topbar-search-input { font-size: 0.8rem; }
+}
+
+/* ==========================================================================
+   SETTINGS — LIGHT MODE PILL
+   --------------------------------------------------------------------------
+   Appearance is a single labelled switch inside the Settings dialog, matching
+   the reference: a rounded pill with a cyan outline and a cyan track. The knob
+   sits left in dark mode and slides right in light mode.
+   ========================================================================== */
+.theme-pref-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 4px 0 2px;
+}
+
+.theme-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  padding: 9px 11px 9px 18px;
+  border-radius: 9999px;
+  border: 1.5px solid rgba(0, 242, 254, 0.55);
+  background: rgba(0, 242, 254, 0.06);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transform: none;
+  box-shadow: none;
+  transition: border-color 0.18s ease, background-color 0.18s ease;
+}
+
+.theme-pill:hover,
+.theme-pill:active {
+  border-color: #00f2fe;
+  background: rgba(0, 242, 254, 0.12);
+  transform: none;
+  box-shadow: none;
+}
+
+.theme-pill:focus-visible {
+  outline: 2px solid #00f2fe;
+  outline-offset: 3px;
+}
+
+.theme-pill-label { padding-bottom: 1px; white-space: nowrap; }
+
+.theme-pill-track {
+  position: relative;
+  flex: none;
+  width: 46px;
+  height: 25px;
+  border-radius: 9999px;
+  background: rgba(100, 116, 139, 0.55);
+  transition: background 0.2s ease;
+}
+
+.theme-pill-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  transition: transform 0.2s ease;
+}
+
+.theme-pill.is-on .theme-pill-track {
+  background: linear-gradient(135deg, #00f2fe 0%, #22d3ee 100%);
+}
+
+.theme-pill.is-on .theme-pill-knob { transform: translateX(21px); }
+
+/* ==========================================================================
+   INVENTORY CARDS (image + stock meter)
+   --------------------------------------------------------------------------
+   Each part now leads with its own artwork, then code, name, category, a stock
+   meter and the restock action. The meter is scaled against 3x the minimum
+   threshold, so a part sitting exactly at its minimum reads as one third full
+   instead of "almost empty" on every card.
+   ========================================================================== */
+.inv-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(238px, 1fr));
+  gap: 18px;
+}
+
+.inv-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+}
+
+.inv-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lg);
+  border-color: var(--border-hover);
+}
+
+/* --- Artwork --- */
+.inv-media {
+  position: relative;
+  height: 152px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px;
+  background:
+    radial-gradient(120% 90% at 50% 0%, rgba(255, 255, 255, 0.7), transparent 65%),
+    var(--bg-muted);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.inv-media img {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  display: block;
+  /* The renders carry their own baked contact shadow, so this is only a hint —
+     a second full-strength shadow read as a dark halo under each part. */
+  filter: drop-shadow(0 4px 7px rgba(15, 23, 42, 0.08));
+}
+
+.inv-media-fallback {
+  font-size: 2.6rem;
+  opacity: 0.55;
+}
+
+.inv-media-pill {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  font-size: 0.68rem !important;
+  padding: 4px 9px !important;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+}
+
+/* --- Body --- */
+.inv-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px 16px;
+  flex: 1;
+}
+
+.inv-code {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--primary);
+  text-transform: uppercase;
+}
+
+.inv-body .inv-part-name {
+  font-size: 0.95rem;
+  font-weight: 800;
+  line-height: 1.32;
+  color: var(--text-primary);
+  margin: 0;
+  /* Two-line reserve keeps the stock boxes aligned across a row even when one
+     name wraps and another does not. */
+  min-height: 2.64em;
+}
+
+.inv-body .inv-part-category {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* --- Stock meter --- */
+.inv-stock-box {
+  margin-top: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-muted);
+}
+
+.inv-stock-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.inv-body .inv-stock-number {
+  font-size: 1.6rem;
+  font-weight: 800;
+  line-height: 1;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  color: var(--text-primary);
+}
+
+.inv-body .inv-stock-hint {
+  font-size: 0.68rem;
+  line-height: 1.25;
+  color: var(--text-muted);
+}
+
+.inv-body .inv-stock-hint small {
+  font-size: 0.66rem;
+  opacity: 0.85;
+}
+
+.inv-stock-bar {
+  height: 5px;
+  margin-top: 9px;
+  border-radius: 9999px;
+  background: rgba(100, 116, 139, 0.25);
+  overflow: hidden;
+}
+
+.inv-stock-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 9999px;
+  transition: width 0.4s ease;
+}
+
+.inv-card.is-in  .inv-stock-bar span { background: linear-gradient(90deg, #059669, #34d399); }
+.inv-card.is-low .inv-stock-bar span { background: linear-gradient(90deg, #d97706, #fbbf24); }
+.inv-card.is-out .inv-stock-bar span { background: linear-gradient(90deg, #dc2626, #f87171); }
+
+/* --- Footer --- */
+.inv-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color);
+}
+
+.inv-body .inv-unit-cost {
+  font-size: 0.7rem;
+  line-height: 1.3;
+  color: var(--text-muted);
+}
+
+.inv-body .inv-unit-cost strong {
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.inv-restock-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 9px;
+  background: linear-gradient(135deg, #2563eb, #3b82f6);
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 0.76rem;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.28);
+  transition: filter 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.inv-restock-btn:hover {
+  filter: brightness(1.07);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.36);
+}
+
+.inv-restock-btn:active { transform: translateY(0); }
+
+/* The button adds a single unit, so the amount is stated on the control. */
+.inv-restock-plus {
+  padding: 1px 6px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.22);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+/* --- Inline unit-cost editor -------------------------------------------------
+   The price doubles as the edit affordance: the whole figure is a button, with
+   a pencil that is visible (not hover-only) so the control is discoverable on
+   touch. Editing swaps in a bordered field so it is obvious what has focus. */
+.inv-price-host { display: inline-flex; align-items: center; }
+
+.inv-price-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 0 0 -3px;
+  padding: 1px 5px 1px 3px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-family: inherit;
+  cursor: pointer;
+  transform: none;
+  box-shadow: none;
+  transition: background-color 0.15s ease;
+}
+
+.inv-price-btn:hover,
+.inv-price-btn:active {
+  background: var(--bg-hover);
+  transform: none;
+  box-shadow: none;
+}
+
+.inv-price-btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.inv-price-pencil {
+  flex: none;
+  opacity: 0.45;
+  color: var(--text-muted);
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.inv-price-btn:hover .inv-price-pencil,
+.inv-price-btn:focus-visible .inv-price-pencil {
+  opacity: 1;
+  color: var(--primary);
+}
+
+/* While a price is being edited the footer collapses to one column: the editor
+   needs the full card width, and at ~200px the field plus the Restock button
+   cannot share a row without the button being clipped. */
+.inv-card.is-editing-price .inv-card-foot { flex-wrap: wrap; }
+.inv-card.is-editing-price .inv-unit-cost { width: 100%; }
+.inv-card.is-editing-price .inv-restock-btn { display: none; }
+.inv-card.is-editing-price .inv-price-host { display: flex; width: 100%; }
+.inv-card.is-editing-price .inv-price-form { flex: 1 1 auto; }
+.inv-card.is-editing-price .inv-price-input { flex: 1 1 auto; width: auto; min-width: 0; }
+
+.inv-price-form {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 2px 6px;
+  border-radius: 8px;
+  background: var(--bg-surface);
+  border: 1px solid var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+.inv-price-cur {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--text-muted);
+}
+
+.inv-price-input {
+  width: 72px;
+  padding: 2px 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 0.86rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.inv-price-input::-webkit-outer-spin-button,
+.inv-price-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.inv-price-save,
+.inv-price-cancel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 0.7rem;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+  transform: none;
+  box-shadow: none;
+}
+
+.inv-price-save { background: var(--primary); color: #ffffff; }
+.inv-price-cancel { background: var(--bg-muted); color: var(--text-secondary); }
+
+.inv-price-save:hover,
+.inv-price-save:active,
+.inv-price-cancel:hover,
+.inv-price-cancel:active {
+  transform: none;
+  box-shadow: none;
+}
+
+.inv-price-save:hover { filter: brightness(1.1); }
+.inv-price-cancel:hover { background: var(--bg-hover); color: var(--text-primary); }
+.inv-price-save:disabled { opacity: 0.6; cursor: default; filter: none; }
+
+/* Dark mode: the white radial wash behind the artwork would blow out the
+   illustration, so it is dropped. The products are near-black hardware, though,
+   and a flat dark panel leaves them as a silhouette — a soft light pool behind
+   the artwork restores the separation the white wash gives in light mode. */
+html[data-theme="dark"] .inv-media {
+  background:
+    radial-gradient(88% 72% at 50% 44%, rgba(148, 163, 184, 0.20), transparent 72%),
+    radial-gradient(120% 90% at 50% 0%, rgba(56, 189, 248, 0.09), transparent 65%),
+    var(--bg-muted);
+}
+
+html[data-theme="dark"] .inv-media img {
+  filter: drop-shadow(0 5px 10px rgba(0, 0, 0, 0.3));
+}
+
+/* ==========================================================================
+   ICON SYSTEM
+   --------------------------------------------------------------------------
+   The interface used to draw its iconography with emoji, which meant the OS
+   picked the artwork: a ticket was a blue-and-white glyph on Windows, a flat
+   outline on Linux and a glossy colour emoji on macOS. The same screen looked
+   like three different products.
+
+   Every glyph is now an SVG symbol declared once in index.html and referenced
+   with <use>. They are stroke-only and inherit `currentColor`, so an icon sits
+   in the surrounding text colour in both themes, and `1em` sizing means it
+   tracks the label it belongs to instead of needing a size per call site.
+   ========================================================================== */
+.ico-sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.ico {
+  width: 1em;
+  height: 1em;
+  display: inline-block;
+  vertical-align: -0.145em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+/* Optical sizes for the places that used to carry a font-size on an emoji. */
+.ico-sm { width: 0.9em; height: 0.9em; }
+.ico-lg { width: 1.35em; height: 1.35em; }
+.ico-xl { width: 2em; height: 2em; }
+
+/* Icons that lead a label get a hair of breathing room, but only when they are
+   actually followed by text — an icon alone in a tile must stay centred. */
+.ico + .ico-label { margin-left: 0.45em; }
+
+/* Icon tiles: a rounded square that holds a single glyph. Used by the KPI
+   cards, quick actions and dashboard widgets that previously wrapped an emoji
+   in a coloured span. */
+.ico-tile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.15em;
+  height: 2.15em;
+  border-radius: 10px;
+  background: var(--bg-muted);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.ico-tile .ico { width: 1.15em; height: 1.15em; }
+
+/* ==========================================================================
+   TICKET DETAIL — restructured
+   --------------------------------------------------------------------------
+   The old dialog stacked every block — summary, six inline facts, assign,
+   chat, status buttons, parts — in one narrow column. The chat sat in the
+   middle of that stack with its message list already polling, so opening a
+   ticket fired a request every three seconds even when the reader only wanted
+   the device serial, and the composer pushed the status controls below the
+   fold.
+
+   Now: a summary card with a proper <dl> fact grid, a collapsed conversation
+   gate, then the admin actions. Same information, ordered by what a person
+   actually does with a ticket.
+   ========================================================================== */
+#ticketDetailModal .modal-content {
+  max-width: 780px;
+}
+
+.tix-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* --- Summary ------------------------------------------------------------ */
+.tix-sum {
+  background: var(--bg-muted);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 16px 18px;
+}
+
+.tix-sum-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.tix-sum-copy h3 {
+  font-size: 1.02rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  line-height: 1.35;
+}
+
+.tix-sum-copy p {
+  margin-top: 6px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.tix-status-chip {
+  flex-shrink: 0;
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--primary-light);
+  color: var(--primary);
+  border: 1px solid var(--border-color);
+  white-space: nowrap;
+}
+
+.tix-status-chip.is-diagnosing { background: var(--warning-light); color: var(--warning); border-color: var(--warning-border); }
+.tix-status-chip.is-repairing  { background: var(--purple-light);  color: var(--purple);  border-color: var(--purple-border); }
+.tix-status-chip.is-resolved,
+.tix-status-chip.is-closed     { background: var(--success-light); color: var(--success); border-color: var(--success-border); }
+
+/* --- Fact grid ---------------------------------------------------------- */
+.tix-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px 18px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-color);
+}
+
+.tix-fact dt {
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.tix-fact dd {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.tix-fact dd small {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.tix-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  letter-spacing: -0.01em;
+}
+
+.tix-pri {
+  align-self: flex-start;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.tix-pri.is-high,
+.tix-pri.is-critical { background: var(--danger-light);  color: var(--danger); }
+.tix-pri.is-medium    { background: var(--warning-light); color: var(--warning); }
+.tix-pri.is-low       { background: var(--success-light); color: var(--success); }
+
+.tix-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.tix-flag.is-ok  { color: var(--success); }
+.tix-flag.is-off { color: var(--text-muted); }
+
+/* --- Conversation gate -------------------------------------------------- */
+.tix-convo {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.tix-convo.is-open {
+  border-color: var(--border-hover);
+  box-shadow: var(--shadow-sm);
+}
+
+.tix-convo-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 13px 16px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  transition: background 0.18s ease;
+}
+
+.tix-convo-bar:hover { background: var(--bg-hover); }
+
+.tix-convo-ico {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: var(--primary-light);
+  color: var(--primary);
+  font-size: 1rem;
+}
+
+.tix-convo-txt {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.tix-convo-txt strong {
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.tix-convo-txt small {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.tix-convo-chip {
+  flex-shrink: 0;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+
+.tix-convo-chip.is-cyan   { background: var(--cyan-light);    color: var(--cyan); }
+.tix-convo-chip.is-green  { background: var(--success-light); color: var(--success); }
+.tix-convo-chip.is-purple { background: var(--purple-light);  color: var(--purple); }
+
+.tix-convo-cta {
+  flex-shrink: 0;
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 7px 14px;
+  border-radius: 9px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-muted);
+  color: var(--primary);
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+
+.tix-convo-bar:hover .tix-convo-cta {
+  border-color: var(--primary);
+  background: var(--primary-light);
+}
+
+/* The panel only exists visually once the gate is opened. */
+.tix-convo-panel { display: none; padding: 0 16px 16px; }
+
+.tix-convo.is-open .tix-convo-panel {
+  display: block;
+  animation: tixReveal 0.22s ease-out;
+}
+
+@keyframes tixReveal {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.tix-convo-sub {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin: 2px 0 10px;
+}
+
+.tix-convo .tix-chat-messages {
+  min-height: 132px;
+  max-height: 258px;
+  margin-bottom: 0;
+}
+
+/* --- Composer ----------------------------------------------------------- */
+.tix-composer {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.tix-composer .form-input { flex: 1; min-width: 0; }
+
+.tix-composer-send {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+  padding: 0 16px;
+  height: 40px;
+  border: 0;
+  border-radius: 9px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: #fff;
+  background: var(--primary-gradient);
+  transition: filter 0.15s ease;
+}
+
+.tix-composer-send:hover { filter: brightness(1.07); }
+.tix-composer-send .ico { width: 1.05em; height: 1.05em; }
+
+/* --- Sub-sections ------------------------------------------------------- */
+.tix-sec {
+  background: var(--bg-muted);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 15px 16px;
+}
+
+.tix-sec-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.86rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.tix-sec-title .ico { color: var(--primary); }
+
+.tix-sec-hint {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin: 5px 0 10px;
+}
+
+.tix-sec-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tix-qty {
+  width: 76px;
+  flex: 0 0 76px;
+  text-align: center;
+}
+
+.tix-parts-used {
+  margin-top: 10px;
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+}
+
+/* --- Bubble polish ------------------------------------------------------ */
+.tix-chat-bubble {
+  max-width: 78%;
+  border-radius: 12px;
+}
+
+.tix-chat-msg.is-self .tix-chat-bubble { border-bottom-right-radius: 4px; }
+.tix-chat-msg.is-other .tix-chat-bubble { border-bottom-left-radius: 4px; }
+
+.tix-chat-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.tix-chat-empty strong {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.tix-chat-empty > span:last-child {
+  font-size: 0.76rem;
+  max-width: 34ch;
+  line-height: 1.5;
+}
+
+.tix-chat-empty .tix-chat-emoji {
+  color: var(--text-muted);
+  opacity: 0.45;
+  font-size: 1.7rem;
+  margin-bottom: 6px;
+}
+
+@media (max-width: 640px) {
+  .tix-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tix-convo-chip { display: none; }
+  .tix-convo-bar { gap: 10px; padding: 12px; }
+  .tix-convo-panel { padding: 0 12px 12px; }
+  .tix-convo .tix-chat-messages { max-height: 210px; }
+  .tix-composer-send span { display: none; }
+  .tix-composer-send { padding: 0 13px; }
+}
+
+/* ==========================================================================
+   WARRANTY BARCODE — sticker preview
+   --------------------------------------------------------------------------
+   The old dialog mixed three visual languages in one column: a hard-coded
+   navy gradient header (which stayed navy in light mode), a white barcode
+   card, and a translucent black detail panel. Dates were printed raw, so a
+   contract read "2026-10-15T16:00:00.000Z".
+
+   Now it is a paper sticker (deliberately theme-independent — it is a preview
+   of what comes out of the printer) followed by a normal token-driven summary
+   and a single action row.
+   ========================================================================== */
+#warrantyBarcodeModal .modal-content {
+  max-width: 520px;
+}
+
+.barcode-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.barcode-modal-title {
+  font-size: 1.02rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+/* --- Sticker (always light: it is a print preview) ---------------------- */
+.bc-sticker {
+  background: #ffffff;
+  color: #0f172a;
+  border-radius: 12px;
+  padding: 16px 18px 14px;
+  box-shadow: inset 0 0 0 1px #e2e8f0, 0 2px 10px rgba(15, 23, 42, 0.08);
+}
+
+.bc-sticker-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e8edf3;
+}
+
+.bc-sticker-mark {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.bc-sticker-brand {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.bc-sticker-brand strong {
+  font-family: 'Cinzel', 'Playfair Display', Georgia, serif;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  color: #0f172a;
+}
+
+.bc-sticker-brand span {
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.bc-sticker-code {
+  padding: 12px 6px 8px;
+  text-align: center;
+}
+
+/* The SVG is given a viewBox after JsBarcode renders (see app.js), so it scales
+   down instead of being clipped when the serial is long. */
+.bc-sticker-code svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 92px;
+  margin: 0 auto;
+}
+
+.bc-sticker-foot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding-top: 8px;
+  border-top: 1px solid #e8edf3;
+  text-align: center;
+}
+
+.bc-sticker-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #0f172a;
+}
+
+.bc-sticker-model {
+  font-size: 0.68rem;
+  color: #64748b;
+}
+
+/* --- Contract summary --------------------------------------------------- */
+.bc-meta {
+  background: var(--bg-muted);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+
+.bc-meta-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 11px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.bc-meta-head h3 {
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.bc-meta-head p {
+  margin-top: 2px;
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+.bc-state {
+  flex-shrink: 0;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 4px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.bc-state.is-active  { background: var(--success-light); color: var(--success); }
+.bc-state.is-soon    { background: var(--warning-light); color: var(--warning); }
+.bc-state.is-expired { background: var(--danger-light);  color: var(--danger); }
+
+.bc-rows {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 11px 18px;
+  padding-top: 12px;
+}
+
+.bc-row dt {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+.bc-row dd {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.bc-row.is-alert dd { color: var(--danger); }
+
+/* --- Note + actions ----------------------------------------------------- */
+.bc-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 0.74rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.bc-note-ico {
+  flex-shrink: 0;
+  font-size: 1rem;
+  color: var(--primary);
+}
+
+.bc-actions {
+  display: flex;
+  gap: 9px;
+}
+
+.bc-actions .btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+@media (max-width: 520px) {
+  .bc-rows { grid-template-columns: 1fr; }
+  .bc-actions { flex-direction: column; }
 }
