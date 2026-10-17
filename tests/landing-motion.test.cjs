@@ -17,7 +17,7 @@ const puppeteer = require('puppeteer-core');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+const CHROME = require('./_chrome-path.cjs');
 const BASE = 'http://127.0.0.1:3000';
 const OUT = path.join(__dirname, '..', 'screenshots', 'landing-motion');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

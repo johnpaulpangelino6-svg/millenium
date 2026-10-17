@@ -67,6 +67,10 @@ const state = {
   filterModel: '',
   filterStatus: '',
   dashboardCabinetView: 'all', // 'all' | 'devices' | 'tickets' | 'activity'
+  // Data Manager > Device Allocation: 'all' | 'assigned' | 'unassigned'
+  allocFilter: 'all',
+  // Directory role filter: 'all' | 'admin' | 'technician' | 'customer'
+  directoryRoleFilter: 'all',
   cabinetOpen: {
     devices: true,
     tickets: true,
@@ -311,8 +315,17 @@ function handleForgotPassword() {
   overlay.innerHTML = `
     <div class="modal-content reset-pw-modal" role="dialog" aria-modal="true"
          aria-labelledby="resetPwTitle">
+      <button type="button" class="reset-pw-close" id="resetPwClose" aria-label="Close">×</button>
+
       <div class="reset-pw-head">
-        <div class="reset-pw-icon" aria-hidden="true">🔐</div>
+        <div class="reset-pw-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round">
+            <rect x="4" y="10.5" width="16" height="10.5" rx="2.5" />
+            <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" />
+            <circle cx="12" cy="15.6" r="1.3" fill="currentColor" stroke="none" />
+          </svg>
+        </div>
         <div>
           <h3 class="reset-pw-title" id="resetPwTitle">Reset your password</h3>
           <p class="reset-pw-sub" id="resetPwSub">We will email you a 6-digit code.</p>
@@ -330,7 +343,7 @@ function handleForgotPassword() {
       <div class="reset-pw-alert" id="resetPwAlert" style="display:none;" role="alert"></div>
 
       <div class="modal-footer reset-pw-foot">
-        <button type="button" class="btn btn-secondary" id="resetPwBack" style="display:none;">← Back</button>
+        <button type="button" class="btn btn-secondary" id="resetPwBack" style="display:none;">Back</button>
         <button type="button" class="btn btn-primary" id="resetPwPrimary">Send code</button>
       </div>
     </div>
@@ -343,6 +356,7 @@ function handleForgotPassword() {
   const alertEl  = overlay.querySelector('#resetPwAlert');
   const primary  = overlay.querySelector('#resetPwPrimary');
   const backBtn  = overlay.querySelector('#resetPwBack');
+  const closeBtn = overlay.querySelector('#resetPwClose');
   const subEl    = overlay.querySelector('#resetPwSub');
   const steps    = Array.from(overlay.querySelectorAll('.reset-pw-step'));
 
@@ -399,8 +413,13 @@ function handleForgotPassword() {
     draft.step = n;
     steps.forEach((s) => {
       const v = Number(s.dataset.step);
+      const done = v < n;
       s.classList.toggle('is-active', v === n);
-      s.classList.toggle('is-done', v < n);
+      s.classList.toggle('is-done', done);
+      // Swap the number for a tick once the step is behind us, so the track
+      // reads as progress rather than three static labels.
+      const badge = s.querySelector('b');
+      if (badge) badge.textContent = done ? '✓' : String(v);
     });
     backBtn.style.display = n === 1 ? 'none' : '';
     setAlert('');
@@ -678,6 +697,7 @@ function handleForgotPassword() {
   };
 
   overlay.addEventListener('click', (e) => { if (e.target === overlay) closeOverlay(); });
+  if (closeBtn) closeBtn.onclick = closeOverlay;
   document.addEventListener('keydown', function esc(e) {
     if (e.key === 'Escape' && document.body.contains(overlay)) {
       closeOverlay();
@@ -897,7 +917,7 @@ function selectLoginRole(role, clickedEl) {
     const cred = demoCredMap[role];
     autofillBtn.onclick = () => quickDemoLogin(cred.email, cred.pass, role);
     const label = autofillBtn.querySelector('span');
-    if (label) label.textContent = `AUTOFILL ${role.toUpperCase()} DEMO CREDENTIALS`;
+    if (label) label.textContent = `Fill ${role} credentials`;
   }
 }
 
@@ -1264,11 +1284,17 @@ async function openProfileModal() {
 
             <div class="profile-identity">
               <div class="profile-avatar-lg">${esc(initial)}</div>
-              <div>
+              <div class="profile-identity-text">
                 <div class="profile-identity-name">${esc(me.fullName || me.username)}</div>
                 <div class="profile-identity-sub">@${esc(me.username)} · ${esc(me.email || 'no email')}</div>
                 <span class="profile-role-pill">${esc(roleMeta.name)}</span>
               </div>
+              <!-- Everything saved below is public: it is what colleagues see in
+                   the Directory. This opens the exact card they get, so "visible
+                   to all users" is checkable instead of assumed. -->
+              <button type="button" class="profile-preview-btn" id="profilePreviewBtn">
+                👁️ View as others see me
+              </button>
             </div>
 
             <section class="form-section settings-sec" id="setSecProfile">
@@ -1381,6 +1407,21 @@ async function openProfileModal() {
   requestAnimationFrame(() => overlay.classList.add('active'));
 
   overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+  // "View as others see me" — reuses the Directory profile dialog verbatim, so
+  // what the user previews is literally the same component their colleagues get.
+  const previewBtn = overlay.querySelector('#profilePreviewBtn');
+  if (previewBtn) {
+    previewBtn.addEventListener('click', async () => {
+      // Make sure the directory cache is current, otherwise the preview can show
+      // a stale name right after an edit.
+      if (!Array.isArray(state.directory) || !state.directory.some((p) => p.id === me.id)) {
+        try { await fetchAllData(); } catch { /* keep going with whatever we have */ }
+      }
+      overlay.remove();
+      openDirectoryProfile(me.id);
+    });
+  }
 
   // Wire the section rail: click to jump, and highlight whichever section the
   // pane is currently showing so the rail doubles as a "you are here" marker.
@@ -1500,9 +1541,14 @@ async function saveProfile(event) {
 
     document.getElementById('profileModalOverlay')?.remove();
     showToast(
-      payload.newPassword ? '✅ Profile and password updated.' : '✅ Profile updated.',
+      payload.newPassword ? 'Profile and password updated.' : 'Profile updated.',
       'success'
     );
+
+    // The Directory is the surface where "everyone else" sees these fields, and
+    // it is served from a cached payload. Refetch so the change is live for the
+    // current session without waiting for a manual Refresh.
+    try { await fetchAllData(); } catch { /* the profile itself is already saved */ }
   } catch (err) {
     showToast('Network error. Please try again.', 'error');
   } finally {
@@ -1547,7 +1593,15 @@ function showToast(message, type = 'info') {
     document.body.appendChild(toast);
   }
   const icon = type === 'success' ? '✅' : type === 'error' ? '⚠️' : 'ℹ️';
-  toast.innerHTML = `<span>${icon}</span> <span>${message}</span>`;
+
+  // About thirty call sites already prefix their message with a status emoji
+  // ("✅ Device assigned", "❌ Assignment failed"). The toast draws its own icon
+  // from `type`, so those messages rendered as "✅ ✅ Device assigned". Strip a
+  // leading status emoji here — one place, instead of editing every call site.
+  const LEADING_STATUS_EMOJI = /^\s*(?:\u2705|\u274C|\u26A0\uFE0F?|\u2139\uFE0F?|\u{1F6AB}|\u26D4|\u{1F4A1})\s*/u;
+  const text = String(message == null ? '' : message).replace(LEADING_STATUS_EMOJI, '');
+
+  toast.innerHTML = `<span>${icon}</span> <span>${text}</span>`;
   toast.classList.add('active');
   setTimeout(() => {
     toast.classList.remove('active');
@@ -4157,7 +4211,7 @@ function renderDirectoryView() {
   const me = state.currentUser || {};
 
   const q = String(state.searchQuery || '').trim().toLowerCase();
-  const visible = q
+  const searched = q
     ? people.filter((p) =>
         String(p.fullName || '').toLowerCase().includes(q) ||
         String(p.role || '').toLowerCase().includes(q) ||
@@ -4165,7 +4219,27 @@ function renderDirectoryView() {
         String(p.organization || '').toLowerCase().includes(q))
     : people;
 
+  // Role filter. The search box answers "who is called X"; this answers "who
+  // are the technicians" — a different question that a text box is bad at.
+  const roleFilter = state.directoryRoleFilter || 'all';
+  const visible = roleFilter === 'all'
+    ? searched
+    : searched.filter((p) => (p.role || '') === roleFilter);
+
   const onlineCount = visible.filter((p) => p.online).length;
+
+  const roleCounts = {
+    all: people.length,
+    admin: people.filter((p) => p.role === 'admin').length,
+    technician: people.filter((p) => p.role === 'technician').length,
+    customer: people.filter((p) => p.role === 'customer').length,
+  };
+
+  const roleChip = (id, label, count) => {
+    const active = roleFilter === id;
+    return `<button type="button" class="dm-filter-chip${active ? ' is-active' : ''}"
+      onclick="setDirectoryRoleFilter('${id}')" aria-pressed="${active}">${label} <strong>${count}</strong></button>`;
+  };
 
   // Online people float to the top, then alphabetical — so "who is around"
   // is answered by the first screenful rather than by scanning every card.
@@ -4173,6 +4247,8 @@ function renderDirectoryView() {
     if (!!b.online !== !!a.online) return b.online ? 1 : -1;
     return String(a.fullName || '').localeCompare(String(b.fullName || ''));
   });
+
+  const nothingAtAll = people.length === 0;
 
   return `
     <div class="page-header-row">
@@ -4185,22 +4261,42 @@ function renderDirectoryView() {
       </div>
     </div>
 
-    <div class="glass-panel" style="padding: 16px 20px; margin-bottom: 20px;">
+    <div class="glass-panel directory-toolbar">
       <div class="search-input-box">
         <span class="search-icon">🔍</span>
         <input type="text" class="search-input"
           placeholder="Search by name, role, location or organization..."
           value="${escapeHtml(state.searchQuery || '')}" oninput="handleSearch(this.value)" />
       </div>
+      <div class="dm-filter-bar directory-role-bar">
+        ${roleChip('all', '👥 Everyone', roleCounts.all)}
+        ${roleChip('admin', '🛡️ Admins', roleCounts.admin)}
+        ${roleChip('technician', '🔧 Technicians', roleCounts.technician)}
+        ${roleChip('customer', '🏢 Customers', roleCounts.customer)}
+      </div>
     </div>
 
     <div class="directory-stats">
       <span class="directory-stat"><strong>${people.length}</strong> ${people.length === 1 ? 'person' : 'people'}</span>
       <span class="directory-stat"><span class="presence-dot is-online"></span><strong>${onlineCount}</strong> online now</span>
+      ${(q || roleFilter !== 'all') ? `<span class="directory-stat directory-stat--muted"><strong>${visible.length}</strong> matching</span>` : ''}
     </div>
 
     ${sorted.length === 0
-      ? `<div class="glass-panel" style="text-align:center;padding:40px;color:var(--text-muted);">No people match your search.</div>`
+      ? `<div class="glass-panel directory-empty">
+           <div class="directory-empty-ico" aria-hidden="true">🔍</div>
+           <h3 class="directory-empty-title">${nothingAtAll ? 'Nobody here yet' : 'No one matches'}</h3>
+           <p class="directory-empty-text">
+             ${nothingAtAll
+               ? 'Accounts will appear here as soon as people register.'
+               : 'Try a different search term or clear the role filter.'}
+           </p>
+           ${(q || roleFilter !== 'all') ? `
+             <div class="directory-empty-actions">
+               ${roleFilter !== 'all' ? `<button type="button" class="btn btn-secondary" onclick="setDirectoryRoleFilter('all')">Clear role filter</button>` : ''}
+               ${q ? `<button type="button" class="btn btn-secondary" onclick="handleSearch('')">Clear search</button>` : ''}
+             </div>` : ''}
+         </div>`
       : `<div class="directory-grid">
           ${sorted.map((p) => {
             const meta = ROLE_META[p.role] || { icon: '👤', name: p.role || 'User' };
@@ -4235,6 +4331,12 @@ function renderDirectoryView() {
           }).join('')}
         </div>`}
   `;
+}
+
+/** Role filter on the People Directory. 'all' clears it. */
+function setDirectoryRoleFilter(role) {
+  state.directoryRoleFilter = ['all', 'admin', 'technician', 'customer'].includes(role) ? role : 'all';
+  renderApp();
 }
 
 /**
@@ -4497,7 +4599,7 @@ function renderInventoryView() {
             </div>
 
             <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem;">
-              <span>Unit Cost: <strong>₱${part.unitCost.toLocaleString()}</strong></span>
+              <span>Unit Cost: <strong><span class="currency-symbol">₱</span>${part.unitCost.toLocaleString()}</strong></span>
               ${isAdmin ? `<button class="btn btn-secondary btn-sm" onclick="quickAdjustStock('${part.id}', ${part.stockQuantity + 5})">+5 Restock</button>` : `<span class="status-pill ${part.status === 'In Stock' ? 'status-online' : 'status-warning'}" style="font-size:0.72rem;">${part.status}</span>`}
             </div>
             ${isAdmin ? `
@@ -4745,7 +4847,7 @@ function renderAnalyticsView() {
         </div>
 
         <div style="background: var(--bg-surface); padding: 20px; border-radius: 12px; border: 1px solid var(--border-subtle);">
-          <div style="font-size: 2.4rem; font-weight: 800; color: var(--accent-blue-text); font-family: 'JetBrains Mono';">₱1.2M</div>
+          <div style="font-size: 2.4rem; font-weight: 800; color: var(--accent-blue-text); font-family: 'JetBrains Mono';"><span class="currency-symbol">₱</span>1.2M</div>
           <div style="font-size: 0.85rem; font-weight: 700; color: var(--text-secondary); margin-top: 4px;">Inventory Stock Value</div>
         </div>
       </div>
@@ -4765,6 +4867,13 @@ function renderDataManagerView() {
     { id: 'allocation', icon: '🔗', label: 'Device Allocation' },
   ];
 
+  // Counts live on the tab that owns them. 'allocation' has no count of its own
+  // (it is about devices, not accounts), so it stays clean.
+  const tabCount = {
+    users: (state.allUsers || []).length,
+    customers: (state.allUsers || []).filter(u => u.role === 'customer').length,
+  };
+
   return `
     <div class="page-header-row">
       <div>
@@ -4773,21 +4882,18 @@ function renderDataManagerView() {
       </div>
     </div>
 
-    <!-- Sub-tab navigation -->
-    <div style="display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap;">
+    <!-- Sub-tab navigation.
+         Was inline-styled with var(--neon-cyan) (#00f2fe, the same in BOTH
+         themes) — against a white surface in light mode that is ~1.3:1, so the
+         active tab label was effectively invisible. Now token-driven. -->
+    <div class="dm-tabs" role="tablist">
       ${tabs.map(t => `
-        <button
-          onclick="switchDataManagerTab('${t.id}')"
-          style="
-            padding: 9px 20px; border-radius: 10px; font-size: 0.88rem; font-weight: 700; cursor: pointer;
-            border: 1px solid ${subTab === t.id ? 'var(--neon-cyan)' : 'var(--border-subtle)'};
-            background: ${subTab === t.id ? 'rgba(0,242,254,0.12)' : 'var(--bg-surface)'};
-            color: ${subTab === t.id ? 'var(--neon-cyan)' : 'var(--text-secondary)'};
-            transition: all 0.2s;
-          ">
-          ${t.icon} ${t.label}
-          ${t.id === 'users' ? `<span style="margin-left:6px;background:rgba(0,242,254,0.2);border-radius:999px;padding:1px 8px;font-size:0.78rem;">${(state.allUsers||[]).length}</span>` : ''}
-          ${t.id === 'customers' ? `<span style="margin-left:6px;background:rgba(0,242,254,0.2);border-radius:999px;padding:1px 8px;font-size:0.78rem;">${(state.allUsers||[]).filter(u=>u.role==='customer').length}</span>` : ''}
+        <button type="button" role="tab" aria-selected="${subTab === t.id}"
+          class="dm-tab${subTab === t.id ? ' is-active' : ''}"
+          onclick="switchDataManagerTab('${t.id}')">
+          <span class="dm-tab-ico" aria-hidden="true">${t.icon}</span>
+          ${t.label}
+          ${tabCount[t.id] !== undefined ? `<span class="dm-tab-count">${tabCount[t.id]}</span>` : ''}
         </button>
       `).join('')}
     </div>
@@ -5014,11 +5120,22 @@ function renderDMAllocationTab() {
   const unassignedDevices = devices.filter(d => !d.customerId || !customers.find(c => c.id === d.customerId));
   const assignedDevices   = devices.filter(d =>  d.customerId &&  customers.find(c => c.id === d.customerId));
 
+  const filter = state.allocFilter || 'all';
+  const visible = filter === 'assigned'   ? assignedDevices
+                : filter === 'unassigned' ? unassignedDevices
+                : devices;
+
+  const chip = (id, label, count) => {
+    const active = filter === id;
+    return `<button type="button" class="dm-filter-chip${active ? ' is-active' : ''}"
+      onclick="setAllocFilter('${id}')" aria-pressed="${active}">${label} <strong>${count}</strong></button>`;
+  };
+
   return `
-    <div style="display: grid; gap: 24px;">
+    <div class="alloc-stack">
 
       <!-- Summary Bar -->
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px;">
+      <div class="stat-cards-grid alloc-stats">
         <div class="stat-card">
           <div class="stat-header"><span class="stat-label">Total Devices</span><div class="stat-icon" style="background:rgba(0,242,254,0.1);color:var(--neon-cyan);">🖥️</div></div>
           <div class="stat-value" style="color:var(--neon-cyan);">${devices.length}</div>
@@ -5041,98 +5158,146 @@ function renderDMAllocationTab() {
         </div>
       </div>
 
-      <!-- Quick Assign Widget -->
-      <div class="glass-panel" style="background: linear-gradient(135deg, rgba(0,242,254,0.07) 0%, rgba(17,24,39,0.9) 100%); border-color: rgba(0,242,254,0.25);">
-        <div class="panel-header" style="margin-bottom: 16px;">
-          <div class="panel-title">🔗 Assign Device to Customer</div>
-          <span style="font-size:0.8rem;color:var(--text-muted);">Admin-only: link a purchased SmartBoard to a customer account</span>
-        </div>
+      <!-- Quick Assign Widget.
+           This panel used to hardcode a dark gradient
+           (linear-gradient(135deg, rgba(0,242,254,.07), rgba(17,24,39,.9))),
+           which turned it into an unreadable dark slab in LIGHT theme — the
+           labels are --text-secondary, so they vanished into it. It now uses
+           theme tokens only, so it reads correctly in both themes. -->
+      <section class="glass-panel alloc-panel">
+        <header class="alloc-head">
+          <div class="alloc-head-main">
+            <span class="alloc-head-ico" aria-hidden="true">🔗</span>
+            <div>
+              <h2 class="alloc-head-title">Assign a SmartBoard</h2>
+              <p class="alloc-head-sub">Link a registered device to the customer organization that owns it.</p>
+            </div>
+          </div>
+          <span class="alloc-head-tag">Admin only</span>
+        </header>
 
-        <div class="alloc-form-row" id="allocationFormRow">
-          <div>
-            <label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:6px;">📦 Select Device</label>
-            <select id="allocDeviceSelect" class="form-input" style="width:100%;">
+        <div class="alloc-grid">
+          <div class="alloc-field">
+            <label class="alloc-label" for="allocDeviceSelect">
+              Device <span class="alloc-req">Required</span>
+            </label>
+            <select id="allocDeviceSelect" class="form-input">
               <option value="">— Choose a SmartBoard —</option>
-              ${devices.map(d => `<option value="${d.id}">${d.id} · ${d.model} · ${d.customerName}</option>`).join('')}
+              ${devices.map(d => {
+                const owner = customers.find(c => c.id === d.customerId);
+                return `<option value="${d.id}">${escapeHtml(d.id)} · ${escapeHtml(d.model || '')}${owner ? ' · currently ' + escapeHtml(owner.organizationName) : ' · unassigned'}</option>`;
+              }).join('')}
             </select>
           </div>
-          <div>
-            <label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:6px;">🏢 Assign to Customer</label>
-            <select id="allocCustomerSelect" class="form-input" style="width:100%;">
-              <option value="">— Choose a Customer —</option>
-              ${customers.map(c => `<option value="${c.id}">${c.organizationName} (${c.id})</option>`).join('')}
-            </select>
-          </div>
-          <div>
-            <button class="btn btn-primary" onclick="executeDeviceAllocation()" style="white-space:nowrap;height:42px;">
-              🔗 Assign Now
-            </button>
-          </div>
-        </div>
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px;">
-          <div>
-            <label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:6px;">📍 Installation Location (optional)</label>
+          <div class="alloc-field">
+            <label class="alloc-label" for="allocCustomerSelect">
+              Customer <span class="alloc-req">Required</span>
+            </label>
+            <select id="allocCustomerSelect" class="form-input">
+              <option value="">— Choose a Customer —</option>
+              ${customers.map(c => `<option value="${c.id}">${escapeHtml(c.organizationName)} (${escapeHtml(c.id)})</option>`).join('')}
+            </select>
+          </div>
+
+          <div class="alloc-field">
+            <label class="alloc-label" for="allocLocationInput">
+              Installation location <span class="alloc-opt">Optional</span>
+            </label>
             <input type="text" id="allocLocationInput" class="form-input" placeholder="e.g. Room 301, Main Building" />
           </div>
-          <div>
-            <label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:6px;">🏙️ City (optional)</label>
+
+          <div class="alloc-field">
+            <label class="alloc-label" for="allocCityInput">
+              City <span class="alloc-opt">Optional</span>
+            </label>
             <input type="text" id="allocCityInput" class="form-input" placeholder="e.g. Quezon City" />
           </div>
         </div>
-      </div>
+
+        <footer class="alloc-actions">
+          <p class="alloc-hint">
+            The device keeps its serial number, firmware and service history — only the owning organization changes.
+          </p>
+          <button type="button" class="btn btn-primary alloc-submit" onclick="executeDeviceAllocation()">
+            🔗 Assign device
+          </button>
+        </footer>
+      </section>
 
       <!-- All Devices Allocation Table -->
-      <div class="glass-panel" style="padding:0;overflow:hidden;">
-        <div style="padding:16px 20px;border-bottom:1px solid var(--border-subtle);display:flex;align-items:center;justify-content:space-between;">
-          <div class="panel-title">📋 All Device Assignments</div>
-          <span style="font-size:0.8rem;color:var(--text-muted);">${devices.length} SmartBoards registered</span>
-        </div>
+      <section class="glass-panel alloc-panel alloc-panel--flush">
+        <header class="alloc-head alloc-head--bar">
+          <div>
+            <h2 class="alloc-head-title">All device assignments</h2>
+            <p class="alloc-head-sub">${devices.length} SmartBoard${devices.length === 1 ? '' : 's'} registered</p>
+          </div>
+          <div class="dm-filter-bar">
+            ${chip('all', 'All', devices.length)}
+            ${chip('assigned', '✅ Assigned', assignedDevices.length)}
+            ${chip('unassigned', '📦 Unassigned', unassignedDevices.length)}
+          </div>
+        </header>
+
         <div class="data-table-wrapper">
-          <table class="data-table">
+          <table class="data-table alloc-table">
             <thead>
               <tr>
-                <th>Device ID</th>
+                <th>Device</th>
                 <th>Model</th>
-                <th>Current Customer</th>
-                <th>Customer ID</th>
+                <th>Assigned to</th>
                 <th>Location</th>
                 <th>Status</th>
-                <th>Action</th>
+                <th class="col-actions">Action</th>
               </tr>
             </thead>
             <tbody>
-              ${devices.length === 0 ? `<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted);">No devices registered yet.</td></tr>` : ''}
-              ${devices.map(dev => {
+              ${visible.length === 0 ? `
+                <tr>
+                  <td colspan="6" class="alloc-empty">
+                    ${devices.length === 0
+                      ? 'No devices registered yet. Register a SmartBoard from the Devices page first.'
+                      : filter === 'unassigned'
+                        ? 'Every registered device is already assigned to a customer.'
+                        : 'No devices match this filter.'}
+                  </td>
+                </tr>` : ''}
+              ${visible.map(dev => {
                 const linkedCust = customers.find(c => c.id === dev.customerId);
                 const isAssigned = !!linkedCust;
+                const statusCls = dev.status === 'online' ? 'status-online'
+                                : dev.status === 'warning' ? 'status-warning'
+                                : dev.status === 'maintenance' ? 'status-maintenance'
+                                : 'status-offline';
+                const statusTxt = dev.status === 'online' ? '🟢 Online'
+                                : dev.status === 'offline' ? '🔴 Offline'
+                                : dev.status === 'warning' ? '⚠️ Warning'
+                                : '🔧 Maintenance';
                 return `
                 <tr>
                   <td>
-                    <strong style="font-family:var(--font-mono);color:var(--neon-cyan);">${dev.id}</strong>
-                    <div style="font-size:0.7rem;color:var(--text-muted);">${dev.serialNumber}</div>
+                    <div class="alloc-dev-id">${escapeHtml(dev.id)}</div>
+                    <div class="alloc-dev-sub">${escapeHtml(dev.serialNumber || '—')}</div>
                   </td>
                   <td>
-                    <strong>${dev.model}</strong>
-                    <div style="font-size:0.72rem;color:var(--text-muted);">${dev.firmwareVersion}</div>
+                    <div class="alloc-dev-model">${escapeHtml(dev.model || '—')}</div>
+                    <div class="alloc-dev-sub">${escapeHtml(dev.firmwareVersion || '')}</div>
                   </td>
                   <td>
                     ${isAssigned
-                      ? `<strong>${dev.customerName}</strong><div style="font-size:0.72rem;color:var(--neon-cyan);">✅ Linked</div>`
-                      : `<span style="color:var(--text-muted);font-style:italic;">Not assigned</span>`
-                    }
-                  </td>
-                  <td style="font-family:var(--font-mono);font-size:0.78rem;color:${isAssigned?'var(--neon-cyan)':'var(--text-muted)'};">
-                    ${dev.customerId || '—'}
-                  </td>
-                  <td style="font-size:0.82rem;">${dev.location || '—'}</td>
-                  <td>
-                    <span class="status-pill ${dev.status === 'online' ? 'status-online' : dev.status === 'warning' ? 'status-warning' : dev.status === 'maintenance' ? 'status-maintenance' : 'status-offline'}">
-                      ${dev.status === 'online' ? '🟢 Online' : dev.status === 'offline' ? '🔴 Offline' : dev.status === 'warning' ? '⚠️ Warning' : '🔧 Maint'}
-                    </span>
+                      ? `<div class="alloc-owner">${escapeHtml(dev.customerName || linkedCust.organizationName)}</div>
+                         <div class="alloc-dev-sub alloc-dev-sub--ok">✅ ${escapeHtml(dev.customerId)}</div>`
+                      : `<div class="alloc-owner alloc-owner--none">Not assigned</div>
+                         <div class="alloc-dev-sub">Awaiting a customer</div>`}
                   </td>
                   <td>
-                    <button class="btn btn-secondary btn-sm" onclick="quickAssignFromTable('${dev.id}')" title="Assign/Reassign this device">
+                    <div class="alloc-loc">${escapeHtml(dev.location || '—')}</div>
+                    ${dev.city ? `<div class="alloc-dev-sub">${escapeHtml(dev.city)}</div>` : ''}
+                  </td>
+                  <td><span class="status-pill ${statusCls}">${statusTxt}</span></td>
+                  <td class="col-actions">
+                    <button class="btn btn-secondary btn-sm" onclick="quickAssignFromTable('${dev.id}')"
+                      title="${isAssigned ? 'Reassign this device to a different customer' : 'Assign this device to a customer'}">
                       🔗 ${isAssigned ? 'Reassign' : 'Assign'}
                     </button>
                   </td>
@@ -5142,9 +5307,15 @@ function renderDMAllocationTab() {
             </tbody>
           </table>
         </div>
-      </div>
+      </section>
     </div>
   `;
+}
+
+/** Assignment-status filter on the Data Manager > Device Allocation tab. */
+function setAllocFilter(filter) {
+  state.allocFilter = ['all', 'assigned', 'unassigned'].includes(filter) ? filter : 'all';
+  renderApp();
 }
 
 // --- Device Allocation Actions ---
@@ -8301,7 +8472,7 @@ function renderRentalsView() {
           <span class="ticket-id">Revenue</span>
           <span class="status-pill status-online">Total</span>
         </div>
-        <div class="rental-kpi-value">₱${(stats.revenue || 0).toLocaleString()}</div>
+        <div class="rental-kpi-value"><span class="currency-symbol">₱</span>${(stats.revenue || 0).toLocaleString()}</div>
         <div class="rental-kpi-label">From active &amp; returned rentals</div>
       </div>
       ` : ''}
@@ -8313,32 +8484,59 @@ function renderRentalsView() {
 
 // --- Rental List View ---
 function renderRentalList(rentals, isAdmin) {
+  const STATUSES = ['Pending', 'Approved', 'Active', 'Returned', 'Overdue', 'Cancelled'];
+  const all = getVisibleRentals();
+  const activeFilter = state.rentalFilterStatus || '';
+
+  // A filter chip bar rather than a bare <select>: the counts make it obvious
+  // where the work is (e.g. 2 pending approvals) before you click anything, and
+  // it matches the chip bar used on the Data Manager and Directory screens.
+  const chip = (value, label, count) => {
+    const active = activeFilter === value;
+    return `<button type="button" class="dm-filter-chip${active ? ' is-active' : ''}"
+      onclick="setRentalFilter('${value}')" aria-pressed="${active}">${label} <strong>${count}</strong></button>`;
+  };
+
+  const filterBar = `
+    <div class="glass-panel rental-filter-bar">
+      <div class="dm-filter-bar">
+        ${chip('', 'All rentals', all.length)}
+        ${STATUSES.map(s => {
+          const n = all.filter(r => r.status === s).length;
+          return n > 0 || activeFilter === s ? chip(s, s, n) : '';
+        }).join('')}
+      </div>
+      <span class="rental-filter-count">${rentals.length} of ${all.length} shown</span>
+    </div>`;
+
   if (rentals.length === 0) {
+    // Two genuinely different situations: nothing booked at all, versus a filter
+    // that happens to match nothing. Telling the user which one it is saves them
+    // wondering whether the data is missing.
+    const filtered = !!activeFilter;
     return `
-      <div class="glass-panel" style="padding:48px;text-align:center;">
-        <div style="font-size:3rem;margin-bottom:16px;">📅</div>
-        <h3 style="font-size:1.2rem;font-weight:700;margin-bottom:8px;">No Rentals Found</h3>
-        <p style="font-size:0.88rem;color:var(--text-muted);">${isAdmin ? 'Click "New Booking" to schedule a device rental.' : 'No rental history yet.'}</p>
+      ${filterBar}
+      <div class="glass-panel rental-empty">
+        <div class="rental-empty-ico" aria-hidden="true">📅</div>
+        <h3 class="rental-empty-title">${filtered ? `No ${activeFilter.toLowerCase()} bookings` : 'No bookings yet'}</h3>
+        <p class="rental-empty-text">
+          ${filtered
+            ? `Nothing matches the “${activeFilter}” filter.`
+            : isAdmin
+              ? 'Schedule the first device rental to see it appear here.'
+              : 'Once a booking is made for your organization it will show up here.'}
+        </p>
+        ${(isAdmin || state.currentRole === 'customer') ? `
+          <div class="rental-empty-actions">
+            ${filtered ? `<button type="button" class="btn btn-secondary" onclick="setRentalFilter('')">Clear filter</button>` : ''}
+            <button type="button" class="btn btn-primary" onclick="openRentalModal()">📅 New booking</button>
+          </div>` : ''}
       </div>
     `;
   }
 
-  // Filter bar
-  const statusOptions = ['Pending', 'Approved', 'Active', 'Returned', 'Overdue', 'Cancelled'];
-
   return `
-    <!-- Filter Bar -->
-    <div class="glass-panel" style="padding:12px 18px;display:flex;align-items:center;gap:12px;margin-bottom:16px;">
-      <span style="font-size:0.85rem;font-weight:600;color:var(--text-muted);">Filter:</span>
-      <select id="rentalStatusFilter" onchange="setRentalFilter(this.value)" style="
-        padding:6px 14px;border-radius:8px;border:1px solid var(--border-color);
-        background:var(--bg-surface-elevated);color:var(--text-primary);font-size:0.82rem;
-      ">
-        <option value="">All Rentals</option>
-        ${statusOptions.map(s => `<option value="${s}" ${state.rentalFilterStatus === s ? 'selected' : ''}>${s}</option>`).join('')}
-      </select>
-      <span style="margin-left:auto;font-size:0.82rem;color:var(--text-muted);">${rentals.length} rental(s) found</span>
-    </div>
+    ${filterBar}
 
     <!-- Rentals Table -->
     <div class="glass-panel" style="padding:0;overflow:hidden;">
@@ -8353,7 +8551,7 @@ function renderRentalList(rentals, isAdmin) {
               <th>Cost</th>
               <th>Status</th>
               <th>Priority</th>
-              ${isAdmin ? '<th>Actions</th>' : ''}
+              ${isAdmin ? '<th class="col-actions">Actions</th>' : ''}
             </tr>
           </thead>
           <tbody>
@@ -8366,26 +8564,22 @@ function renderRentalList(rentals, isAdmin) {
                 : 'status-online';
 
               const days = Math.ceil((new Date(r.endDate) - new Date(r.startDate)) / (1000 * 60 * 60 * 24)) + 1;
+              const priorityClass = r.priority === 'High' ? 'is-high'
+                                  : r.priority === 'Medium' ? 'is-medium'
+                                  : 'is-low';
 
               return `
                 <tr style="cursor:pointer;" onclick="viewRentalDetail('${r.id}')">
                   <td><span class="ticket-id">${r.rentalNumber}</span></td>
-                  <td><strong>${r.customerName}</strong></td>
-                  <td>${r.deviceModel}<br><span style="font-size:0.76rem;color:var(--text-muted);">${r.serialNumber}</span></td>
+                  <td><strong>${escapeHtml(r.customerName || '—')}</strong></td>
+                  <td>${escapeHtml(r.deviceModel || '—')}<br><span class="rental-sub">${escapeHtml(r.serialNumber || '')}</span></td>
                   <td>
-                    <div style="font-size:0.82rem;">${formatDate(r.startDate)} → ${formatDate(r.endDate)}</div>
-                    <div style="font-size:0.74rem;color:var(--text-muted);">${days} day(s)</div>
+                    <div class="rental-period">${formatDate(r.startDate)} → ${formatDate(r.endDate)}</div>
+                    <div class="rental-sub">${days} day${days === 1 ? '' : 's'}</div>
                   </td>
-                  <td><strong>₱${r.totalCost.toLocaleString()}</strong><br><span style="font-size:0.74rem;color:var(--text-muted);">₱${r.dailyRate}/day</span></td>
+                  <td><strong><span class="currency-symbol">₱</span>${r.totalCost.toLocaleString()}</strong><br><span class="rental-sub"><span class="currency-symbol">₱</span>${r.dailyRate}/day</span></td>
                   <td><span class="status-pill ${statusClass}">${r.status}</span></td>
-                  <td>
-                    <span style="
-                      font-size:0.74rem;padding:3px 8px;border-radius:6px;font-weight:600;
-                      ${r.priority === 'High' ? 'background:rgba(244,63,94,0.15);color:#f43f5e;' :
-                        r.priority === 'Medium' ? 'background:rgba(245,158,11,0.15);color:var(--accent-amber-text);' :
-                        'background:rgba(34,197,94,0.15);color:var(--accent-green-text);'}
-                    ">${r.priority}</span>
-                  </td>
+                  <td><span class="rental-priority ${priorityClass}">${escapeHtml(r.priority || '—')}</span></td>
                   ${isAdmin ? `
                   <td class="col-actions" onclick="event.stopPropagation();">
                     <div class="dm-actions">
@@ -8841,8 +9035,8 @@ function viewRentalDetail(id) {
           </div>
           <div class="detail-tile">
             <div class="detail-tile-label">Total Cost</div>
-            <div class="detail-tile-value" style="font-size:1.15rem;">₱${Number(rental.totalCost || 0).toLocaleString()}</div>
-            <div class="detail-tile-sub">₱${Number(rental.dailyRate || 0).toLocaleString()}/day + ₱${Number(rental.depositAmount || 0).toLocaleString()} deposit</div>
+            <div class="detail-tile-value" style="font-size:1.15rem;"><span class="currency-symbol">₱</span>${Number(rental.totalCost || 0).toLocaleString()}</div>
+            <div class="detail-tile-sub"><span class="currency-symbol">₱</span>${Number(rental.dailyRate || 0).toLocaleString()}/day + <span class="currency-symbol">₱</span>${Number(rental.depositAmount || 0).toLocaleString()} deposit</div>
           </div>
           <div class="detail-tile">
             <div class="detail-tile-label">Priority</div>

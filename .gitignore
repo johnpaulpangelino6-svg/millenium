@@ -17,6 +17,10 @@ dist/
 *.swo
 *~
 
+# UI-test screenshot output (tests/*.cjs write here)
+screenshots/
+.shot/
+
 # Git lock files
 .git/*.lock
 .git/index.lock

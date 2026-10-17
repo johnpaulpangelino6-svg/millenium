@@ -1070,6 +1070,22 @@ body::before {
   letter-spacing: -0.02em;
 }
 
+/* Currency symbol.
+   The peso sign (U+20B1) is not in JetBrains Mono, so the browser falls back to
+   a UI font whose glyph is visually wider than the advance width it reports.
+   Inside a mono KPI with -0.02em tracking, the ₱ visibly collided with the digit
+   after it ("₱0" read as one smudged glyph). Render the symbol in its own span,
+   in a font that actually has it, with normal tracking and a hair of spacing. */
+.currency-symbol {
+  font-family: 'Segoe UI', system-ui, -apple-system, 'Segoe UI Symbol',
+    'Noto Sans Symbols 2', 'Arial Unicode MS', sans-serif;
+  font-weight: 700;
+  letter-spacing: 0;
+  margin-right: 0.08em;
+}
+
+.rental-kpi-value .currency-symbol { font-size: 0.86em; }
+
 /* `margin-top: auto` lines the captions up across the row even though they are
    different lengths ("Awaiting approval" vs "Devices currently rented out"). */
 .rental-kpi-label {
@@ -5315,10 +5331,18 @@ button:active::after, .btn:active::after {
   transition: 0s;
 }
 
-/* Card Hover Effects */
+/* Card Hover Effects
+   NOTE: these cards deliberately have NO entrance animation.
+   renderApp() rebuilds the view's innerHTML on every render (navigation, any
+   refresh, any poll), so a CSS `animation` on a card RESTARTS every time. The
+   old `animation: fadeInUp 0.5s ease-out` therefore replayed constantly, and
+   because the stagger below only defined delays for :nth-child(1..4), a fifth
+   card animated out of step — the Rentals "Revenue" KPI sat 20px low at
+   translateY(20px)/opacity 0 at the start of every render and visibly flickered.
+   Entrance motion is owned by .page-transition-enter on the view container,
+   which is applied once per navigation instead. */
 .stat-card, .device-card, .ticket-card, .warranty-card {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  animation: fadeInUp 0.5s ease-out;
 }
 
 .stat-card:hover, .device-card:hover, .ticket-card:hover, .warranty-card:hover {
@@ -5513,18 +5537,11 @@ input:focus, textarea:focus, select:focus {
   will-change: transform;
 }
 
-/* Stagger Animation for Lists */
-.nav-item:nth-child(1) { animation-delay: 0.05s; }
-.nav-item:nth-child(2) { animation-delay: 0.1s; }
-.nav-item:nth-child(3) { animation-delay: 0.15s; }
-.nav-item:nth-child(4) { animation-delay: 0.2s; }
-.nav-item:nth-child(5) { animation-delay: 0.25s; }
-.nav-item:nth-child(6) { animation-delay: 0.3s; }
-
-.stat-card:nth-child(1) { animation-delay: 0.1s; }
-.stat-card:nth-child(2) { animation-delay: 0.2s; }
-.stat-card:nth-child(3) { animation-delay: 0.3s; }
-.stat-card:nth-child(4) { animation-delay: 0.4s; }
+/* Stagger Animation for Lists.
+   The `.nav-item` delays are inert (the sidebar nav has no `animation` — see
+   "SIDEBAR NAV — SINGLE SOURCE OF TRUTH"), and the `.stat-card` delays were
+   removed with the entrance animation they belonged to. Both sets are gone
+   rather than left as dead rules that invite someone to re-add the animation. */
 
 /* Enhanced Video Player Overlay */
 .view-theater iframe {
@@ -9150,35 +9167,54 @@ body {
   flex-shrink: 0;
 }
 
-/* Demo Autofill Row */
+/* Demo Autofill Row.
+   These are seeded demo accounts, not a sign-in filter — the caption says so, and
+   the button names the account it will fill. Previously an all-caps, wide-tracked
+   dashed pill reading "AUTOFILL ADMIN DEMO CREDENTIALS", which read as a warning
+   label rather than a button. */
 .auth-demo-row {
   display: flex;
+  align-items: center;
   justify-content: center;
-  margin-top: 8px;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
   width: 100%;
 }
 
+.auth-demo-caption {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
 .auth-demo-btn {
-  background: none;
-  border: 1px dashed rgba(56, 189, 248, 0.3);
-  color: rgba(56, 189, 248, 0.75);
-  font-size: 0.65rem;
-  font-weight: 600;
-  font-family: inherit;
-  cursor: pointer;
-  padding: 4px 12px;
-  border-radius: 9999px;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 5px;
-  letter-spacing: 0.04em;
-  transition: all 0.2s ease;
+  gap: 7px;
+  padding: 6px 14px;
+  border-radius: var(--radius-full, 9999px);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  background: rgba(56, 189, 248, 0.10);
+  color: #7dd3fc;
+  font-family: inherit;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
 .auth-demo-btn:hover {
-  background: rgba(56, 189, 248, 0.1);
+  background: rgba(56, 189, 248, 0.20);
   border-color: #38bdf8;
-  color: #38bdf8;
+  color: #bae6fd;
+}
+
+.auth-demo-btn:focus-visible {
+  outline: 2px solid #38bdf8;
+  outline-offset: 2px;
 }
 
 /* Register Link */
@@ -12054,37 +12090,86 @@ html:not([data-theme="dark"]) .floating-menu-btn:hover {
    Three steps: email -> code -> new password. The dialog is built in
    handleForgotPassword() (public/js/app.js) and rides the shared
    .modal-backdrop / .modal-content shell so it themes automatically.
+
+   Two layout details worth not regressing:
+   - .reset-pw-foot RESETS .modal-footer's own padding. Inheriting it added a
+     second 24px inset inside .modal-content's 26px, so the primary button's
+     right edge did not line up with the input above it.
+   - The primary button is full-width so it reads as the end of the form
+     rather than a chip floating in the corner.
    ========================================================================== */
 .reset-pw-modal {
-  max-width: 460px;
+  position: relative;
+  max-width: 468px;
   width: 100%;
+  padding: 28px 28px 22px;
 }
 
-.reset-pw-head {
+/* --- close --- */
+.reset-pw-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-full, 999px);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+.reset-pw-close:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.reset-pw-close:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* --- head --- */
+.reset-pw-head {
+  display: flex;
+  align-items: flex-start;
   gap: 14px;
-  margin-bottom: 18px;
+  /* keeps the heading clear of the close button */
+  padding-right: 32px;
+  margin-bottom: 20px;
 }
 
 .reset-pw-icon {
   width: 46px;
   height: 46px;
   flex-shrink: 0;
-  border-radius: var(--radius-md, 12px);
+  border-radius: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.4rem;
-  background: var(--cyan-light, rgba(0, 242, 254, 0.12));
-  border: 1px solid var(--cyan-border, rgba(0, 242, 254, 0.3));
+  color: var(--primary);
+  background: var(--primary-light);
+  border: 1px solid var(--cyan-border);
+}
+
+.reset-pw-icon svg {
+  width: 23px;
+  height: 23px;
+  display: block;
 }
 
 .reset-pw-title {
-  font-size: 1.15rem;
+  font-size: 1.2rem;
   font-weight: 800;
+  letter-spacing: -0.01em;
   color: var(--text-primary);
-  margin: 0 0 3px;
+  margin: 2px 0 4px;
   line-height: 1.2;
 }
 
@@ -12092,49 +12177,59 @@ html:not([data-theme="dark"]) .floating-menu-btn:hover {
   font-size: 0.82rem;
   color: var(--text-secondary);
   margin: 0;
-  line-height: 1.4;
+  line-height: 1.45;
 }
 
-/* --- step indicator --- */
+/* --- step indicator: a segmented track with a raised active chip --- */
 .reset-pw-steps {
   display: flex;
-  gap: 6px;
-  margin-bottom: 18px;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 20px;
+  border-radius: var(--radius-md, 12px);
+  background: var(--bg-muted);
+  border: 1px solid var(--border-color);
 }
 
 .reset-pw-step {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 7px 4px;
-  border-radius: var(--radius-sm, 8px);
-  font-size: 0.72rem;
+  padding: 8px 6px;
+  border-radius: 9px;
+  font-size: 0.73rem;
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
   color: var(--text-muted);
-  background: var(--bg-muted);
-  border: 1px solid var(--border-subtle);
-  transition: color 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+  background: transparent;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  transition: color 0.2s ease, background 0.2s ease, border-color 0.2s ease,
+              box-shadow 0.2s ease;
 }
 
 .reset-pw-step b {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 17px;
-  height: 17px;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
   border-radius: 50%;
-  font-size: 0.68rem;
+  font-size: 0.66rem;
   background: var(--border-color);
   color: var(--text-secondary);
+  transition: background 0.2s ease, color 0.2s ease;
 }
 
 .reset-pw-step.is-active {
   color: var(--primary);
-  background: var(--cyan-light, rgba(0, 242, 254, 0.1));
-  border-color: var(--cyan-border, rgba(0, 242, 254, 0.35));
+  background: var(--bg-surface);
+  border-color: var(--cyan-border);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.09);
 }
 
 .reset-pw-step.is-active b {
@@ -12144,8 +12239,6 @@ html:not([data-theme="dark"]) .floating-menu-btn:hover {
 
 .reset-pw-step.is-done {
   color: var(--success);
-  border-color: var(--success-border);
-  background: var(--success-light);
 }
 
 .reset-pw-step.is-done b {
@@ -12246,19 +12339,40 @@ html:not([data-theme="dark"]) .floating-menu-btn:hover {
 }
 
 /* --- footer --- */
+/* Resets .modal-footer's own padding (16px 24px) and background: inheriting
+   both inset the button a further 24px inside .modal-content's 26px padding,
+   so its right edge did not line up with the input above it. */
 .reset-pw-foot {
   display: flex;
+  align-items: center;
   gap: 10px;
-  justify-content: flex-end;
+  margin-top: 22px;
+  padding: 18px 0 0;
+  background: transparent;
+  border-top: 1px solid var(--border-color);
+}
+
+/* Fills the row so the primary action lines up with the form above. */
+.reset-pw-foot .btn-primary {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.reset-pw-foot .btn-secondary {
+  flex: 0 0 auto;
 }
 
 @media (max-width: 520px) {
-  .reset-pw-step span,
+  .reset-pw-modal {
+    padding: 22px 18px 18px;
+  }
   .reset-pw-step {
     font-size: 0.66rem;
+    gap: 4px;
+    padding: 7px 4px;
   }
   .reset-pw-steps {
-    gap: 4px;
+    gap: 3px;
   }
   .reset-pw-code {
     font-size: 1.25rem;
@@ -12721,4 +12835,384 @@ html:not([data-theme="dark"]) .floating-menu-btn:hover {
     flex: 1;
     justify-content: center;
   }
+}
+
+/* ==========================================================================
+   DATA MANAGER — DEVICE ALLOCATION
+   --------------------------------------------------------------------------
+   Rebuilt layout. The previous version mixed inline styles with a hardcoded
+   dark gradient, which broke in light theme and left the primary action
+   stranded between the required and optional fields. Everything here is
+   token-driven so both themes read correctly.
+   ========================================================================== */
+
+.alloc-stack { display: grid; gap: 24px; }
+
+.alloc-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 1100px) { .alloc-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 620px)  { .alloc-stats { grid-template-columns: 1fr; } }
+
+/* The panel is a shell: header / body / footer own their own padding so the
+   bars can run edge to edge. */
+.alloc-panel { padding: 0; overflow: hidden; }
+
+.alloc-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--primary-light);
+}
+.alloc-head--bar { align-items: center; }
+
+.alloc-head-main { display: flex; align-items: center; gap: 12px; min-width: 0; }
+
+.alloc-head-ico {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-md);
+  display: grid;
+  place-items: center;
+  font-size: 1.05rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+}
+
+.alloc-head-title { margin: 0; font-size: 0.98rem; font-weight: 800; color: var(--text-primary); }
+.alloc-head-sub   { margin: 2px 0 0; font-size: 0.8rem; color: var(--text-secondary); }
+
+.alloc-head-tag {
+  flex: none;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  color: var(--primary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+}
+
+.alloc-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  padding: 20px;
+}
+@media (max-width: 900px) { .alloc-grid { grid-template-columns: 1fr; } }
+
+.alloc-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+
+.alloc-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.alloc-req,
+.alloc-opt {
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 1px 7px;
+  border-radius: var(--radius-full);
+  border: 1px solid transparent;
+}
+.alloc-req { color: var(--danger);  background: var(--danger-light);  border-color: var(--danger-border); }
+.alloc-opt { color: var(--text-muted); background: var(--bg-muted);    border-color: var(--border-color); }
+
+.alloc-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-muted);
+}
+
+.alloc-hint { margin: 0; font-size: 0.78rem; line-height: 1.45; color: var(--text-muted); max-width: 62ch; }
+.alloc-submit { white-space: nowrap; }
+
+/* Inside the panel header the chip bar should not add its own bottom margin. */
+.alloc-head .dm-filter-bar { margin: 0; }
+
+.alloc-dev-id {
+  font-family: var(--font-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--accent-blue-text);
+}
+.alloc-dev-sub {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.alloc-dev-sub--ok { color: var(--accent-green-text); }
+.alloc-dev-model  { font-size: 0.86rem; font-weight: 700; color: var(--text-primary); }
+.alloc-owner      { font-size: 0.86rem; font-weight: 700; color: var(--text-primary); }
+.alloc-owner--none { color: var(--text-muted); font-weight: 600; font-style: italic; }
+.alloc-loc        { font-size: 0.82rem; color: var(--text-primary); }
+
+.alloc-empty {
+  text-align: center;
+  padding: 44px 20px;
+  color: var(--text-muted);
+  font-size: 0.86rem;
+}
+
+/* --- Data Manager sub-tabs ------------------------------------------------- */
+.dm-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+
+.dm-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 18px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 0.86rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.dm-tab:hover { border-color: var(--border-hover); color: var(--text-primary); }
+.dm-tab:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+.dm-tab.is-active {
+  background: var(--primary-light);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.dm-tab-ico { font-size: 0.95rem; line-height: 1; }
+
+.dm-tab-count {
+  font-size: 0.72rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 8px;
+  border-radius: var(--radius-full);
+  background: var(--bg-muted);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+}
+
+.dm-tab.is-active .dm-tab-count {
+  background: var(--bg-surface);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+/* ==========================================================================
+   RENTALS — filter bar, empty state, table cells
+   ========================================================================== */
+
+.rental-filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 12px 18px;
+  margin-bottom: 16px;
+}
+
+/* The chip bar carries its own bottom margin for standalone use. */
+.rental-filter-bar .dm-filter-bar { margin: 0; }
+
+.rental-filter-count {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.rental-sub {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+.rental-period {
+  font-size: 0.82rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+/* Priority pill. Was inline-styled with a hardcoded rgba() trio; as a class it
+   can use the theme's accent text tokens, which already carry a light/dark step. */
+.rental-priority {
+  display: inline-block;
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.rental-priority.is-high   { color: var(--danger);  background: var(--danger-light);  border-color: var(--danger-border); }
+.rental-priority.is-medium { color: var(--warning); background: var(--warning-light); border-color: var(--warning-border); }
+.rental-priority.is-low    { color: var(--success); background: var(--success-light); border-color: var(--success-border); }
+
+/* --- Rentals empty state --------------------------------------------------- */
+.rental-empty {
+  padding: 56px 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.rental-empty-ico {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 1.7rem;
+  background: var(--primary-light);
+  border: 1px solid var(--border-color);
+  margin-bottom: 4px;
+}
+
+.rental-empty-title {
+  margin: 0;
+  font-size: 1.12rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.rental-empty-text {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+  max-width: 46ch;
+}
+
+.rental-empty-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 10px;
+}
+
+/* ==========================================================================
+   PEOPLE DIRECTORY — toolbar, role filter, empty state
+   ========================================================================== */
+
+.directory-toolbar {
+  padding: 16px 20px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.directory-role-bar { margin: 0; }
+
+.directory-stat--muted strong { color: var(--text-secondary); }
+
+.directory-empty {
+  padding: 56px 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.directory-empty-ico {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 1.7rem;
+  background: var(--primary-light);
+  border: 1px solid var(--border-color);
+  margin-bottom: 4px;
+}
+
+.directory-empty-title {
+  margin: 0;
+  font-size: 1.12rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.directory-empty-text {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+  max-width: 46ch;
+}
+
+.directory-empty-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 10px;
+}
+
+/* --- Settings: "view as others see me" ------------------------------------- */
+.profile-identity { flex-wrap: wrap; }
+
+.profile-identity-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.profile-preview-btn {
+  flex: 0 0 auto;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.profile-preview-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.profile-preview-btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+@media (max-width: 560px) {
+  .profile-preview-btn { margin-left: 0; width: 100%; justify-content: center; }
 }

@@ -3,7 +3,7 @@
 const puppeteer = require('puppeteer-core');
 const path = require('path');
 
-const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+const CHROME = require('./_chrome-path.cjs');
 const BASE = 'http://localhost:3000';
 const APP = BASE + '/app';
 const OUT = path.resolve(__dirname, '..', 'screenshots', 'light-mode');

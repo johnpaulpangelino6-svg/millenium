@@ -18,7 +18,7 @@ const puppeteer = require('puppeteer-core');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+const CHROME = require('./_chrome-path.cjs');
 const BASE = 'http://127.0.0.1:3000';
 const APP = BASE + '/app';
 const OUT = path.join(__dirname, '..', 'screenshots', 'modal-review');

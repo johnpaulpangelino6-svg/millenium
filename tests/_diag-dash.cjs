@@ -1,5 +1,5 @@
 const puppeteer = require('puppeteer-core');
-const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+const CHROME = require('./_chrome-path.cjs');
 const APP = 'http://127.0.0.1:3000/app';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

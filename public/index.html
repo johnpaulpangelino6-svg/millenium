@@ -58,7 +58,7 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;800;900&family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800;900&family=Playfair+Display:ital,wght@1,500;1,600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
     rel="stylesheet" />
-  <link rel="stylesheet" href="/css/style.css?v=20261017b" />
+  <link rel="stylesheet" href="/css/style.css?v=20261017c" />
 </head>
 
 <body>
@@ -293,7 +293,7 @@
                     <polyline points="22,6 12,13 2,6" />
                   </svg>
                 </span>
-                <input type="text" id="loginUsername" class="auth-field-input" placeholder="e.g. admin@brains.asia"
+                <input type="text" id="loginUsername" class="auth-field-input" placeholder="you@company.com"
                   autocomplete="username" required />
               </div>
             </div>
@@ -350,14 +350,20 @@
 
 
 
-            <!-- Demo Autofill -->
+            <!-- Demo Autofill.
+                 The role tabs above select WHICH seeded demo account this fills
+                 in; they are not a sign-in filter, so the label names the account
+                 explicitly rather than implying "sign in as a Customer". -->
             <div class="auth-demo-row">
+              <span class="auth-demo-caption">Demo accounts</span>
               <button type="button" class="auth-demo-btn" onclick="quickDemoLogin('admin@gmail.com','123123','Admin')"
                 id="autofillDemoBtn">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="8" />
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
                 </svg>
-                <span>AUTOFILL ADMIN DEMO CREDENTIALS</span>
+                <span>Fill Admin credentials</span>
               </button>
             </div>
           </form>
@@ -1079,7 +1085,7 @@
   <!-- JsBarcode Library for Barcode Generation -->
   <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
 
-  <script src="/js/app.js?v=20261017b"></script>
+  <script src="/js/app.js?v=20261017c"></script>
 </body>
 
 </html>
