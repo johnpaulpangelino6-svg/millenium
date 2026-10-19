@@ -25,6 +25,10 @@ async function login(username, password) {
     body: JSON.stringify({ username, password }),
   });
   const j = await r.json();
+  // `user` is defaulted to {} so a failed login shows up as a run of failed
+  // assertions naming the missing account, instead of a TypeError halfway
+  // through the suite that hides every check after it.
+  if (!j.user) j.user = {};
   return { status: r.status, body: j, token: j.token, user: j.user };
 }
 
@@ -98,8 +102,10 @@ function authGet(path, token) {
   const foreignOwners = [...new Set(mine.map((r) => r.createdByUserId))];
 
   console.log(`        admin sees ${adminJson.count} rentals`);
-  console.log(`        ${customer.body.user.username} (${customer.body.user.id}) sees ${custJson.count} rentals`);
-  console.log(`        ${customer2.body.user.username} (${customer2.body.user.id}) sees ${cust2Json.count} rentals`);
+  const custName = (customer.body && customer.body.user && customer.body.user.username) || 'orgen';
+  const cust2Name = (customer2.body && customer2.body.user && customer2.body.user.username) || '(second account)';
+  console.log(`        ${custName} (${customer.body.user.id}) sees ${custJson.count} rentals`);
+  console.log(`        ${cust2Name} (${customer2.body.user ? customer2.body.user.id : 'n/a'}) sees ${cust2Json.count} rentals`);
   console.log(`        owner ids present in customer's list: ${JSON.stringify(foreignOwners)}`);
 
   check('customer list is non-empty', mine.length > 0);
@@ -216,9 +222,12 @@ function authGet(path, token) {
   check('second customer stats total equals their visible rows',
     cust2Stats.data && cust2Stats.data.totalRentals === cust2Json.count,
     `stats=${cust2Stats.data && cust2Stats.data.totalRentals} list=${cust2Json.count}`);
+  const custTotal  = (custStats.data  && custStats.data.totalRentals)  || 0;
+  const cust2Total = (cust2Stats.data && cust2Stats.data.totalRentals) || 0;
+  const adminTotal = (adminStats.data && adminStats.data.totalRentals) || 0;
   check('the two same-org customers get disjoint booking sets',
-    custStats.data.totalRentals + cust2Stats.data.totalRentals <= adminStats.data.totalRentals,
-    `${custStats.data.totalRentals} + ${cust2Stats.data.totalRentals} vs admin ${adminStats.data.totalRentals}`);
+    custTotal + cust2Total <= adminTotal,
+    `${custTotal} + ${cust2Total} vs admin ${adminTotal}`);
 
   // ------------------------------------------------- 7. admin-only feeds
   console.log('\n=== 7. ADMIN-ONLY FEEDS ===');

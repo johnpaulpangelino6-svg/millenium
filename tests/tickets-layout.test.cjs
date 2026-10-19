@@ -248,22 +248,43 @@ const GEOMETRY = () => {
     await page.evaluate(() => document.querySelector('.ticket-card')?.click());
     await sleep(900);
 
-    // The conversation is gated behind "Open chat" now, so the panel — and its
-    // message list — only exists once the gate is opened. Checking colours
-    // before that would measure a display:none container.
-    const gate = await page.evaluate(() => {
-      const panel = document.getElementById('tixConvoPanel');
-      const bar = document.getElementById('tixConvoBar');
+    // The conversation is no longer gated behind an "Open chat" bar — it lives
+    // in its own always-visible column beside the ticket details, so the panel
+    // and its message list exist as soon as the dialog opens.
+    const split = await page.evaluate(() => {
+      const modal = document.querySelector('.tix-modal');
+      const details = document.querySelector('.tix-details');
+      const pane = document.querySelector('.tix-chat-pane');
+      const chat = document.getElementById('ticketChatMessages');
+      const composer = document.querySelector('.tix-chat-pane .tix-composer');
+      if (!modal || !details || !pane) return { missing: true };
+
+      const d = details.getBoundingClientRect();
+      const p = pane.getBoundingClientRect();
+      const c = composer ? composer.getBoundingClientRect() : null;
+      const cs = getComputedStyle(chat);
+
       return {
-        hasGate: !!bar,
-        panelHidden: panel ? getComputedStyle(panel).display === 'none' : null,
-        label: bar ? bar.textContent.trim() : '',
+        missing: false,
+        isSplit: modal.classList.contains('tix-modal--split'),
+        paneVisible: getComputedStyle(pane).display !== 'none' && p.width > 200,
+        paneRightOfDetails: p.left >= d.right - 2,
+        detailsScrolls: getComputedStyle(details).overflowY === 'auto',
+        chatScrolls: cs.overflowY === 'auto',
+        // The composer is the last thing in the pane, so its bottom edge should
+        // sit on the pane's bottom edge rather than floating under the messages.
+        composerPinned: !!c && Math.abs(c.bottom - p.bottom) < 3,
+        chatAboveComposer: !!c && chat.getBoundingClientRect().bottom <= c.top + 2,
       };
     });
-    check('the ticket dialog gates its chat behind an "Open chat" control', gate.hasGate && gate.panelHidden);
-    check('the gate is labelled', /Open chat/i.test(gate.label), gate.label);
+    check('the ticket dialog is a details + chat split', split.isSplit === true, JSON.stringify(split));
+    check('the chat column is visible as soon as the dialog opens', split.paneVisible === true);
+    check('the chat column sits to the right of the details', split.paneRightOfDetails === true);
+    check('the details column scrolls on its own', split.detailsScrolls === true);
+    check('the message list scrolls on its own', split.chatScrolls === true);
+    check('the composer is pinned to the bottom of the chat column', split.composerPinned === true);
+    check('the message list ends above the composer', split.chatAboveComposer === true);
 
-    await page.click('#tixConvoBar');
     await sleep(1800);
 
     const m = await page.evaluate(() => {
@@ -281,11 +302,11 @@ const GEOMETRY = () => {
         bubbleText: bubbles.length ? getComputedStyle(bubbles[bubbles.length - 1]).color : '',
         bubbleTextLum: bubbles.length ? lum(getComputedStyle(bubbles[bubbles.length - 1]).color) : -1,
         bubbles: bubbles.length,
-        open: document.getElementById('tixConvo')?.classList.contains('is-open'),
+        open: !!document.getElementById('tixConvo'),
       };
     });
     console.log(`        ${JSON.stringify(m)}`);
-    check('opening the gate reveals the conversation', m.open === true);
+    check('the conversation container is rendered', m.open === true);
     check('the chat panel is light in light mode (regression: was hardcoded #070c1d)',
       m.chatLum > 150, `chat bg=${m.chatBg} luminance=${m.chatLum}`);
     check('message text is dark in light mode (regression: was #f1f5f9, white-on-white)',

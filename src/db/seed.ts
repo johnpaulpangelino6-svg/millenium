@@ -37,7 +37,7 @@ async function seed() {
       await db.registerUser(u);
       userCount++;
     } catch (err: any) {
-      if (err.message?.includes('UNIQUE') || err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+      if (err.message?.includes('UNIQUE') || err.message?.includes('duplicate key') || err.code === '23505') {
         // Skip duplicate
       } else {
         throw err;
@@ -67,7 +67,7 @@ async function seed() {
       await db.addCustomer(c as any);
       customerCount++;
     } catch (err: any) {
-      if (err.message?.includes('UNIQUE') || err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+      if (err.message?.includes('UNIQUE') || err.message?.includes('duplicate key') || err.code === '23505') {
         // Skip duplicate
       } else {
         throw err;
@@ -97,7 +97,7 @@ async function seed() {
       await db.addDevice(d);
       deviceCount++;
     } catch (err: any) {
-      if (err.message?.includes('UNIQUE') || err.code === 'SQLITE_CONSTRAINT_UNIQUE' || err.code === 'SQLITE_CONSTRAINT_PRIMARYKEY') {
+      if (err.message?.includes('UNIQUE') || err.message?.includes('duplicate key') || err.code === '23505') {
         // Skip duplicate
       } else {
         throw err;
@@ -143,7 +143,7 @@ async function seed() {
       await db.createTicket(t);
       ticketCount++;
     } catch (err: any) {
-      if (err.message?.includes('UNIQUE') || err.code === 'SQLITE_CONSTRAINT_UNIQUE' || err.code === 'SQLITE_CONSTRAINT_PRIMARYKEY') {
+      if (err.message?.includes('UNIQUE') || err.message?.includes('duplicate key') || err.code === '23505') {
         // Skip duplicate
       } else {
         throw err;
@@ -166,7 +166,7 @@ async function seed() {
       await db.addCms(c);
       cmsCount++;
     } catch (err: any) {
-      if (err.message?.includes('UNIQUE') || err.code === 'SQLITE_CONSTRAINT_UNIQUE' || err.code === 'SQLITE_CONSTRAINT_PRIMARYKEY') {
+      if (err.message?.includes('UNIQUE') || err.message?.includes('duplicate key') || err.code === '23505') {
         // Skip duplicate
       } else {
         throw err;

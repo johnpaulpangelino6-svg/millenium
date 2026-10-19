@@ -330,9 +330,26 @@ class MillenniumDatabase {
           min_threshold INTEGER DEFAULT 5,
           unit_cost REAL DEFAULT 0.0,
           status TEXT DEFAULT 'In Stock',
+          -- Optional custom artwork for the card. Holds either a URL or a
+          -- downscaled data: URL produced by the admin's edit dialog.
+          image_url TEXT DEFAULT NULL,
           last_restocked TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
+      `);
+
+      // Migration: inventory_parts.image_url. CREATE TABLE IF NOT EXISTS does
+      // nothing on an existing table, so the column has to be added explicitly.
+      await client.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'inventory_parts' AND column_name = 'image_url'
+          ) THEN
+            ALTER TABLE inventory_parts ADD COLUMN image_url TEXT DEFAULT NULL;
+          END IF;
+        END $$;
       `);
 
       // CMS Content table
@@ -496,7 +513,8 @@ class MillenniumDatabase {
     const hash = hashPassword(password);
     const result = await pool.query(
       `SELECT id, username, email, full_name as "fullName", role, location, 
-              allowed_locations as "allowedLocations", organization
+              allowed_locations as "allowedLocations", organization,
+              profile_photo as "profilePhoto", created_at as "createdAt"
        FROM users 
        WHERE (username = $1 OR email = $1) AND password_hash = $2`,
       [username, hash]
@@ -561,7 +579,8 @@ class MillenniumDatabase {
   async getUsers(): Promise<any[]> {
     const result = await pool.query(`
       SELECT id, username, email, full_name as "fullName", role, location, 
-             allowed_locations as "allowedLocations", organization, created_at as "createdAt"
+             allowed_locations as "allowedLocations", organization,
+             profile_photo as "profilePhoto", created_at as "createdAt"
       FROM users
       ORDER BY created_at DESC
     `);
@@ -585,6 +604,12 @@ class MillenniumDatabase {
       if (data.location) { updates.push(`location = $${paramCount++}`); values.push(data.location); }
       if (data.organization) { updates.push(`organization = $${paramCount++}`); values.push(data.organization); }
       if (data.password) { updates.push(`password_hash = $${paramCount++}`); values.push(hashPassword(data.password)); }
+      // `null` clears the picture; `undefined` means "leave it alone", which is
+      // why this cannot use the truthiness test the fields above use.
+      if (data.profilePhoto !== undefined) {
+        updates.push(`profile_photo = $${paramCount++}`);
+        values.push(data.profilePhoto === null || data.profilePhoto === '' ? null : data.profilePhoto);
+      }
 
       if (updates.length === 0) {
         return { success: false, error: 'No fields to update' };
@@ -598,7 +623,8 @@ class MillenniumDatabase {
       // snake_case keys, so callers reading `fullName` silently got undefined.)
       const result = await pool.query(`
         SELECT id, username, email, full_name as "fullName", role, location,
-               allowed_locations as "allowedLocations", organization, created_at as "createdAt"
+               allowed_locations as "allowedLocations", organization,
+               profile_photo as "profilePhoto", created_at as "createdAt"
         FROM users WHERE id = $1
       `, [id]);
       return { success: true, user: result.rows[0] };
@@ -1284,7 +1310,8 @@ class MillenniumDatabase {
   async getInventory(): Promise<InventoryPart[]> {
     const result = await pool.query(`
       SELECT id, part_code as "partCode", name, category, stock_quantity as "stockQuantity", 
-             min_threshold as "minThreshold", unit_cost as "unitCost", status, 
+             min_threshold as "minThreshold", unit_cost as "unitCost", status,
+             image_url as "imageUrl",
              last_restocked as "lastRestocked", created_at as "createdAt"
       FROM inventory_parts
       ORDER BY name
@@ -1296,7 +1323,8 @@ class MillenniumDatabase {
   async getInventoryPartById(id: string): Promise<InventoryPart | null> {
     const result = await pool.query(`
       SELECT id, part_code as "partCode", name, category, stock_quantity as "stockQuantity", 
-             min_threshold as "minThreshold", unit_cost as "unitCost", status, 
+             min_threshold as "minThreshold", unit_cost as "unitCost", status,
+             image_url as "imageUrl",
              last_restocked as "lastRestocked", created_at as "createdAt"
       FROM inventory_parts
       WHERE id = $1
@@ -1335,6 +1363,9 @@ class MillenniumDatabase {
     if (data.minThreshold !== undefined) { updates.push(`min_threshold = $${paramCount++}`); values.push(data.minThreshold); }
     if (data.unitCost !== undefined) { updates.push(`unit_cost = $${paramCount++}`); values.push(data.unitCost); }
     if (data.status) { updates.push(`status = $${paramCount++}`); values.push(data.status); }
+    // `null` is a meaningful value here: it clears custom artwork and falls the
+    // card back to the built-in SVG for its part code.
+    if (data.imageUrl !== undefined) { updates.push(`image_url = $${paramCount++}`); values.push(data.imageUrl); }
 
     if (updates.length > 0) {
       values.push(id);

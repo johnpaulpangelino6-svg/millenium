@@ -114,7 +114,13 @@ const SECTIONS = ['features', 'how-it-works', 'booking', 'user-roles', 'about'];
   });
   // The header itself is EXPECTED to be pinned. Nothing else may be, otherwise
   // it would sit on top of the content while the page scrolls.
-  const others = pinned.filter((p) => !String(p.cls).includes('site-head'));
+  //
+  // `.page-bg` is the one sanctioned exception: it is the decorative background
+  // layer (grids, glows, beam) and it is `pointer-events: none` at `z-index: 0`,
+  // so it cannot cover or intercept anything. Any OTHER fixed/sticky element is
+  // still a failure.
+  const isBackgroundLayer = (p) => String(p.cls).split(/\s+/).includes('page-bg');
+  const others = pinned.filter((p) => !String(p.cls).includes('site-head') && !isBackgroundLayer(p));
   check('the header is pinned (position:sticky)',
     pinned.some((p) => String(p.cls).includes('site-head')),
     pinned.map((p) => `${p.tag}.${p.cls}:${p.pos}`).join(', ') || 'none found');
@@ -123,6 +129,18 @@ const SECTIONS = ['features', 'how-it-works', 'booking', 'user-roles', 'about'];
     others.map((p) => `${p.tag}.${p.cls}:${p.pos}`).join(', '));
 
   // Actually scroll and prove the page moved.
+  // The document keeps growing while images/fonts settle, so a scroll issued
+  // too early is clamped to a nearly-unscrollable page (this read 0 -> 15 and
+  // failed). Wait for the height to stop changing first.
+  await page.evaluate(async () => {
+    let last = -1;
+    for (let i = 0; i < 40; i += 1) {
+      const h = document.documentElement.scrollHeight;
+      if (h === last) return;
+      last = h;
+      await new Promise((r) => setTimeout(r, 150));
+    }
+  });
   const scrolled = await page.evaluate(async () => {
     const before = window.pageYOffset;
     window.scrollTo(0, 1400);
@@ -140,8 +158,33 @@ const SECTIONS = ['features', 'how-it-works', 'booking', 'user-roles', 'about'];
     const r = await page.evaluate(async (yy) => {
       // `behavior: instant` overrides the page's CSS `scroll-behavior: smooth`
       // so each probe lands immediately instead of still animating when read.
+      const target = () => Math.min(yy, document.documentElement.scrollHeight - window.innerHeight);
       window.scrollTo({ top: yy, behavior: 'instant' });
-      await new Promise((res) => setTimeout(res, 450));
+      // A single call can land short: the reveal animation changes scrollHeight
+      // as sections come into view, and a scroll issued mid-reflow gets clamped
+      // (measured 107 instead of 0). Nudge until the offset actually arrives.
+      for (let i = 0; i < 20; i++) {
+        await new Promise((res) => setTimeout(res, 50));
+        if (Math.abs(window.pageYOffset - target()) <= 2) break;
+        window.scrollTo({ top: yy, behavior: 'instant' });
+      }
+      // Wait for the offset to stop moving before measuring.
+      let prev = -1;
+      let stable = 0;
+      for (let i = 0; i < 40; i++) {
+        await new Promise((res) => setTimeout(res, 50));
+        if (window.pageYOffset === prev) { if (++stable >= 2) break; } else { stable = 0; }
+        prev = window.pageYOffset;
+      }
+      // `.is-stuck` is toggled from a rAF-throttled scroll handler, so the class
+      // can still be one frame behind the offset we just set. Wait until the two
+      // agree rather than measuring whichever won the race.
+      for (let i = 0; i < 20; i++) {
+        const hd = document.querySelector('.site-head');
+        const wantStuck = window.pageYOffset > 8;
+        if (hd && hd.classList.contains('is-stuck') === wantStuck) break;
+        await new Promise((res) => requestAnimationFrame(() => res()));
+      }
       const h = document.querySelector('.site-head');
       const rect = h.getBoundingClientRect();
       const cs = getComputedStyle(h);

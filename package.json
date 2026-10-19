@@ -12,15 +12,10 @@
     "mail:test": "node --import tsx/esm src/tools/test-mail.ts",
     "mail:setup": "node src/tools/setup-mail.mjs",
     "mail:brevo": "node src/tools/brevo-connect.mjs",
-    "postbuild": "echo 'Build complete. Run npm run db:seed to initialize database.'",
-    "sync": "powershell -ExecutionPolicy Bypass -File auto-sync.ps1",
-    "auto-watch": "node auto-watch.js",
-    "push": "git add . && git commit -m \"Update code\" && git push origin main"
+    "postbuild": "echo 'Build complete. Run npm run db:seed to initialize database.'"
   },
   "dependencies": {
-    "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.116.0",
-    "@types/nodemailer": "^8.0.2",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
@@ -37,11 +32,13 @@
     "@types/express": "^5.0.6",
     "@types/express-session": "^1.18.0",
     "@types/node": "^26.5.0",
+    "@types/nodemailer": "^8.0.2",
     "@types/passport": "^1.0.17",
     "@types/passport-apple": "^2.0.3",
     "@types/passport-facebook": "^3.0.3",
     "@types/passport-google-oauth20": "^2.0.16",
     "@types/pg": "^8.23.1",
+    "puppeteer-core": "^25.14.0",
     "tsx": "^4.23.13",
     "typescript": "^7.0.2"
   }

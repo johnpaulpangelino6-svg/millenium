@@ -119,28 +119,40 @@ async function login(page, u, p) {
         navigateTo('dashboard');
         await new Promise((r) => setTimeout(r, 900));
         const w = document.querySelector('.hero-display-wrapper');
-        const a = document.querySelector('.hero-right-accent');
         return {
           wrapperExists: !!w,
-          accentExists: !!a,
           wrapperOnclick: w ? (w.getAttribute('onclick') || '') : 'MISSING',
-          accentOnclick: a ? (a.getAttribute('onclick') || '') : 'MISSING',
           wrapperCursor: w ? getComputedStyle(w).cursor : '',
           dashRendered: !!document.querySelector('.dash-v2-container'),
           kpiCount: document.querySelectorAll('.kpi-card-v2').length,
           heroImg: !!document.querySelector('.hero-display-img'),
+          // The stock photo was removed outright, so nothing in the hero may
+          // point at a remote image any more.
+          remoteImgs: Array.from(document.querySelectorAll('.hero-banner-card img'))
+            .map((i) => i.getAttribute('src') || '')
+            .filter((s) => /^https?:\/\//i.test(s)),
+          // The decorative right-hand accent (slogan + three carousel dots that
+          // controlled nothing) is now a real quick-actions panel.
+          accentExists: !!document.querySelector('.hero-right-accent'),
+          quickActions: document.querySelectorAll('.hero-quick-btn').length,
+          // Nothing anywhere in the dashboard may still route to the showcase.
+          showcaseLinks: Array.from(document.querySelectorAll('.dash-v2-container [onclick]'))
+            .map((el) => el.getAttribute('onclick') || '')
+            .filter((v) => /showcase/i.test(v)),
         };
       });
-      check('dashboard hero markup still present', hero.wrapperExists && hero.accentExists);
-      check('hero display wrapper is not a showcase link',
-        !/showcase/i.test(hero.wrapperOnclick), hero.wrapperOnclick);
-      check('hero right accent is not a showcase link',
-        !/showcase/i.test(hero.accentOnclick), hero.accentOnclick);
-      check('hero display wrapper is no longer pointer-cursor',
-        hero.wrapperCursor !== 'pointer', hero.wrapperCursor);
+      // The wrapper used to be kept as a showcase link target; it is gone now,
+      // which is the stronger guarantee — there is nothing left to click.
+      check('the showcase hero wrapper is gone from the dashboard', !hero.wrapperExists);
+      check('the hero carries no stock photo', !hero.heroImg && hero.remoteImgs.length === 0,
+        hero.remoteImgs.join(', ') || 'none');
+      check('the decorative hero accent is gone', !hero.accentExists);
+      check('the hero now carries real quick actions', hero.quickActions === 4,
+        `${hero.quickActions} buttons`);
+      check('nothing on the dashboard links to the showcase', hero.showcaseLinks.length === 0,
+        hero.showcaseLinks.join(' | ') || 'none');
       check('dashboard still renders with KPI cards', hero.dashRendered && hero.kpiCount > 0,
         `kpis=${hero.kpiCount}`);
-      check('dashboard hero image still renders', hero.heroImg);
 
       await page.evaluate(() => applyTheme('dark'));
       await new Promise((r) => setTimeout(r, 400));

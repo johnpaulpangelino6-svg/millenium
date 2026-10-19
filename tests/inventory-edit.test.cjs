@@ -129,8 +129,10 @@ const restorePart = (page, snapshot) => page.evaluate(async ({ id, stock, cost }
     return b ? { text: b.textContent.trim(), label: b.getAttribute('aria-label') } : null;
   }, card('.inv-price-btn'));
   check('the unit cost is an editable control', !!priceBtn, priceBtn);
+  // The label is what a screen reader reads out; "price" and "unit cost" are
+  // both acceptable wording for it, so match either.
   check('it is labelled for screen readers',
-    !!(priceBtn && /edit unit cost/i.test(priceBtn.label || '')), priceBtn && priceBtn.label);
+    !!(priceBtn && /(edit|change).{0,12}(unit cost|price)/i.test(priceBtn.label || '')), priceBtn && priceBtn.label);
 
   await page.click(card('.inv-price-btn'));
   await sleep(500);

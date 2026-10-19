@@ -239,6 +239,38 @@ function hideAuthOverlay() {
   if (overlay) overlay.classList.add('auth-hidden');
 }
 
+/**
+ * Paint a circular avatar element in place.
+ *
+ * A user-supplied photo wins; otherwise the first letter of the name sits on the
+ * gradient the element already has. Doing it this way means every avatar keeps
+ * its exact size, ring and shadow whether or not a picture is set — no layout
+ * shift when someone adds or removes their photo.
+ */
+function paintAvatar(el, photoUrl, fallbackText) {
+  if (!el) return;
+  const url = String(photoUrl || '').trim();
+  if (url) {
+    el.style.backgroundImage = `url("${url}")`;
+    el.classList.add('has-photo');
+    el.textContent = '';
+    el.removeAttribute('aria-hidden');
+  } else {
+    el.style.backgroundImage = '';
+    el.classList.remove('has-photo');
+    el.textContent = fallbackText || '';
+  }
+}
+
+/** Same rule as paintAvatar(), for avatars inside generated HTML strings. */
+function avatarMarkup(photoUrl, fallbackText, className, extraAttrs = '') {
+  const url = String(photoUrl || '').trim();
+  if (url) {
+    return `<div class="${className} has-photo" style="background-image:url('${escapeHtml(url)}')" ${extraAttrs}></div>`;
+  }
+  return `<div class="${className}" ${extraAttrs}>${escapeHtml(fallbackText || '')}</div>`;
+}
+
 /** Update the header user chip after login */
 function updateAuthChip(user) {
   const nameEl = document.getElementById('authUserName');
@@ -251,7 +283,7 @@ function updateAuthChip(user) {
   if (nameEl)   nameEl.textContent  = displayName;
   if (menuNameEl) menuNameEl.textContent = displayName;
   if (locEl)    locEl.textContent   = user.location || 'All Locations';
-  if (avatarEl) avatarEl.textContent = displayName.charAt(0).toUpperCase();
+  paintAvatar(avatarEl, user.profilePhoto, displayName.charAt(0).toUpperCase());
 
   // The top bar shows the role under the name (the reference design), while the
   // account menu keeps the location — both are useful, so neither is dropped.
@@ -1194,7 +1226,8 @@ function handleLogout() {
     const avatarEl = document.getElementById('authUserAvatar');
     if (nameEl) nameEl.textContent = '';
     if (locEl) locEl.textContent = '';
-    if (avatarEl) avatarEl.textContent = '';
+    // Also drop the previous user's photo, or it would linger into the next session.
+    paintAvatar(avatarEl, '', '');
 
     // Reset the sign-in form and make sure it opens on the login tab.
     switchAuthTab('login');
@@ -1313,11 +1346,25 @@ async function openProfileModal() {
           <div class="form-body settings-pane" id="settingsPane">
 
             <div class="profile-identity">
-              <div class="profile-avatar-lg">${esc(initial)}</div>
+              <div class="profile-avatar-wrap">
+                <div class="profile-avatar-lg${me.profilePhoto ? ' has-photo' : ''}" id="profileAvatarLg"
+                  ${me.profilePhoto ? `style="background-image:url('${esc(me.profilePhoto)}')"` : ''}>${
+                  me.profilePhoto ? '' : esc(initial)
+                }</div>
+                <button type="button" class="profile-avatar-cam" id="profileAvatarBtn"
+                  title="Change your profile photo" aria-label="Change your profile photo">
+                  <svg class="ico" aria-hidden="true" focusable="false"><use href="#i-camera"></use></svg>
+                </button>
+                <input type="file" accept="image/*" hidden id="profileAvatarFile" onchange="handleAvatarPick(this)" />
+              </div>
               <div class="profile-identity-text">
                 <div class="profile-identity-name">${esc(me.fullName || me.username)}</div>
                 <div class="profile-identity-sub">@${esc(me.username)} · ${esc(me.email || 'no email')}</div>
                 <span class="profile-role-pill">${esc(roleMeta.name)}</span>
+                <div class="profile-avatar-links">
+                  <button type="button" class="profile-avatar-link" id="profileAvatarPickBtn">Change photo</button>
+                  ${me.profilePhoto ? '<button type="button" class="profile-avatar-link" id="profileAvatarClearBtn">Remove photo</button>' : ''}
+                </div>
               </div>
               <!-- Everything saved below is public: it is what colleagues see in
                    the Directory. This opens the exact card they get, so "visible
@@ -1560,6 +1607,20 @@ async function openProfileModal() {
 
   overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 
+  // ---- profile photo -------------------------------------------------------
+  // The pending value lives on the overlay so the form can stay a plain
+  // <form> (a file input cannot contribute a data URL to FormData).
+  overlay.dataset.profilePhoto = me.profilePhoto || '';
+  const avatarFileInput = overlay.querySelector('#profileAvatarFile');
+  const openAvatarPicker = () => avatarFileInput && avatarFileInput.click();
+  overlay.querySelector('#profileAvatarBtn')?.addEventListener('click', openAvatarPicker);
+  overlay.querySelector('#profileAvatarPickBtn')?.addEventListener('click', openAvatarPicker);
+  overlay.querySelector('#profileAvatarClearBtn')?.addEventListener('click', () => {
+    overlay.dataset.profilePhoto = '';
+    paintAvatar(overlay.querySelector('#profileAvatarLg'), '', initial);
+    showToast('Photo removed — press Save Changes to keep it.', 'info');
+  });
+
   // "View as others see me" — reuses the Directory profile dialog verbatim, so
   // what the user previews is literally the same component their colleagues get.
   const previewBtn = overlay.querySelector('#profilePreviewBtn');
@@ -1655,6 +1716,29 @@ function openSettingsModal() {
 }
 
 /** Save the profile form to PATCH /api/auth/me. */
+/**
+ * Turn a picked file into a downscaled square data URL and show it in the
+ * dialog. 256px is deliberately small: a profile photo is only ever drawn at
+ * 32–96px, so a larger source would cost upload time and row size for pixels
+ * nobody sees.
+ */
+async function handleAvatarPick(input) {
+  const file = input?.files?.[0];
+  if (!file) return;
+  try {
+    const dataUrl = await readImageFile(file, 256);
+    const overlay = document.getElementById('profileModalOverlay');
+    if (overlay) overlay.dataset.profilePhoto = dataUrl;
+    const lg = document.getElementById('profileAvatarLg');
+    if (lg) paintAvatar(lg, dataUrl, '');
+    showToast('Photo ready — press Save Changes.', 'info');
+  } catch (err) {
+    showToast(err.message || 'Could not use that picture.', 'error');
+  } finally {
+    if (input) input.value = '';
+  }
+}
+
 async function saveProfile(event) {
   event.preventDefault();
   const form = event.target;
@@ -1666,6 +1750,16 @@ async function saveProfile(event) {
     email: String(fd.get('email') || '').trim(),
     location: String(fd.get('location') || '').trim(),
   };
+
+  // Only send the photo when it actually changed, so saving a name does not
+  // rewrite a 200 KB data URL on every submit.
+  const overlayEl = document.getElementById('profileModalOverlay');
+  if (overlayEl) {
+    const pendingPhoto = overlayEl.dataset.profilePhoto || '';
+    if (pendingPhoto !== (state.currentUser?.profilePhoto || '')) {
+      payload.profilePhoto = pendingPhoto;
+    }
+  }
 
   const currentPassword = String(fd.get('currentPassword') || '');
   const newPassword = String(fd.get('newPassword') || '');
@@ -2529,28 +2623,61 @@ function renderDashboardView() {
 
   const userName  = (state.currentUser && (state.currentUser.fullName || state.currentUser.username)) || 'System Administrator';
 
-  // Recent tickets
+  // Most recent tickets, newest first.
   const recentTickets = [...state.tickets]
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
     .slice(0, 3);
 
-  // Recent activity
-  const recentLogs = [...state.auditLogs]
+  // Recent activity — the audit log is the ONLY real source for this. The panel
+  // used to render three hard-coded rows ("Ticket #T-2026-0098 created") that
+  // looked like live events but never changed, so an admin could not tell what
+  // had actually happened. state.auditLogs is fetched for admins only.
+  const recentLogs = [...(state.auditLogs || [])]
     .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-    .slice(0, 3);
+    .slice(0, 4);
+
+  const attentionCount = warning + offline + maint;
+
+  // The one sentence at the top of the page. It answers "is anything wrong?"
+  // using exactly the numbers the cards below show, so the two cannot disagree.
+  const statusBits = [];
+  if (attentionCount > 0) statusBits.push(`${attentionCount} device${attentionCount === 1 ? '' : 's'} to check`);
+  if (lowStockParts.length > 0) statusBits.push(`${lowStockParts.length} part${lowStockParts.length === 1 ? '' : 's'} to restock`);
+  if (openTickets.length > 0) statusBits.push(`${openTickets.length} open ticket${openTickets.length === 1 ? '' : 's'}`);
+  const statusLine = statusBits.length === 0
+    ? 'Everything is running normally — no device needs attention and no ticket is open.'
+    // Deliberately does NOT repeat the numbers: the KPI cards and the "What to
+    // do next" panel already carry them. This just says whether to look.
+    : `${statusBits.length === 1 ? 'One thing needs' : `${statusBits.length} things need`} your attention — see the list below.`;
+
+  const peopleCount = Array.isArray(state.directory) ? state.directory.length : 0;
+
+  // One destination tile. `count` is optional; without it the tile is a plain
+  // link. Every tile is a real button, so the whole strip is keyboard-reachable.
+  const dashLink = (icon, label, count, action) => `
+    <button type="button" class="dash-link" onclick="${action}">
+      <span class="dash-link-ico">${ico(icon)}</span>
+      <span class="dash-link-body">
+        <small>${label}</small>
+        <strong>${count}</strong>
+      </span>
+      ${ico('arrow-right', 'dash-link-go')}
+    </button>`;
 
   const currentDate = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   const currentDayTime = new Date().toLocaleDateString('en-US', { weekday: 'long' }) + ', ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   return `
     <div class="dash-v2-container" data-dash="admin">
-      <!-- 1. Hero Banner (full width, no quick-actions panel) -->
+      <!-- 1. Greeting, a plain-language status line, and the four things an
+              admin actually does. The right-hand side used to hold a slogan and
+              three carousel dots that controlled nothing. -->
       <div class="hero-banner-card">
         <div class="hero-text-content">
-          <h1 class="hero-greeting">Welcome Back,<br>${userName}!</h1>
-          <p class="hero-subtext">Manage your devices, monitor performance, and keep your operations running smoothly.</p>
+          <h1 class="hero-greeting">Welcome back,<br>${userName}!</h1>
+          <p class="hero-subtext">${statusLine}</p>
           <div class="hero-date-chip">
-            <span class="calendar-icon"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-calendar"></use></svg></span>
+            <span class="calendar-icon">${ico('calendar')}</span>
             <div>
               <strong id="heroClockDate">${currentDate}</strong>
               <small id="heroClockTime">${currentDayTime}</small>
@@ -2558,117 +2685,89 @@ function renderDashboardView() {
           </div>
         </div>
 
-        <!-- Center Display Graphic -->
-        <div class="hero-display-wrapper">
-          <div class="hero-display-frame">
-            <img src="https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=800&q=80" alt="Millennium SmartBoard Display" class="hero-display-img" />
-            <div class="hero-display-ui-overlay">
-              <span class="hero-ui-badge">4K UHD</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Right Hero Accent Text & Dots -->
-        <div class="hero-right-accent">
-          <div class="hero-accent-title">Smart Technology<br>for a Brighter<br>Future</div>
-          <div class="hero-dots">
-            <span class="dot active"></span>
-            <span class="dot"></span>
-            <span class="dot"></span>
+        <div class="hero-quick">
+          <div class="hero-quick-title">Quick actions</div>
+          <div class="hero-quick-grid">
+            <button type="button" class="hero-quick-btn" onclick="openRegisterModal()">
+              ${ico('plus')}<span>Register a board</span>
+            </button>
+            <button type="button" class="hero-quick-btn" onclick="openTicketModal()">
+              ${ico('ticket')}<span>Open a ticket</span>
+            </button>
+            <button type="button" class="hero-quick-btn" onclick="openInventoryQuickAction()">
+              ${ico('package')}<span>Add parts</span>
+            </button>
+            <button type="button" class="hero-quick-btn" onclick="navigateTo('directory')">
+              ${ico('users')}<span>Find a person</span>
+            </button>
           </div>
         </div>
       </div>
 
-      <!-- 2. Core Stat Summary Cards Row -->
+      <!-- 2. Four numbers, each with a plain-English explanation underneath.
+              The old detail lines read "0 warn · 0 off · 0 maint". -->
       <div class="stat-cards-grid-v2">
-        <div class="kpi-card-v2 kpi-blue">
-          <div class="kpi-v2-header">
-            <div class="kpi-v2-icon"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-monitor"></use></svg></div>
-            <div>
-              <div class="kpi-v2-label">Total Devices</div>
-              <div class="kpi-v2-value">${total}</div>
-            </div>
-          </div>
-          <div class="kpi-v2-detail">
-            <span class="kpi-v2-detail-dot"></span>
-            <span>${schoolDevices} school · ${corpDevices} corporate</span>
-          </div>
-        </div>
-
-        <div class="kpi-card-v2 kpi-green">
-          <div class="kpi-v2-header">
-            <div class="kpi-v2-icon"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-signal"></use></svg></div>
-            <div>
-              <div class="kpi-v2-label">Online</div>
-              <div class="kpi-v2-value">${online}</div>
-            </div>
-          </div>
-          <div class="kpi-v2-detail">
-            <span class="kpi-v2-detail-dot"></span>
-            <span>${online} of ${total} reporting · ${healthPct}% healthy</span>
-          </div>
-        </div>
-
-        <div class="kpi-card-v2 kpi-amber">
-          <div class="kpi-v2-header">
-            <div class="kpi-v2-icon"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-alert"></use></svg></div>
-            <div>
-              <div class="kpi-v2-label">Needs Attention</div>
-              <div class="kpi-v2-value">${warning + offline + maint}</div>
-            </div>
-          </div>
-          <div class="kpi-v2-detail">
-            <span class="kpi-v2-detail-dot"></span>
-            <span>${warning} warn · ${offline} off · ${maint} maint</span>
-          </div>
-        </div>
-
-        <div class="kpi-card-v2 kpi-purple">
-          <div class="kpi-v2-header">
-            <div class="kpi-v2-icon"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-ticket"></use></svg></div>
-            <div>
-              <div class="kpi-v2-label">Open Tickets</div>
-              <div class="kpi-v2-value">${openTickets.length}</div>
-            </div>
-          </div>
-          <div class="kpi-v2-detail">
-            <span class="kpi-v2-detail-dot"></span>
-            <span>${resolvedTix} resolved to date</span>
-          </div>
-        </div>
+        ${kpiCard('blue', ico('monitor'), 'Total Devices', total,
+          `${schoolDevices} in schools · ${corpDevices} in companies`)}
+        ${kpiCard('green', ico('signal'), 'Online Now', online,
+          `${healthPct}% of the fleet is healthy`)}
+        ${kpiCard('amber', ico('alert'), 'Needs Attention', attentionCount,
+          `${warning} flagged · ${offline} offline · ${maint} in service`)}
+        ${kpiCard('purple', ico('ticket'), 'Open Tickets', openTickets.length,
+          `${receivedTix} just reported · ${diagnosingTix + repairingTix} being worked on`)}
       </div>
 
-      <!-- 3. Horizontal Metadata Strip Bar -->
-      <div class="strip-bar-v2">
-        <button type="button" class="strip-item strip-item--clickable"
-          title="Show every school client account" onclick="showClientsByType('school')">
-          School Clients: <strong>${schoolClients}</strong>
-        </button>
-        <div class="strip-divider"></div>
-        <button type="button" class="strip-item strip-item--clickable"
-          title="Show every corporate client account" onclick="showClientsByType('corporate')">
-          Corporate Clients: <strong>${corpClients}</strong>
-        </button>
-        <div class="strip-divider"></div>
-        <button type="button" class="strip-item strip-item--clickable"
-          title="Open the spare-parts inventory" onclick="navigateTo('inventory')">
-          Inventory: <strong class="text-amber">${lowStockParts.length} Low</strong>
-        </button>
-        <div class="strip-divider"></div>
-        <div class="strip-item" title="Share of the fleet reporting normally">Health Score: <strong class="text-emerald">${healthPct}%</strong></div>
-        <button class="strip-btn-link" onclick="navigateTo('devices')">View All →</button>
+      <!-- 3. Plain-language next steps, derived from live state -->
+      ${renderNextSteps([
+        attentionCount > 0 ? {
+          icon: 'alert',
+          title: `${attentionCount} device${attentionCount === 1 ? '' : 's'} need${attentionCount === 1 ? 's' : ''} a look`,
+          why: `${warning} flagged by monitoring, ${offline} not reporting at all, ${maint} with a technician. Open one to see what it is complaining about.`,
+          action: "navigateTo('devices')",
+          label: 'Open devices',
+        } : null,
+        lowStockParts.length > 0 ? {
+          icon: 'package',
+          title: `${lowStockParts.length} part${lowStockParts.length === 1 ? '' : 's'} running low`,
+          why: outStockParts.length > 0
+            ? `${outStockParts.length} already out of stock, so any repair that needs one is blocked until it arrives.`
+            : 'At or below the reorder level — restock before a repair is held up.',
+          action: "navigateTo('inventory')",
+          label: 'Open inventory',
+        } : null,
+        openTickets.length > 0 ? {
+          icon: 'ticket',
+          title: `${openTickets.length} open service ticket${openTickets.length === 1 ? '' : 's'}`,
+          why: `${receivedTix} just reported and ${diagnosingTix + repairingTix} already being worked on.`,
+          action: "navigateTo('tickets')",
+          label: 'Open tickets',
+        } : null,
+      ], { who: 'the system' })}
+
+      <!-- 4. Four destinations. Every tile is clickable and says where it goes,
+              which the old strip did not — it mixed links with a read-only
+              health score in identical styling and ended in a vague "View All". -->
+      <div class="dash-links">
+        ${dashLink('school', 'School clients', schoolClients, "showClientsByType('school')")}
+        ${dashLink('building', 'Corporate clients', corpClients, "showClientsByType('corporate')")}
+        ${dashLink('package', 'Parts to restock', lowStockParts.length, "navigateTo('inventory')")}
+        ${dashLink('users', 'People on the system', peopleCount, "navigateTo('directory')")}
       </div>
 
-      <!-- 4. Bottom 3-Column Dashboard Grid -->
+      <!-- 5. Two rows of two panels, in the order an admin asks the questions:
+              how is the fleet, what is queued, what is on the shelf, what just
+              happened. -->
       <div class="dash-bottom-grid">
-        <!-- Column 1: Device Fleet Status -->
+        <!-- Panel 1: Device Fleet -->
         <div class="widget-card">
           <div class="widget-header">
-            <div class="widget-title">Device Fleet Status</div>
-            <button class="widget-link" onclick="navigateTo('devices')">View All →</button>
+            <div>
+              <div class="widget-title">Device Fleet</div>
+              <p class="widget-sub">${online} of ${total} devices are reporting normally.</p>
+            </div>
+            <button class="widget-link" onclick="navigateTo('devices')">View all →</button>
           </div>
 
-          <!-- Donut = share of the fleet that is healthy right now. -->
           <div class="donut-chart-row">
             <div class="donut-container">
               <svg viewBox="0 0 36 36" class="donut-svg" role="img"
@@ -2677,15 +2776,13 @@ function renderDashboardView() {
                 <path class="donut-segment" stroke-dasharray="${healthPct}, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#00f2fe" stroke-width="3.8"/>
               </svg>
               <div class="donut-center-text">
-                <strong>${total}</strong>
-                <small>Total Devices</small>
+                <strong>${healthPct}%</strong>
+                <small>Online</small>
               </div>
             </div>
 
-            <!-- Bar chart: one bar per status, width = share of the fleet. -->
             <div class="fleet-chart">
-              <div class="fleet-share-bar" role="img"
-                   aria-label="Fleet status breakdown">
+              <div class="fleet-share-bar" role="img" aria-label="Fleet status breakdown">
                 ${fleetBreakdown.filter(b => b.count > 0).map(b => `
                   <span class="fleet-share-seg is-${b.key}" style="width:${b.pct}%"
                         title="${b.label}: ${b.count} (${b.pct}%)"></span>
@@ -2708,14 +2805,17 @@ function renderDashboardView() {
             </div>
           </div>
 
-          <!-- Mini device fleet table -->
           <div class="dash-mini-table">
             <div class="dash-mini-table-head">
               <span>Devices</span>
               <span>Status</span>
               <span>Location</span>
             </div>
-            ${state.devices.slice(0, 5).map(dev => {
+            ${state.devices.length === 0 ? `
+              <div class="dash-empty">
+                No devices registered yet.
+                <button class="widget-link" onclick="openRegisterModal()">Register the first one →</button>
+              </div>` : state.devices.slice(0, 5).map(dev => {
               const displayStatus = getDeviceDisplayStatus(dev);
               const statusClass = displayStatus === 'online' ? 'is-online'
                 : displayStatus === 'offline' ? 'is-offline'
@@ -2728,7 +2828,7 @@ function renderDashboardView() {
               return `
               <div class="dash-mini-table-row" onclick="navigateTo('devices')" role="button" tabindex="0">
                 <span class="dash-mini-device">
-                  <span class="dash-mini-ico"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-monitor"></use></svg></span>
+                  <span class="dash-mini-ico">${ico('monitor')}</span>
                   <span>
                     <strong>${escapeHtml(dev.id)}</strong>
                     <small>${escapeHtml(dev.model || '')}</small>
@@ -2746,58 +2846,51 @@ function renderDashboardView() {
           </div>
         </div>
 
-        <!-- Column 2: Service Tickets -->
+        <!-- Panel 2: Service Tickets, in the order a ticket actually moves -->
         <div class="widget-card">
           <div class="widget-header">
-            <div class="widget-title">Service Tickets</div>
-            <button class="widget-link" onclick="navigateTo('tickets')">View All →</button>
+            <div>
+              <div class="widget-title">Service Tickets</div>
+              <p class="widget-sub">Every repair request, in the order it moves.</p>
+            </div>
+            <button class="widget-link" onclick="navigateTo('tickets')">View all →</button>
           </div>
           <div class="tix-quad-grid">
-            <div class="quad-item purple"><span class="quad-count">${openTickets.length}</span><span class="quad-label">Open</span></div>
-            <div class="quad-item green"><span class="quad-count">${resolvedTix}</span><span class="quad-label">Resolved</span></div>
-            <div class="quad-item violet"><span class="quad-count">${repairingTix}</span><span class="quad-label">Repairing</span></div>
-            <div class="quad-item amber"><span class="quad-count">${diagnosingTix}</span><span class="quad-label">Diagnosing</span></div>
+            <div class="quad-item violet${receivedTix === 0 ? ' is-zero' : ''}"><span class="quad-count">${receivedTix}</span><span class="quad-label">Just reported</span></div>
+            <div class="quad-item amber${diagnosingTix === 0 ? ' is-zero' : ''}"><span class="quad-count">${diagnosingTix}</span><span class="quad-label">Being checked</span></div>
+            <div class="quad-item purple${repairingTix === 0 ? ' is-zero' : ''}"><span class="quad-count">${repairingTix}</span><span class="quad-label">Being fixed</span></div>
+            <div class="quad-item green${resolvedTix === 0 ? ' is-zero' : ''}"><span class="quad-count">${resolvedTix}</span><span class="quad-label">Fixed</span></div>
           </div>
           <div class="recent-tix-header">
-            <span>Recent Tickets</span>
-            <button onclick="navigateTo('tickets')">View All Tickets →</button>
+            <span>Latest tickets</span>
+            <button onclick="navigateTo('tickets')">See all ${state.tickets.length} →</button>
           </div>
           <div class="recent-tix-list">
             ${recentTickets.length === 0 ? `
-              <div class="recent-tix-item">
-                <div>
-                  <div class="tix-id">#T-2026-0098</div>
-                  <div class="tix-sub">Display not turning on</div>
-                </div>
-                <span class="tix-status-tag open">Open</span>
-                <span class="tix-time">2 days ago ›</span>
-              </div>
-              <div class="recent-tix-item">
-                <div>
-                  <div class="tix-id">#T-2026-0097</div>
-                  <div class="tix-sub">Network connection issue</div>
-                </div>
-                <span class="tix-status-tag open">Open</span>
-                <span class="tix-time">3 days ago ›</span>
-              </div>
-            ` : recentTickets.map(t => `
+              <div class="dash-empty">
+                No tickets yet. When a customer reports a problem it appears here.
+                <button class="widget-link" onclick="openTicketModal()">Open a ticket →</button>
+              </div>` : recentTickets.map(t => `
               <div class="recent-tix-item" onclick="navigateTo('tickets')">
                 <div>
-                  <div class="tix-id">${t.ticketId || '#T-2026-0098'}</div>
-                  <div class="tix-sub">${t.title}</div>
+                  <div class="tix-id">${escapeHtml(t.ticketId || t.id || '')}</div>
+                  <div class="tix-sub">${escapeHtml(t.title || '')}</div>
                 </div>
-                <span class="tix-status-tag ${t.status ? t.status.toLowerCase() : 'open'}">${t.status || 'Open'}</span>
-                <span class="tix-time">${new Date(t.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' })} ›</span>
+                <span class="tix-status-tag ${t.status ? String(t.status).toLowerCase() : 'open'}">${ticketStatusLabel(t.status)}</span>
+                <span class="tix-time">${timeAgo(new Date(t.createdAt))} ›</span>
               </div>
             `).join('')}
           </div>
         </div>
 
-        <!-- Column 3: Stock & Inventory & Recent Activity -->
+        <!-- Panel 3: Stock -->
         <div class="widget-card">
           <div class="widget-header">
-            <div class="widget-title">Stock & Inventory</div>
-            <select class="branch-select-v2" aria-label="Select Branch"><option>All Branches</option></select>
+            <div>
+              <div class="widget-title">Stock &amp; Inventory</div>
+              <p class="widget-sub">${inStockItems} of ${totalInventory} parts are in stock.</p>
+            </div>
+            <button class="widget-link" onclick="navigateTo('inventory')">View all →</button>
           </div>
           <div class="stock-gauge-row">
             <div class="stock-gauge-circle" style="--gauge-pct: ${stockLevelPct};">
@@ -2805,75 +2898,70 @@ function renderDashboardView() {
               <small>Stock Level</small>
             </div>
             <div class="stock-alerts-list">
-              <div class="stock-alerts-title">Parts Stock Alerts <span class="badge-red-sm">${lowStockParts.length} alert${lowStockParts.length === 1 ? '' : 's'}</span></div>
+              <div class="stock-alerts-title">Parts to reorder <span class="badge-red-sm">${lowStockParts.length}</span></div>
               ${lowStockParts.length === 0 ? `
                 <div class="stock-alert-item stock-alert-item--empty">
-                  <span>All parts are in stock</span>
-                </div>` : lowStockParts.slice(0, 3).map(p => `
+                  <span>Every part is above its reorder level.</span>
+                </div>` : lowStockParts.slice(0, 4).map(p => `
                   <div class="stock-alert-item">
                     <div>
                       <strong>${escapeHtml(p.name)}</strong>
-                      <small>${escapeHtml(p.partCode)}</small>
+                      <small>${escapeHtml(p.partCode)} · ${p.stockQuantity} left, reorder at ${p.minThreshold}</small>
                     </div>
                     <span class="alert-pill ${p.status === 'Out of Stock' ? 'out' : 'low'}">${p.status === 'Out of Stock' ? 'Out' : 'Low'} ${ico('chevron-right')}</span>
                   </div>
                 `).join('')}
             </div>
           </div>
-          <div class="view-inv-link" onclick="navigateTo('inventory')">View Inventory →</div>
+          <button class="widget-link widget-link--block" onclick="navigateTo('inventory')">Open inventory →</button>
+        </div>
 
-          <!-- Quick Actions -->
-          <div class="dash-quick-actions">
-            <div class="dash-quick-actions-title">Quick Actions</div>
-            <div class="dash-quick-actions-grid">
-              <button class="qa-btn qa-btn-blue" onclick="openRegisterModal()">
-                <span class="qa-icon">+</span>
-                <span>Register Board</span>
-              </button>
-              <button class="qa-btn qa-btn-purple" onclick="openTicketModal()">
-                <span class="qa-icon"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-ticket"></use></svg></span>
-                <span>Open Ticket</span>
-              </button>
-              <button class="qa-btn qa-btn-teal" onclick="openInventoryQuickAction()" title="Inventory & Parts Restock">
-                <span class="qa-icon"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-package"></use></svg></span>
-                <span>Add Parts</span>
-              </button>
-              <button class="qa-btn qa-btn-navy" onclick="navigateTo('tickets')">
-                <span class="qa-icon"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-chart"></use></svg></span>
-                <span>View Reports</span>
-              </button>
+        <!-- Panel 4: Recent activity, straight from the audit log -->
+        <div class="widget-card">
+          <div class="widget-header">
+            <div>
+              <div class="widget-title">Recent Activity</div>
+              <p class="widget-sub">The last things that happened, newest first.</p>
             </div>
           </div>
-
-          <!-- Recent Activity Timeline -->
-          <div class="recent-activity-box">
-            <div class="activity-header">
-              <span>Recent Activity</span>
-              <button onclick="navigateTo('inventory')">View All →</button>
-            </div>
-            <div class="activity-timeline">
-              <div class="activity-item">
-                <span class="act-icon tix"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-ticket"></use></svg></span>
-                <div class="act-desc">Ticket #T-2026-0098 created</div>
-                <span class="act-time">2 days ago</span>
-              </div>
-              <div class="activity-item">
-                <span class="act-icon online"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-dot"></use></svg></span>
-                <div class="act-desc">Device 1 went online</div>
-                <span class="act-time">3 days ago</span>
-              </div>
-              <div class="activity-item">
-                <span class="act-icon stock"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-book"></use></svg></span>
-                <div class="act-desc">Stock level updated</div>
-                <span class="act-time">4 days ago</span>
-              </div>
-            </div>
+          <div class="activity-timeline">
+            ${recentLogs.length === 0 ? `
+              <div class="dash-empty">
+                Nothing recorded yet. Registering a board, opening a ticket and
+                moving stock all show up here.
+              </div>` : recentLogs.map(log => {
+              const act = String(log.action || '');
+              const tone = /ticket/i.test(act) ? 'tix'
+                : /rental/i.test(act) ? 'rental'
+                : /user|register|account/i.test(act) ? 'user'
+                : /stock|inventory|part/i.test(act) ? 'stock'
+                : /device|board|remote|assign/i.test(act) ? 'online'
+                : 'misc';
+              const icon = tone === 'tix' ? 'ticket'
+                : tone === 'rental' ? 'calendar'
+                : tone === 'user' ? 'user'
+                : tone === 'stock' ? 'package'
+                : tone === 'online' ? 'monitor'
+                : 'history';
+              const when = new Date(log.timestamp);
+              return `
+                <div class="activity-item">
+                  <span class="act-icon ${tone}">${ico(icon)}</span>
+                  <div class="act-desc">
+                    <strong>${escapeHtml(act)}</strong>
+                    ${log.details ? `<small>${escapeHtml(log.details)}</small>` : ''}
+                    <span class="act-by">${escapeHtml(log.userName || 'System')}</span>
+                  </div>
+                  <span class="act-time" title="${isNaN(when) ? '' : when.toLocaleString()}">${isNaN(when) ? '' : timeAgo(when)}</span>
+                </div>`;
+            }).join('')}
           </div>
         </div>
       </div>
     </div>
   `;
 }
+
 
 // ==========================================================================
 // ROLE DASHBOARDS — CUSTOMER & TECHNICIAN
@@ -2943,6 +3031,67 @@ function kpiCard(accent, icon, label, value, detail) {
       </div>
     </div>
   `;
+}
+
+/**
+ * "What to do next" panel, shared by all three dashboards.
+ *
+ * Every dashboard already answers "what is the state of things". This answers
+ * the question a first-time user actually asks — "so what should I do?" — with
+ * at most three concrete, clickable actions derived from live data. Each row
+ * carries a one-line reason, because a bare "3 overdue" tells nobody why it
+ * matters.
+ *
+ * `items`: [{ icon, title, why, action, label }]. When nothing needs doing the
+ * panel says so explicitly rather than disappearing — a missing panel reads as
+ * a broken page, an "all clear" reads as an answer.
+ */
+function renderNextSteps(items, opts = {}) {
+  const list = (items || []).filter(Boolean).slice(0, 3);
+  const who = opts.who || 'you';
+
+  if (list.length === 0) {
+    return `
+      <div class="dash-guide is-clear">
+        <div class="dash-guide-head">
+          <span class="dash-guide-badge is-clear"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-check-circle"></use></svg></span>
+          <div class="dash-guide-headtext">
+            <strong>Nothing needs your attention</strong>
+            <small>Everything assigned to ${escapeHtml(who)} is up to date. This panel fills in by itself when something does.</small>
+          </div>
+        </div>
+        ${opts.peopleLink === false ? '' : `
+        <button type="button" class="dash-guide-people" onclick="navigateTo('directory')">
+          <svg class="ico" aria-hidden="true" focusable="false"><use href="#i-users"></use></svg>
+          Look someone up in the People Directory
+        </button>`}
+      </div>`;
+  }
+
+  return `
+    <div class="dash-guide">
+      <div class="dash-guide-head">
+        <span class="dash-guide-badge"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-bolt"></use></svg></span>
+        <div class="dash-guide-headtext">
+          <strong>What to do next</strong>
+          <small>${list.length === 1
+            ? 'The one thing most worth doing right now.'
+            : `The ${list.length} things most worth doing right now, most urgent first.`}</small>
+        </div>
+      </div>
+      <div class="dash-guide-list">
+        ${list.map((it) => `
+          <button type="button" class="dash-guide-item" onclick="${it.action}">
+            <span class="dash-guide-top">
+              <span class="dash-guide-ico"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-${it.icon}"></use></svg></span>
+              <strong class="dash-guide-title">${escapeHtml(it.title)}</strong>
+            </span>
+            <span class="dash-guide-why">${escapeHtml(it.why)}</span>
+            <span class="dash-guide-cta">${escapeHtml(it.label || 'Open')}<svg class="ico" aria-hidden="true" focusable="false"><use href="#i-arrow-right"></use></svg></span>
+          </button>
+        `).join('')}
+      </div>
+    </div>`;
 }
 
 /**
@@ -3289,6 +3438,38 @@ function renderCustomerDashboardView() {
           expiringSoon.length > 0 ? `${expiringSoon.length} expiring within 90 days` : 'All contracts in good standing')}
       </div>
 
+      <!-- Plain-language next steps, derived from live state -->
+      ${renderNextSteps([
+        overdueBookings.length > 0 ? {
+          icon: 'calendar',
+          title: `${overdueBookings.length} booking${overdueBookings.length === 1 ? '' : 's'} overdue`,
+          why: 'The return date has passed. Return the device or contact support so the booking can be closed.',
+          action: "navigateTo('rentals')",
+          label: 'Open bookings',
+        } : null,
+        attentionCount > 0 ? {
+          icon: 'alert',
+          title: `${attentionCount} of your device${attentionCount === 1 ? '' : 's'} ${attentionCount === 1 ? 'is' : 'are'} not online`,
+          why: 'Offline or in service. If it should be working, report it and a technician will be assigned.',
+          action: "openCreateTicketModal('${firstDevId}')",
+          label: 'Report it',
+        } : null,
+        expiringSoon.length > 0 ? {
+          icon: 'shield',
+          title: `${expiringSoon.length} warranty contract${expiringSoon.length === 1 ? '' : 's'} expire within 90 days`,
+          why: 'After that date repairs are billed. Renew now to stay covered.',
+          action: "navigateTo('warranty')",
+          label: 'See warranties',
+        } : null,
+        openTickets.length > 0 ? {
+          icon: 'ticket',
+          title: `${openTickets.length} ticket${openTickets.length === 1 ? '' : 's'} still open`,
+          why: 'Open a ticket to read the latest note from the technician and reply.',
+          action: "navigateTo('tickets')",
+          label: 'Open tickets',
+        } : null,
+      ], { who: 'your account' })}
+
       <!-- Charts: fleet health + ticket mix + warranty runway -->
       <div class="chart-row-2">
         ${chartPanel('Device Health', `${myDevices.length} registered device${myDevices.length === 1 ? '' : 's'}`,
@@ -3302,11 +3483,10 @@ function renderCustomerDashboardView() {
 
         ${chartPanel('Ticket Status', 'Every service ticket on this account',
           barChart([
-            { label: 'Open',       value: myTickets.filter(t => t.status === 'Open').length,        tone: 'c1' },
-            { label: 'Diagnosing', value: myTickets.filter(t => t.status === 'Diagnosing').length,  tone: 'c6' },
-            { label: 'Repairing',  value: myTickets.filter(t => t.status === 'Repairing').length,   tone: 'c4' },
-            { label: 'Received',   value: myTickets.filter(t => t.status === 'Received').length,    tone: 'c7' },
-            { label: 'Resolved',   value: resolvedCount,                                            tone: 'c3' },
+            { label: 'Just reported', value: myTickets.filter(t => t.status === 'Received').length,   tone: 'c7' },
+            { label: 'Being checked', value: myTickets.filter(t => t.status === 'Diagnosing').length, tone: 'c6' },
+            { label: 'Being fixed',   value: myTickets.filter(t => t.status === 'Repairing').length,  tone: 'c4' },
+            { label: 'Fixed',         value: resolvedCount,                                            tone: 'c3' },
           ]),
           `<button class="btn btn-secondary btn-sm" onclick="navigateTo('tickets')">View All →</button>`)}
       </div>
@@ -3565,15 +3745,47 @@ function renderTechnicianDashboardView() {
           servicedDevices.length === 1 ? '1 device in your ticket history' : `${servicedDevices.length} devices in your ticket history`)}
       </div>
 
+      <!-- Plain-language next steps, derived from live state -->
+      ${renderNextSteps([
+        critical.length > 0 ? {
+          icon: 'siren',
+          title: `${critical.length} critical job${critical.length === 1 ? '' : 's'} waiting`,
+          why: 'Marked critical by the customer. These are the ones to pick up first.',
+          action: "navigateTo('tickets')",
+          label: 'Triage now',
+        } : null,
+        received.length > 0 ? {
+          icon: 'message',
+          title: `${received.length} ticket${received.length === 1 ? '' : 's'} not looked at yet`,
+          why: 'Reported but never opened. Read it and set it to "Being checked" so the customer knows you have it.',
+          action: "navigateTo('tickets')",
+          label: 'Review it',
+        } : null,
+        lowStock.length > 0 ? {
+          icon: 'package',
+          title: `${lowStock.length} part${lowStock.length === 1 ? '' : 's'} low on stock`,
+          why: 'Check before you start a repair that needs one — otherwise the job stalls halfway.',
+          action: "navigateTo('inventory')",
+          label: 'Check stock',
+        } : null,
+        high.length > 0 ? {
+          icon: 'alert',
+          title: `${high.length} high-priority job${high.length === 1 ? '' : 's'} in your queue`,
+          why: 'Less urgent than critical, but older than everything else you have open.',
+          action: "navigateTo('tickets')",
+          label: 'Open queue',
+        } : null,
+      ], { who: 'you' })}
+
       <!-- Charts: job mix + parts consumed -->
       <div class="chart-row-2">
         ${chartPanel('Job Status Mix', `${myTickets.length} ticket${myTickets.length === 1 ? '' : 's'} assigned to you`,
           donutChart([
-            { label: 'Awaiting first response', value: received.length,           tone: 'c7' },
-            { label: 'Diagnosing',              value: myTickets.filter(t => t.status === 'Diagnosing').length, tone: 'c6' },
-            { label: 'Repairing',               value: myTickets.filter(t => t.status === 'Repairing').length,  tone: 'c4' },
-            { label: 'Resolved',                value: resolved.length,           tone: 'c3' },
-          ], `${resolveRate}%`, 'Resolved'),
+            { label: 'Just reported', value: received.length,           tone: 'c7' },
+            { label: 'Being checked', value: myTickets.filter(t => t.status === 'Diagnosing').length, tone: 'c6' },
+            { label: 'Being fixed',   value: myTickets.filter(t => t.status === 'Repairing').length,  tone: 'c4' },
+            { label: 'Fixed',         value: resolved.length,           tone: 'c3' },
+          ], `${resolveRate}%`, 'Fixed'),
           `<button class="btn btn-secondary btn-sm" onclick="navigateTo('tickets')">Open Queue →</button>`)}
 
         ${chartPanel('Parts Consumed', 'Units logged against your tickets',
@@ -3843,7 +4055,10 @@ function renderDevicesView() {
                   </td>
                   <td title="${escapeHtml(ownerHint)}">
                     <div style="font-size: 0.82rem; font-weight: 600; color: var(--text-primary);">${escapeHtml(ownerName)}</div>
-                    <div style="font-size: 0.72rem; color: var(--text-muted);">${onlineOwners.length > 0 ? 'Owner online' : 'Owner offline'}</div>
+                    <div class="device-owner-presence">
+                      <span class="presence-dot ${onlineOwners.length > 0 ? 'is-online' : 'is-offline'}"></span>
+                      ${onlineOwners.length > 0 ? 'Signed in now' : 'Not signed in'}
+                    </div>
                   </td>
                   <td class="col-actions">
                     ${isAdmin
@@ -3894,7 +4109,7 @@ function renderTicketCardCustomer(t) {
       onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openTicketDetailModal('${t.id}')}">
       <div class="ticket-top">
         <span class="ticket-id">${t.ticketNumber}</span>
-        <span class="ticket-status ${isClosed ? 'is-closed' : 'is-open'}">${statusIcon} ${t.status}</span>
+        <span class="ticket-status ${isClosed ? 'is-closed' : 'is-open'}">${statusIcon} ${ticketStatusLabel(t.status)}</span>
       </div>
       <h4 class="ticket-title">${escapeHtml(t.title)}</h4>
       <div class="ticket-facts">
@@ -3909,7 +4124,7 @@ function renderTicketCardCustomer(t) {
           <span class="${t.warrantyCovered ? 'warranty-badge-active' : 'warranty-badge-expired'}">${t.warrantyCovered ? 'Covered' : 'Not covered'}</span>
         </span>
         <span class="ticket-fact" title="Assigned technician">
-          <span class="ticket-fact-ico"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-user"></use></svg></span><span>${escapeHtml(t.assignedTechnician || 'Pending assignment')}</span>
+          <span class="ticket-fact-ico"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-user"></use></svg></span><span>${escapeHtml(t.assignedTechnician || 'Not assigned yet')}</span>
         </span>
       </div>
       <div class="ticket-foot">
@@ -3925,14 +4140,14 @@ function renderTicketCardCustomer(t) {
 
 // Human-readable names for the ticket pipeline stages.
 // The DB keeps the original Received/Diagnosing/Repairing/Resolved values, but
-// the UI now speaks the language the team actually uses when triaging: a ticket
-// is new, then it needs a diagnosis, then it is being repaired, then resolved.
+// the UI speaks plain English: a ticket has just been reported, then someone is
+// checking it, then it is being fixed, then it is fixed and closed.
 function ticketStatusLabel(status) {
   switch (status) {
-    case 'Received':   return 'New Ticket';
-    case 'Diagnosing': return 'Needs Diagnosis';
-    case 'Repairing':  return 'Repairing';
-    case 'Resolved':   return 'Resolved';
+    case 'Received':   return 'Just reported';
+    case 'Diagnosing': return 'Being checked';
+    case 'Repairing':  return 'Being fixed';
+    case 'Resolved':   return 'Fixed';
     case 'Closed':     return 'Closed';
     default:           return status || '—';
   }
@@ -3997,7 +4212,7 @@ function renderTicketsView() {
             <span class="${t.warrantyCovered ? 'warranty-badge-active' : 'warranty-badge-expired'}">${t.warrantyCovered ? 'Covered' : 'Not covered'}</span>
           </span>
           <span class="ticket-fact" title="Assigned technician">
-            <span class="ticket-fact-ico"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-user"></use></svg></span><span>${escapeHtml(t.assignedTechnician || 'Unassigned')}</span>
+            <span class="ticket-fact-ico"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-user"></use></svg></span><span>${escapeHtml(t.assignedTechnician || 'Not assigned yet')}</span>
           </span>
         </div>
         ${t.partsUsed && t.partsUsed.length > 0 ? `
@@ -4063,8 +4278,8 @@ function renderTicketsView() {
     return `
       <div class="page-header-row">
         <div>
-          <h1 class="page-title">My Service Requests</h1>
-          <p class="page-description">Track your submitted Millennium SmartBoard service requests and repair status.</p>
+          <h1 class="page-title">My Reports</h1>
+          <p class="page-description">Problems you have reported, and how far along the repair is.</p>
         </div>
         <div class="page-actions">
           <button class="btn btn-primary" onclick="openCreateTicketModal()">Report a Problem</button>
@@ -4075,30 +4290,30 @@ function renderTicketsView() {
       <div class="glass-panel" style="padding: 16px 20px; margin-bottom: 20px;">
         <div class="search-input-box">
           <span class="search-icon"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-search"></use></svg></span>
-          <input type="text" class="search-input" placeholder="Search your tickets by ID, title, device..." value="${state.searchQuery}" oninput="handleSearch(this.value)" />
+          <input type="text" class="search-input" placeholder="Search your reports by number, title or device..." value="${state.searchQuery}" oninput="handleSearch(this.value)" />
         </div>
       </div>
       
       <div class="role-info-banner">
-        <strong>Customer View:</strong> You can report issues and track your repair status. For urgent matters, call our support hotline.
+        <strong>What you can do here:</strong> report a problem and follow its progress. If it is urgent, call our support hotline.
       </div>
       <div class="kanban-board">
         <div class="kanban-column stage-open${open.length === 0 ? ' is-empty' : ''}">
           <div class="kanban-header">
-            <span class="kanban-header-label">Open Requests</span>
+            <span class="kanban-header-label">Still open</span>
             <span class="kanban-count">${open.length}</span>
           </div>
           ${open.length === 0
-            ? renderKanbanEmpty('', 'No open requests', 'Everything you reported has been closed.')
+            ? renderKanbanEmpty('', 'Nothing open', 'Everything you reported has been closed.')
             : open.map(t => renderTicketCardCustomer(t)).join('')}
         </div>
         <div class="kanban-column stage-resolved${closed.length === 0 ? ' is-empty' : ''}">
           <div class="kanban-header">
-            <span class="kanban-header-label">Closed Requests</span>
+            <span class="kanban-header-label">Fixed</span>
             <span class="kanban-count">${closed.length}</span>
           </div>
           ${closed.length === 0
-            ? renderKanbanEmpty('', 'Nothing closed yet', 'Resolved requests will be listed here.')
+            ? renderKanbanEmpty('', 'Nothing fixed yet', 'Finished reports will be listed here.')
             : closed.map(t => renderTicketCardCustomer(t)).join('')}
         </div>
       </div>
@@ -4108,11 +4323,11 @@ function renderTicketsView() {
   return `
     <div class="page-header-row">
       <div>
-        <h1 class="page-title">${isTech ? 'My Assigned Tickets' : 'Maintenance & Service Tickets'}</h1>
-        <p class="page-description">${isTech ? 'Your active service jobs and repair tasks assigned to you.' : 'Automated lifecycle from issue detection to technician dispatch and inventory parts deduction.'}</p>
+        <h1 class="page-title">${isTech ? 'Jobs Assigned to Me' : 'Service Tickets'}</h1>
+        <p class="page-description">${isTech ? 'The repair jobs assigned to you, and where each one has got to.' : 'Every reported problem, from the moment it comes in until it is fixed and closed.'}</p>
       </div>
       <div class="page-actions">
-        ${isAdmin ? `<button class="btn btn-primary" onclick="openCreateTicketModal()">Submit Service Ticket</button>` : ''}
+        ${isAdmin ? `<button class="btn btn-primary" onclick="openCreateTicketModal()">New Ticket</button>` : ''}
         ${isTech  ? `<button class="btn btn-secondary" onclick="fetchAllData()">Refresh My Jobs</button>` : ''}
       </div>
     </div>
@@ -4121,12 +4336,12 @@ function renderTicketsView() {
     <div class="glass-panel" style="padding: 16px 20px; margin-bottom: 20px;">
       <div class="search-input-box">
         <span class="search-icon"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-search"></use></svg></span>
-        <input type="text" class="search-input" placeholder="Search tickets by ID, title, device, customer, category..." value="${state.searchQuery}" oninput="handleSearch(this.value)" />
+        <input type="text" class="search-input" placeholder="Search by ticket number, title, device or customer..." value="${state.searchQuery}" oninput="handleSearch(this.value)" />
       </div>
     </div>
     
-    ${isTech ? `<div class="role-info-banner"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-wrench"></use></svg><strong>Technician View:</strong> Showing only tickets assigned to you. Contact admin to view unassigned tickets.</div>` : ''}
-    ${isAdmin ? `<div class="role-info-banner"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-crown"></use></svg><strong>Admin View:</strong> You can see all tickets from all customers and assign them to technicians.</div>` : ''}
+    ${isTech ? `<div class="role-info-banner"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-wrench"></use></svg><strong>Technician view:</strong> only tickets assigned to you are shown. Ask an admin if you need the full list.</div>` : ''}
+    ${isAdmin ? `<div class="role-info-banner"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-crown"></use></svg><strong>Admin view:</strong> every ticket from every customer, and you can hand any of them to a technician.</div>` : ''}
 
     <!-- Kanban Columns -->
     <div class="kanban-board">${received.length === 0 && diagnosing.length === 0 && repairing.length === 0 && resolved.length === 0 && isTech ? `
@@ -4139,44 +4354,44 @@ function renderTicketsView() {
       <!-- 1. New Tickets -->
       <div class="kanban-column stage-received${received.length === 0 ? ' is-empty' : ''}">
         <div class="kanban-header">
-          <span class="kanban-header-label">New Tickets</span>
+          <span class="kanban-header-label">Just reported</span>
           <span class="kanban-count">${received.length}</span>
         </div>
         ${received.length === 0
-          ? renderKanbanEmpty('', 'No new tickets', 'Freshly submitted requests land here.')
+          ? renderKanbanEmpty('', 'Nothing new', 'Newly reported problems land here.')
           : received.map(renderTicketCard).join('')}
       </div>
 
       <!-- 2. Diagnosing -->
       <div class="kanban-column stage-diagnosing${diagnosing.length === 0 ? ' is-empty' : ''}">
         <div class="kanban-header">
-          <span class="kanban-header-label">Diagnosing</span>
+          <span class="kanban-header-label">Being checked</span>
           <span class="kanban-count">${diagnosing.length}</span>
         </div>
         ${diagnosing.length === 0
-          ? renderKanbanEmpty('', 'Nothing in diagnosis', 'Tickets under investigation appear here.')
+          ? renderKanbanEmpty('', 'Nothing being checked', 'We are working out what is wrong.')
           : diagnosing.map(renderTicketCard).join('')}
       </div>
 
       <!-- 3. Repairing -->
       <div class="kanban-column stage-repairing${repairing.length === 0 ? ' is-empty' : ''}">
         <div class="kanban-header">
-          <span class="kanban-header-label">Repairing</span>
+          <span class="kanban-header-label">Being fixed</span>
           <span class="kanban-count">${repairing.length}</span>
         </div>
         ${repairing.length === 0
-          ? renderKanbanEmpty('', 'Nothing in repair', 'Devices currently being worked on appear here.')
+          ? renderKanbanEmpty('', 'Nothing in repair', 'Boards being worked on show up here.')
           : repairing.map(renderTicketCard).join('')}
       </div>
 
       <!-- 4. Resolved -->
       <div class="kanban-column stage-resolved${resolved.length === 0 ? ' is-empty' : ''}">
         <div class="kanban-header">
-          <span class="kanban-header-label">Resolved</span>
+          <span class="kanban-header-label">Fixed</span>
           <span class="kanban-count">${resolved.length}</span>
         </div>
         ${resolved.length === 0
-          ? renderKanbanEmpty('', 'Nothing resolved yet', 'Closed tickets are archived here.')
+          ? renderKanbanEmpty('', 'Nothing fixed yet', 'Finished jobs are kept here.')
           : resolved.map(renderTicketCard).join('')}
       </div>
     `}
@@ -4408,6 +4623,16 @@ function resolveDeviceHolder(w) {
   return { person: org || '—', org: '' };
 }
 
+// Dates arrive from Postgres as full ISO strings ("2026-10-15T16:00:00.000Z").
+// Printed raw they are unreadable and they wrap onto three lines in a table
+// cell, so every human-facing date goes through this.
+function formatFriendlyDate(value) {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
 // 5. Warranty Management View
 function renderWarrantyView() {
   const isCustomer = state.currentRole === 'customer';
@@ -4428,26 +4653,26 @@ function renderWarrantyView() {
   return `
     <div class="page-header-row">
       <div>
-        <h1 class="page-title">${isCustomer ? 'My Warranty Coverage' : 'Warranty & RMA Management'}</h1>
-        <p class="page-description">${isCustomer ? 'View your active SmartBoard warranty contracts and coverage details.' : 'Automated eligibility verification, contract duration tracking, and replacement coverage.'}</p>
+        <h1 class="page-title">${isCustomer ? 'My Warranty' : 'Warranty Coverage'}</h1>
+        <p class="page-description">${isCustomer ? 'The warranties you hold on your SmartBoards, and when each one ends.' : 'Every warranty we hold — when it runs out, and who to contact about that board.'}</p>
       </div>
       <div class="page-actions">
         <button class="btn btn-primary" onclick="openWarrantyScannerModal()">
-          Scan Warranty
+          Scan a barcode
         </button>
       </div>
     </div>
-    ${isCustomer ? `<div class="role-info-banner"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-clipboard"></use></svg><strong>Customer View:</strong> Showing your registered warranty contracts only. Contact support for RMA or replacement requests.</div>` : ''}
+    ${isCustomer ? `<div class="role-info-banner"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-clipboard"></use></svg><strong>Your own boards only:</strong> these are the warranties registered to your account. Call support if you need a repair or a replacement.</div>` : ''}
 
     <!-- Quick Warranty Checker Box -->
-    <div class="glass-panel" style="background: linear-gradient(135deg, rgba(79, 172, 254, 0.1) 0%, rgba(17, 24, 39, 0.8) 100%);">
-      <h2 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 12px;">Instant Warranty Coverage Check</h2>
+    <div class="glass-panel warranty-check-panel">
+      <h2 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 12px;">Check one board</h2>
       <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 14px;">
-        Enter any Millennium Device ID to instantly check warranty expiration and on-site repair coverage before dispatching technicians.
+        Type a device ID to see whether that SmartBoard is still covered, and when the cover ends.
       </p>
       <div style="display: flex; gap: 10px; max-width: 600px;">
         <input type="text" id="warrantyCheckInput" class="form-input" placeholder="e.g. MIL-2026-00125, MIL-86-0021, MIL-65-0102" />
-        <button class="btn btn-primary" onclick="verifyWarrantyFromInput()">Check Coverage</button>
+        <button class="btn btn-primary" onclick="verifyWarrantyFromInput()">Check</button>
       </div>
       <div id="warrantyCheckResult" style="margin-top: 16px;"></div>
     </div>
@@ -4458,19 +4683,19 @@ function renderWarrantyView() {
         <table class="data-table">
           <thead>
             <tr>
-              <th>Contract ID</th>
+              <th>Contract no.</th>
               <th>Device ID</th>
               ${!isCustomer ? '<th>Customer</th>' : ''}
               <th>Model</th>
-              <th>Purchase Date</th>
-              <th>Expiry Date</th>
+              <th>Bought on</th>
+              <th>Cover ends</th>
               <th>Status</th>
-              <th>Device Holder</th>
+              <th>Who has it</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            ${filteredWarranties.length === 0 ? `<tr><td colspan="${isCustomer ? '8' : '9'}" style="text-align:center;padding:40px;color:var(--text-muted);">No warranty records found.</td></tr>` : ''}
+            ${filteredWarranties.length === 0 ? `<tr><td colspan="${isCustomer ? '8' : '9'}" style="text-align:center;padding:40px;color:var(--text-muted);">No warranties on record yet.</td></tr>` : ''}
             ${filteredWarranties
               .map((w) => {
                 const holder = resolveDeviceHolder(w);
@@ -4480,8 +4705,8 @@ function renderWarrantyView() {
                 <td><strong style="color: var(--accent-blue);">${w.deviceId}</strong></td>
                 ${!isCustomer ? `<td><strong>${w.customerName}</strong></td>` : ''}
                 <td>${w.deviceModel}</td>
-                <td>${w.purchaseDate}</td>
-                <td>${w.expiryDate}</td>
+                <td>${formatFriendlyDate(w.purchaseDate)}</td>
+                <td>${formatFriendlyDate(w.expiryDate)}</td>
                 <td>
                   <span class="status-pill ${w.status === 'Under Warranty' ? 'status-online' : 'status-offline'}">
                     ${w.status === 'Under Warranty' ? 'Active' : 'Expired'}
@@ -4622,7 +4847,7 @@ function renderDirectoryView() {
                 aria-label="Open profile for ${escapeHtml(p.fullName)}"
                 onclick="openDirectoryProfile('${p.id}')"
                 onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openDirectoryProfile('${p.id}');}">
-                <div class="directory-avatar directory-avatar--${escapeHtml(p.role || 'user')}" aria-hidden="true">${escapeHtml(initials)}</div>
+                ${avatarMarkup(p.profilePhoto, initials, `directory-avatar directory-avatar--${escapeHtml(p.role || 'user')}`, 'aria-hidden="true"')}
                 <div class="directory-body">
                   <div class="directory-name">
                     ${escapeHtml(p.fullName)}
@@ -4737,9 +4962,7 @@ function openDirectoryProfile(personId) {
         aria-label="Close profile"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg></button>
 
       <div class="dir-profile-head">
-        <div class="dir-profile-avatar directory-avatar--${escapeHtml(p.role || 'user')}" aria-hidden="true">
-          ${escapeHtml(initials)}
-        </div>
+        ${avatarMarkup(p.profilePhoto, initials, `dir-profile-avatar directory-avatar--${escapeHtml(p.role || 'user')}`, 'aria-hidden="true"')}
         <div class="dir-profile-id">
           <h3 class="dir-profile-name">
             ${escapeHtml(p.fullName)}
@@ -4890,12 +5113,16 @@ const PART_IMAGES = {
   'TF-86-PRO':  '/images/parts/tf-86-pro.svg',
 };
 
+// Category glyphs. These used to be emoji (📷 🔌 ⚡ 💻 🖥️) and were later
+// blanked out to empty strings, which left an empty <span> in every inventory
+// card. They are now icon ids from the shared SVG sprite, so the category line
+// has a real glyph again and matches the rest of the UI.
 const PART_CATEGORY_ICONS = {
-  'AV Equipment': '',
-  'Accessories': '',
-  'Power & Mainboard': '',
-  'Computing (OPS)': '',
-  'Display & Touch': '',
+  'AV Equipment': 'camera',
+  'Accessories': 'plug',
+  'Power & Mainboard': 'bolt',
+  'Computing (OPS)': 'laptop',
+  'Display & Touch': 'monitor',
 };
 
 function getPartImage(part) {
@@ -4907,7 +5134,9 @@ function getPartImage(part) {
 }
 
 function getPartCategoryIcon(category) {
-  return PART_CATEGORY_ICONS[category] || '';
+  const name = PART_CATEGORY_ICONS[category];
+  if (!name) return '';
+  return `<svg class="ico inv-cat-ico" aria-hidden="true" focusable="false"><use href="#i-${name}"></use></svg>`;
 }
 
 function formatUnitCost(value) {
@@ -4965,26 +5194,30 @@ function renderInventoryCard(part, isAdmin) {
               <div class="inv-stock-box">
                 <div class="inv-stock-line">
                   <span class="inv-stock-number">${part.stockQuantity}</span>
-                  <span class="inv-stock-hint">units remaining<br /><small>(Min: ${part.minThreshold})</small></span>
+                  <span class="inv-stock-hint">left in stock<br /><small>(reorder at ${part.minThreshold})</small></span>
                 </div>
                 <div class="inv-stock-bar"><span style="width:${fillPct}%"></span></div>
               </div>
 
               <div class="inv-card-foot">
-                <span class="inv-unit-cost">Unit Cost<br /><span class="inv-price-host" data-price-for="${part.id}">${
+                <span class="inv-unit-cost">Price each<br /><span class="inv-price-host" data-price-for="${part.id}">${
                   isAdmin
                     ? `<button type="button" class="inv-price-btn" onclick="editPartPrice('${part.id}')"
-                         title="Edit unit cost" aria-label="Edit unit cost for ${escapeHtml(part.name)}"><strong>${priceText}</strong><svg class="inv-price-pencil" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg></button>`
+                         title="Change the price of one unit" aria-label="Change the price of one unit of ${escapeHtml(part.name)}"><strong>${priceText}</strong><svg class="inv-price-pencil" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg></button>`
                     : `<strong>${priceText}</strong>`
                 }</span></span>
                 ${isAdmin
-                  ? `<button class="inv-restock-btn" onclick="restockOne('${part.id}')" title="Add 1 unit to stock">Restock<span class="inv-restock-plus">+1</span></button>`
+                  ? `<button class="inv-restock-btn" onclick="restockOne('${part.id}')" title="Add one more unit to stock">Restock<span class="inv-restock-plus">+1</span></button>`
                   : `<span class="status-pill ${statusPillClass}" style="font-size:0.72rem;">${part.status}</span>`}
               </div>
 
               ${isAdmin ? `
-                <div class="inv-delete-row">
-                  <button class="inv-delete-btn" onclick="deleteInventoryPart('${part.id}')">Delete Part</button>
+                <div class="inv-card-actions">
+                  <button class="inv-edit-btn" onclick="openPartEditModal('${part.id}')"
+                    title="Change the name or picture of this part">
+                    <svg class="ico" aria-hidden="true" focusable="false"><use href="#i-pencil"></use></svg>Edit
+                  </button>
+                  <button class="inv-delete-btn" onclick="deleteInventoryPart('${part.id}')">Remove</button>
                 </div>
               ` : ''}
             </div>
@@ -5009,11 +5242,11 @@ function renderInventoryView() {
   return `
     <div class="page-header-row">
       <div>
-        <h1 class="page-title">Spare Parts & Hardware Inventory</h1>
-        <p class="page-description">Real-time stock tracking for Millennium replacements, touch frames, OPS boards, and accessories.</p>
+        <h1 class="page-title">Parts & Spare Stock</h1>
+        <p class="page-description">How many spare parts we keep in the store room — and which ones are running low.</p>
       </div>
       <div class="page-actions">
-        ${isAdmin ? `<button class="btn btn-primary" onclick="openRestockModal()">Restock Shipment</button>` : `<span style="font-size:0.82rem;color:var(--text-muted);">View only. Deduct parts via a ticket.</span>`}
+        ${isAdmin ? `<button class="btn btn-primary" onclick="openRestockModal()">Add Stock</button>` : `<span style="font-size:0.82rem;color:var(--text-muted);">View only — parts come off stock when a ticket uses them.</span>`}
       </div>
     </div>
 
@@ -5325,19 +5558,36 @@ function setClientTypeFilter(type) {
 
 /**
  * Dashboard drill-down: jump straight from a School / Corporate chip to the
- * matching list of client accounts. This is what makes those chips real
- * buttons rather than decoration.
+ * matching list of client accounts.
+ *
+ * The list lives on Data Manager -> Customers, so this has to do TWO things:
+ * set the filter AND move the user there. Setting the filter alone repainted
+ * the dashboard the user was already looking at, which is why the chips felt
+ * dead — the numbers changed underneath but the screen did not.
  */
 function showClientsByType(type) {
   const wanted = type === 'school' ? 'school' : 'corporate';
   const count = (state.customers || []).filter(c => c.clientType === wanted).length;
 
-  setClientTypeFilter(wanted);
+  state.clientTypeFilter = wanted;
+  state.dataManagerSubTab = 'customers';
+  state.searchQuery = '';
+
+  // switchTab() is a no-op when we are already on that tab, so repaint directly
+  // in that case rather than relying on the navigation to trigger a render.
+  if (state.currentTab === 'data-manager') {
+    renderApp();
+  } else {
+    switchTab('data-manager');
+  }
 
   if (count === 0) {
     showToast(`No ${wanted} clients have registered yet.`, 'info');
   } else {
-    showToast(`Showing ${count} ${wanted} client${count === 1 ? '' : 's'}.`, 'success');
+    // No number here on purpose: the chips count client ORGANISATIONS while the
+    // table lists user ACCOUNTS, so a count in the toast would contradict the
+    // "2 of 3 accounts" line right above it.
+    showToast(`Showing only ${wanted} accounts.`, 'success');
   }
 }
 
@@ -5373,7 +5623,7 @@ function renderDMUsersTab() {
               <tr>
                 <td>
                   <div class="dm-user">
-                    <div class="dm-avatar">${(u.fullName||u.username).charAt(0).toUpperCase()}</div>
+                    ${avatarMarkup(u.profilePhoto, (u.fullName || u.username).charAt(0).toUpperCase(), 'dm-avatar')}
                     <div class="dm-user-text">
                       <strong class="dm-name" title="User ID: ${u.id}">${u.fullName || u.username}</strong>
                       <span class="dm-handle">@${u.username}</span>
@@ -5481,7 +5731,7 @@ function renderDMCustomersTab() {
               <tr>
                 <td>
                   <div class="dm-user">
-                    <div class="dm-avatar dm-avatar--customer">${(u.fullName || u.username).charAt(0).toUpperCase()}</div>
+                    ${avatarMarkup(u.profilePhoto, (u.fullName || u.username).charAt(0).toUpperCase(), 'dm-avatar dm-avatar--customer')}
                     <div class="dm-user-text">
                       <strong class="dm-name" title="User ID: ${u.id}">${u.fullName || u.username}</strong>
                       <span class="dm-handle">@${u.username}</span>
@@ -6313,8 +6563,50 @@ function openTicketDetailModal(ticketId) {
     const fact = (label, valueHtml) =>
       `<div class="tix-fact"><dt>${label}</dt><dd>${valueHtml}</dd></div>`;
 
+    // Conversation column.
+    // It used to sit inline, between the ticket facts and the status controls,
+    // with the message list capped at 258px. That is what made chatting feel
+    // cramped: the composer competed with the rest of the ticket for one scroll
+    // position. It is now its own grid column with its own scroll and a
+    // composer pinned to the bottom.
+    const chatPaneHtml = `
+        <aside class="tix-chat-pane" id="tixConvo" aria-label="${chatCopy.title}">
+          <header class="tix-chat-head">
+            <span class="tix-chat-head-ico" aria-hidden="true">${ico('message')}</span>
+            <span class="tix-chat-head-txt">
+              <strong>${chatCopy.title}</strong>
+              <small>${chatCopy.hint}</small>
+            </span>
+            <span class="tix-convo-chip is-${chatCopy.tone}">${chatCopy.chip}</span>
+          </header>
+          ${tabsHtml}
+          <p id="ticketChatSubtitle" class="tix-convo-sub">
+            ${isAdmin
+              ? 'Staff channel — coordination with the assigned technician. <strong>Customers cannot see this.</strong>'
+              : isCustomer
+                ? 'Messages here go to Millennium admin and support only.'
+                : 'Internal coordination with admin. <strong>Customer messages stay separate.</strong>'}
+          </p>
+          <div id="ticketChatMessages" class="tix-chat-messages">
+            <div class="tix-chat-loading">
+              <div class="spinner" style="margin:8px auto;"></div>
+              Loading messages…
+            </div>
+          </div>
+          <div class="tix-composer">
+            <input type="text" id="ticketChatInput" class="form-input"
+              placeholder="${inputPlaceholder}"
+              aria-label="Message"
+              onkeypress="if(event.key==='Enter') sendTicketMessage(${sendChannelAttr})" />
+            <button type="button" class="tix-composer-send" onclick="sendTicketMessage(${sendChannelAttr})">
+              ${ico('arrow-right')}<span>Send</span>
+            </button>
+          </div>
+        </aside>`;
+
     body.innerHTML = `
-      <div class="tix-modal">
+      <div class="tix-modal tix-modal--split">
+        <div class="tix-details">
 
         <!-- Summary -->
         <section class="tix-sum">
@@ -6340,46 +6632,6 @@ function openTicketDetailModal(ticketId) {
           </dl>
         </section>
 
-        <!-- Conversation (collapsed until opened) -->
-        <section class="tix-convo" id="tixConvo">
-          <button type="button" class="tix-convo-bar" id="tixConvoBar"
-            aria-expanded="false" aria-controls="tixConvoPanel" onclick="toggleTicketChat()">
-            <span class="tix-convo-ico" aria-hidden="true">${ico('message')}</span>
-            <span class="tix-convo-txt">
-              <strong>${chatCopy.title}</strong>
-              <small>${chatCopy.hint}</small>
-            </span>
-            <span class="tix-convo-chip is-${chatCopy.tone}">${chatCopy.chip}</span>
-            <span class="tix-convo-cta" id="tixConvoCta">Open chat</span>
-          </button>
-
-          <div class="tix-convo-panel" id="tixConvoPanel">
-            ${tabsHtml}
-            <p id="ticketChatSubtitle" class="tix-convo-sub">
-              ${isAdmin
-                ? 'Staff channel — coordination with the assigned technician. <strong>Customers cannot see this.</strong>'
-                : isCustomer
-                  ? 'Messages here go to Millennium admin and support only.'
-                  : 'Internal coordination with admin. <strong>Customer messages stay separate.</strong>'}
-            </p>
-            <div id="ticketChatMessages" class="tix-chat-messages">
-              <div class="tix-chat-loading">
-                <div class="spinner" style="margin:8px auto;"></div>
-                Loading messages…
-              </div>
-            </div>
-            <div class="tix-composer">
-              <input type="text" id="ticketChatInput" class="form-input"
-                placeholder="${inputPlaceholder}"
-                aria-label="Message"
-                onkeypress="if(event.key==='Enter') sendTicketMessage(${sendChannelAttr})" />
-              <button type="button" class="tix-composer-send" onclick="sendTicketMessage(${sendChannelAttr})">
-                ${ico('arrow-right')}<span>Send</span>
-              </button>
-            </div>
-          </div>
-        </section>
-
         ${isAdmin ? `
         <section class="tix-sec">
           <h4 class="tix-sec-title">${ico('wrench')} Assign technician</h4>
@@ -6401,8 +6653,8 @@ function openTicketDetailModal(ticketId) {
         <div class="ticket-status-panel">
           <h4 class="ticket-status-title">Update status</h4>
           <p class="ticket-status-hint">
-            New tickets land in <strong>New Tickets</strong>. Move one along as the work progresses —
-            the lane updates the moment you save.
+            New reports start in <strong>Just reported</strong>. Move one along as the work goes —
+            the board updates the moment you save.
           </p>
           <div class="ticket-status-actions">
             <button type="button" class="ticket-status-btn${tck.status === 'Diagnosing' ? ' is-current' : ''}"
@@ -6437,36 +6689,33 @@ function openTicketDetailModal(ticketId) {
           ${tck.partsUsed && tck.partsUsed.length > 0 ? `
             <p class="tix-parts-used"><strong>Used:</strong> ${tck.partsUsed.map(p => `${p.quantity}× ${p.partName}`).join(', ')}</p>` : ''}
         </section>` : ''}
+        </div>
+
+        ${chatPaneHtml}
       </div>
     `;
 
-    // Nothing polls until the conversation is actually opened.
-    stopTicketChatPolling();
+    // The conversation now has its own column and is visible the moment the
+    // ticket opens, so its messages load (and then refresh every 3s) straight
+    // away. closeTicketDetailModal() is what stops the poll.
     state._activeChatTab = activeChannel;
+    startTicketChatPolling(tck.id);
   }
 
   if (modal) modal.classList.add('active');
 }
 
-/** Open / close the in-ticket conversation panel. */
+/**
+ * Legacy hook for the old collapsible chat panel.
+ *
+ * The conversation is now a permanent column beside the ticket details, so
+ * there is nothing to open or close. Kept as a no-op because inline handlers
+ * from a cached page can still call it after a deploy.
+ */
 function toggleTicketChat() {
-  const wrap = document.getElementById('tixConvo');
-  if (!wrap || !state.selectedTicket) return;
-
-  const willOpen = !wrap.classList.contains('is-open');
-  wrap.classList.toggle('is-open', willOpen);
-
-  const bar = document.getElementById('tixConvoBar');
-  if (bar) bar.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
-  const cta = document.getElementById('tixConvoCta');
-  if (cta) cta.textContent = willOpen ? 'Hide chat' : 'Open chat';
-
-  if (willOpen) {
-    startTicketChatPolling(state.selectedTicket.id);
-    setTimeout(() => document.getElementById('ticketChatInput')?.focus(), 80);
-  } else {
-    stopTicketChatPolling();
-  }
+  if (!state.selectedTicket) return;
+  const input = document.getElementById('ticketChatInput');
+  if (input) input.focus();
 }
 
 /** Load the active channel once, then refresh it every 3s while the panel is open. */
@@ -6498,11 +6747,6 @@ function closeTicketDetailModal() {
   const modal = document.getElementById('ticketDetailModal');
   if (modal) modal.classList.remove('active');
   stopTicketChatPolling();
-  // The conversation collapses with the modal, so reopening a ticket always
-  // starts from the gate rather than silently restoring a live chat panel.
-  document.getElementById('tixConvo')?.classList.remove('is-open');
-  const bar = document.getElementById('tixConvoBar');
-  if (bar) bar.setAttribute('aria-expanded', 'false');
   state.selectedTicket = null;
   state._activeChatTab = 'staff';
 }
@@ -7286,6 +7530,174 @@ async function savePartPrice(partId) {
     if (saveBtn) saveBtn.disabled = false;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Part editor — rename a part and replace its picture.
+//
+// The picture is read in the browser and downscaled onto a canvas before it is
+// sent, so a 4 MB phone photo becomes a ~40 KB data: URL. That keeps the request
+// small and means no upload endpoint or static file directory is needed.
+// ---------------------------------------------------------------------------
+
+/** Read a File into a downscaled data: URL (max `maxEdge` on the long side). */
+function readImageFile(file, maxEdge = 720) {
+  return new Promise((resolve, reject) => {
+    if (!file) return reject(new Error('No file selected.'));
+    if (!/^image\//.test(file.type)) return reject(new Error('Please choose an image file.'));
+    if (file.size > 12 * 1024 * 1024) return reject(new Error('That image is over 12 MB.'));
+
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read that file.'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('That file is not a readable image.'));
+      img.onload = () => {
+        const scale = Math.min(1, maxEdge / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
+        // PNG keeps transparency-free artwork crisp; JPEG would blur the
+        // hairline details on the part illustrations.
+        resolve(canvas.toDataURL('image/png'));
+      };
+      img.src = String(reader.result);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function openPartEditModal(partId) {
+  const part = (state.inventory || []).find((p) => p.id === partId);
+  if (!part) return;
+
+  document.getElementById('partEditOverlay')?.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'partEditOverlay';
+  overlay.className = 'modal-backdrop active';
+  overlay.innerHTML = `
+    <div class="modal-content part-edit" role="dialog" aria-modal="true" aria-label="Edit part">
+      <div class="modal-header">
+        <h2 class="part-edit-title">Edit part</h2>
+        <button class="modal-close" aria-label="Close" onclick="closePartEditModal()">
+          <svg class="ico" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
+        </button>
+      </div>
+
+      <div class="part-edit-body">
+        <div class="part-edit-preview">
+          <div class="part-edit-img" id="partEditImgWrap">
+            ${getPartImage(part)
+              ? `<img src="${getPartImage(part)}" alt="" id="partEditImg" />`
+              : `<span class="part-edit-img-empty" id="partEditImgEmpty">No picture</span>`}
+          </div>
+          <div class="part-edit-img-actions">
+            <label class="btn btn-secondary btn-sm part-edit-upload">
+              Upload picture
+              <input type="file" accept="image/*" hidden id="partEditFile" onchange="handlePartImagePick(this)" />
+            </label>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="clearPartImage()">Use built-in artwork</button>
+          </div>
+          <p class="part-edit-hint">PNG or JPEG. Large photos are shrunk automatically.</p>
+        </div>
+
+        <div class="part-edit-fields">
+          <label class="part-edit-label" for="partEditName">Part name</label>
+          <input type="text" id="partEditName" class="form-input" maxlength="120"
+            value="${escapeHtml(part.name)}" />
+          <p class="part-edit-hint">Shown on the inventory card and in ticket dropdowns.</p>
+
+          <dl class="part-edit-meta">
+            <div><dt>Code</dt><dd>${escapeHtml(part.partCode)}</dd></div>
+            <div><dt>Category</dt><dd>${escapeHtml(part.category)}</dd></div>
+            <div><dt>In stock</dt><dd>${part.stockQuantity}</dd></div>
+          </dl>
+        </div>
+      </div>
+
+      <div class="part-edit-foot">
+        <button type="button" class="btn btn-secondary" onclick="closePartEditModal()">Cancel</button>
+        <button type="button" class="btn btn-primary" id="partEditSave" onclick="savePartEdit('${part.id}')">Save changes</button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(overlay);
+  // Stashed so savePartEdit() can tell "unchanged" apart from "cleared".
+  overlay.dataset.imageUrl = part.imageUrl || '';
+  setTimeout(() => document.getElementById('partEditName')?.focus(), 60);
+}
+
+function closePartEditModal() {
+  document.getElementById('partEditOverlay')?.remove();
+}
+
+async function handlePartImagePick(input) {
+  const file = input?.files?.[0];
+  if (!file) return;
+  try {
+    const dataUrl = await readImageFile(file, 720);
+    const overlay = document.getElementById('partEditOverlay');
+    if (overlay) overlay.dataset.imageUrl = dataUrl;
+    const wrap = document.getElementById('partEditImgWrap');
+    if (wrap) wrap.innerHTML = `<img src="${dataUrl}" alt="" id="partEditImg" />`;
+    showToast('Picture ready — press Save changes.', 'info');
+  } catch (err) {
+    showToast(err.message || 'Could not use that picture.', 'error');
+  } finally {
+    if (input) input.value = '';
+  }
+}
+
+function clearPartImage() {
+  const overlay = document.getElementById('partEditOverlay');
+  if (!overlay) return;
+  overlay.dataset.imageUrl = '';
+  const wrap = document.getElementById('partEditImgWrap');
+  if (wrap) wrap.innerHTML = '<span class="part-edit-img-empty" id="partEditImgEmpty">Built-in artwork</span>';
+}
+
+async function savePartEdit(partId) {
+  const overlay = document.getElementById('partEditOverlay');
+  const nameEl = document.getElementById('partEditName');
+  const saveBtn = document.getElementById('partEditSave');
+  if (!overlay || !nameEl) return;
+
+  const name = String(nameEl.value || '').trim();
+  if (name.length < 2) {
+    showToast('Give the part a name of at least 2 characters.', 'error');
+    nameEl.focus();
+    return;
+  }
+
+  const imageUrl = overlay.dataset.imageUrl || '';
+  if (saveBtn) saveBtn.disabled = true;
+
+  try {
+    const res = await fetch(`${API_BASE}/inventory/${partId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, imageUrl }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) throw new Error(data.error || 'Could not save the part.');
+
+    const idx = (state.inventory || []).findIndex((p) => p.id === partId);
+    if (idx >= 0) state.inventory[idx] = data.data;
+    refreshInventoryGrid();
+    closePartEditModal();
+    showToast('Part updated.', 'success');
+  } catch (err) {
+    showToast(err.message || 'Could not save the part.', 'error');
+    if (saveBtn) saveBtn.disabled = false;
+  }
+}
+
 
 // Register Board Modal
 function openRegisterModal() {
@@ -8233,27 +8645,27 @@ function displayWarrantyResults(details) {
         </h4>
         <div class="warranty-info-grid">
           <div class="warranty-info-item">
-            <span class="warranty-info-label">Contract ID:</span>
+            <span class="warranty-info-label">Contract no.:</span>
             <span class="warranty-info-value">${warranty.id}</span>
           </div>
           <div class="warranty-info-item">
-            <span class="warranty-info-label">Coverage Type:</span>
+            <span class="warranty-info-label">What it covers:</span>
             <span class="warranty-info-value">${warranty.coverageType}</span>
           </div>
           <div class="warranty-info-item">
-            <span class="warranty-info-label">Purchase Date:</span>
+            <span class="warranty-info-label">Bought on:</span>
             <span class="warranty-info-value">${purchaseDateFormatted}</span>
           </div>
           <div class="warranty-info-item">
-            <span class="warranty-info-label">Expiry Date:</span>
+            <span class="warranty-info-label">Cover ends:</span>
             <span class="warranty-info-value">${expiryDateFormatted}</span>
           </div>
           <div class="warranty-info-item">
-            <span class="warranty-info-label">Warranty Period:</span>
+            <span class="warranty-info-label">Cover lasts:</span>
             <span class="warranty-info-value">${warranty.warrantyYears} year${warranty.warrantyYears !== 1 ? 's' : ''}</span>
           </div>
           <div class="warranty-info-item">
-            <span class="warranty-info-label">Today's Date:</span>
+            <span class="warranty-info-label">Today:</span>
             <span class="warranty-info-value">${todayFormatted}</span>
           </div>
         </div>

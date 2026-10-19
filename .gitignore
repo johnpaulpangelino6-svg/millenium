@@ -21,6 +21,15 @@ dist/
 screenshots/
 .shot/
 
+# AI assistant artifacts and caches
+.workbuddy-ai/
+.kiro/
+
+# SQLite databases
+data/
+*.db
+*.db-*
+
 # Git lock files
 .git/*.lock
 .git/index.lock

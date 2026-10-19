@@ -107,9 +107,14 @@ const translateX = (m) => (matrixOf(m) ? matrixOf(m).e : null);
     check('the progress bar starts at zero length',
       scaleX(rest.barScale) === 0, String(rest.barScale));
     check('no horizontal overflow', rest.overflow <= 0, `overflow=${rest.overflow}px`);
+    // `.page-bg` is the decorative background layer (grids, glows, beam). It is
+    // `position: fixed` so it stays put while the page scrolls, but it sits at
+    // `z-index: 0` behind the content with `pointer-events: none`, so it cannot
+    // cover or intercept anything. Everything else must still be unpinned.
+    const pinnedReal = rest.pinned.filter((p) => !/\bpage-bg\b/.test(p));
     check('only the header is pinned',
-      rest.pinned.length === 1 && rest.pinned[0].includes('site-head'),
-      rest.pinned.join(', ') || 'none');
+      pinnedReal.length === 1 && pinnedReal[0].includes('site-head'),
+      pinnedReal.join(', ') || 'none');
 
     // The stat count-up runs as soon as the strip is in view, which it is here.
     const stats = await page.evaluate(() =>

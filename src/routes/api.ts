@@ -16,6 +16,35 @@ const getParam = (param: string | string[] | undefined): string => {
   return param || '';
 };
 
+/**
+ * Validate a stored picture value (part artwork, profile photo).
+ *
+ * Three shapes are allowed, all kept verbatim in one TEXT column:
+ *   '' / null     -> clear the custom picture
+ *   http(s)://…   -> an external image
+ *   data:image/…  -> a picture the client uploaded, already downscaled in the
+ *                    browser (see readImageFile() in app.js)
+ *
+ * Anything else — notably `javascript:` and `data:text/html` — is refused, so a
+ * crafted value can never become a script sink when the value is rendered.
+ */
+function validatePictureValue(raw: unknown): { ok: true; value: string | null } | { ok: false; error: string } {
+  if (raw === null || raw === '') return { ok: true, value: null };
+
+  const value = String(raw).trim();
+  const isHttp = /^https?:\/\/\S+$/i.test(value);
+  const isData = /^data:image\/(png|jpe?g|webp|gif|svg\+xml);base64,[A-Za-z0-9+/=]+$/i.test(value);
+  if (!isHttp && !isData) {
+    return { ok: false, error: 'The picture must be an http(s) URL or an uploaded image.' };
+  }
+  // ~3 MB of base64. The client downscales well below this; the cap only stops
+  // a hand-crafted request from bloating the row.
+  if (value.length > 3_000_000) {
+    return { ok: false, error: 'That picture is too large.' };
+  }
+  return { ok: true, value };
+}
+
 // ============================================================
 // AUTHENTICATION
 // A signed token is issued at login and sent by the client as
@@ -460,6 +489,7 @@ apiRouter.get('/directory', requireAuth, async (_req: AuthedRequest, res: Respon
         location: u.location || 'All Locations',
         allowedLocations: Array.isArray(u.allowedLocations) ? u.allowedLocations : [],
         organization: u.organization || '',
+        profilePhoto: u.profilePhoto || null,
         createdAt: u.createdAt || null,
         online: typeof seen === 'number' && now - seen < PRESENCE_WINDOW_MS,
         lastSeenAt: typeof seen === 'number' ? new Date(seen).toISOString() : null,
@@ -473,13 +503,14 @@ apiRouter.get('/directory', requireAuth, async (_req: AuthedRequest, res: Respon
 
 // PATCH /api/auth/me — self-service profile update (any signed-in user)
 //
-// Only these fields may be self-edited: fullName, email, location and password.
-// `role`, `organization` and `customerId` are deliberately NOT accepted — a user
-// must never be able to widen their own access or re-home their account.
+// Only these fields may be self-edited: fullName, email, location, profilePhoto
+// and password. `role`, `organization` and `customerId` are deliberately NOT
+// accepted — a user must never be able to widen their own access or re-home
+// their account.
 apiRouter.patch('/auth/me', requireAuth, async (req: AuthedRequest, res: Response) => {
   try {
     const userId = req.auth!.userId;
-    const { fullName, email, location, currentPassword, newPassword } = req.body;
+    const { fullName, email, location, profilePhoto, currentPassword, newPassword } = req.body;
 
     const users = await db.getUsers();
     const me: any = users.find((u: any) => u.id === userId);
@@ -487,7 +518,13 @@ apiRouter.patch('/auth/me', requireAuth, async (req: AuthedRequest, res: Respons
       return res.status(404).json({ success: false, error: 'Account not found.' });
     }
 
-    const updates: { fullName?: string; email?: string; location?: string; password?: string } = {};
+    const updates: {
+      fullName?: string;
+      email?: string;
+      location?: string;
+      profilePhoto?: string | null;
+      password?: string;
+    } = {};
 
     if (fullName !== undefined) {
       const value = String(fullName).trim();
@@ -513,6 +550,16 @@ apiRouter.patch('/auth/me', requireAuth, async (req: AuthedRequest, res: Respons
 
     if (location !== undefined) {
       updates.location = String(location).trim() || 'All Locations';
+    }
+
+    // A profile photo is cosmetic, so it is validated but never privileged.
+    if (profilePhoto !== undefined) {
+      const checked = validatePictureValue(profilePhoto);
+      if (!checked.ok) {
+        const status = /too large/i.test(checked.error) ? 413 : 400;
+        return res.status(status).json({ success: false, error: checked.error });
+      }
+      updates.profilePhoto = checked.value;
     }
 
     // Password change requires the current password, so a stolen token alone
@@ -1450,6 +1497,62 @@ apiRouter.patch(
       }
       const rounded = Math.round(value * 100) / 100;
       const updated = await db.updateInventoryPart(id, { unitCost: rounded });
+      if (!updated) {
+        return res.status(404).json({ success: false, error: 'Part not found.' });
+      }
+      res.json({ success: true, data: updated });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+);
+
+/**
+ * PATCH /api/inventory/:id — rename a part and/or replace its picture.
+ *
+ * `imageUrl` accepts three shapes, all stored verbatim in one TEXT column:
+ *   ''            -> clear the custom picture (card falls back to built-in art)
+ *   http(s)://…   -> an external image
+ *   data:image/…  -> a picture the admin uploaded, already downscaled in the
+ *                    browser (see readImageFile() in app.js)
+ *
+ * Anything else — notably `javascript:` and `data:text/html` — is refused, so a
+ * crafted value can never be used as a script sink when the card renders it.
+ */
+apiRouter.patch(
+  '/inventory/:id',
+  requireAuth,
+  requireRole('admin'),
+  async (req: AuthedRequest, res: Response) => {
+    try {
+      const id = getParam(req.params.id);
+      const updates: { name?: string; imageUrl?: string | null } = {};
+
+      if (req.body?.name !== undefined) {
+        const name = String(req.body.name).trim();
+        if (name.length < 2) {
+          return res.status(400).json({ success: false, error: 'Part name must be at least 2 characters.' });
+        }
+        if (name.length > 120) {
+          return res.status(400).json({ success: false, error: 'Part name must be 120 characters or fewer.' });
+        }
+        updates.name = name;
+      }
+
+      if (req.body?.imageUrl !== undefined) {
+        const checked = validatePictureValue(req.body.imageUrl);
+        if (!checked.ok) {
+          const status = /too large/i.test(checked.error) ? 413 : 400;
+          return res.status(status).json({ success: false, error: checked.error });
+        }
+        updates.imageUrl = checked.value;
+      }
+
+      if (Object.keys(updates).length === 0) {
+        return res.status(400).json({ success: false, error: 'Nothing to update.' });
+      }
+
+      const updated = await db.updateInventoryPart(id, updates);
       if (!updated) {
         return res.status(404).json({ success: false, error: 'Part not found.' });
       }

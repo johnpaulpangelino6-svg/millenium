@@ -63,6 +63,9 @@
       --shadow-lg:     0 28px 60px -20px rgba(13, 21, 38, .24), 0 10px 24px -10px rgba(13, 21, 38, .10);
       --header-bg:     rgba(255, 255, 255, .86);
       --code-bg:       #eef2f8;
+      /* Background grid line. Deliberately ~4% — visible as texture on a
+         white page, invisible as a line. */
+      --bg-grid-line:  rgba(13, 21, 38, .042);
       --radius:        16px;
       --radius-lg:     22px;
       --maxw:          1180px;
@@ -94,6 +97,7 @@
       --shadow-lg:     0 28px 64px -20px rgba(0, 0, 0, .75);
       --header-bg:     rgba(6, 11, 25, .86);
       --code-bg:       #16203a;
+      --bg-grid-line:  rgba(125, 165, 235, .055);
     }
 
     *, *::before, *::after { box-sizing: border-box; }
@@ -139,6 +143,78 @@
     .aurora .a2 { width: 560px; height: 560px; top: -180px; right: -140px; background: radial-gradient(circle, rgba(124,58,237,.45), transparent 68%); }
     .aurora .a3 { width: 520px; height: 520px; top: 300px; left: 40%; background: radial-gradient(circle, rgba(0,242,254,.30), transparent 70%); }
     [data-theme="dark"] .aurora span { opacity: .42; }
+
+    /* ---------- Full-page background design ----------
+       The aurora above only covers the first 900px, so everything below the
+       hero sat on a flat fill. These three layers run the whole page:
+
+         .bg-grid   a hairline blueprint grid, faded out at the edges and
+                    toward the bottom so it reads as texture, not wallpaper
+         .bg-glow   two very large, very soft colour pools that act as
+                    ambient light behind the sections
+         .bg-beam   a single conic sweep across the top, tying the hero to
+                    the header
+
+       All of it is `position: fixed` + `pointer-events: none`, so it never
+       adds to the scroll height and never intercepts a click. Alpha values are
+       kept under ~6% — enough to see, never enough to fight the body text. */
+    .page-bg {
+      position: fixed; inset: 0; z-index: 0;
+      pointer-events: none; overflow: hidden;
+    }
+    .page-bg__grid {
+      position: absolute; inset: -1px;
+      background-image:
+        linear-gradient(to right, var(--bg-grid-line) 1px, transparent 1px),
+        linear-gradient(to bottom, var(--bg-grid-line) 1px, transparent 1px);
+      background-size: 72px 72px;
+      -webkit-mask-image: radial-gradient(ellipse 78% 62% at 50% 0%, #000 12%, transparent 78%);
+      mask-image: radial-gradient(ellipse 78% 62% at 50% 0%, #000 12%, transparent 78%);
+    }
+    /* Second grid pass: the radial mask above fades to nothing by ~1500px, so
+       everything below the hero went back to a flat fill. This one is the same
+       grid at roughly half strength with no mask, which keeps a faint texture
+       running the whole length of the page. */
+    .page-bg__grid--soft {
+      -webkit-mask-image: none;
+      mask-image: none;
+      opacity: .42;
+      background-size: 96px 96px;
+    }
+    .page-bg__glow {
+      position: absolute; border-radius: 50%; filter: blur(110px);
+    }
+    .page-bg__glow--a {
+      width: 760px; height: 760px; top: 22%; left: -280px;
+      background: radial-gradient(circle, rgba(2,132,199,.24), transparent 68%);
+    }
+    .page-bg__glow--b {
+      width: 720px; height: 720px; bottom: -240px; right: -260px;
+      background: radial-gradient(circle, rgba(124,58,237,.20), transparent 68%);
+    }
+    .page-bg__beam {
+      position: absolute; top: -420px; left: 50%;
+      width: 1400px; height: 900px; transform: translateX(-50%);
+      background: conic-gradient(from 180deg at 50% 100%,
+        transparent 0deg, rgba(0,194,209,.10) 40deg, transparent 96deg);
+    }
+    [data-theme="dark"] .page-bg__grid {
+      -webkit-mask-image: radial-gradient(ellipse 82% 66% at 50% 0%, #000 10%, transparent 80%);
+      mask-image: radial-gradient(ellipse 82% 66% at 50% 0%, #000 10%, transparent 80%);
+    }
+    [data-theme="dark"] .page-bg__glow--a {
+      background: radial-gradient(circle, rgba(14,165,233,.22), transparent 68%);
+    }
+    [data-theme="dark"] .page-bg__glow--b {
+      background: radial-gradient(circle, rgba(139,92,246,.20), transparent 68%);
+    }
+    [data-theme="dark"] .page-bg__beam {
+      background: conic-gradient(from 180deg at 50% 100%,
+        transparent 0deg, rgba(0,242,254,.10) 40deg, transparent 96deg);
+    }
+
+    /* Every section must paint ABOVE the fixed background. */
+    .site-head, main, footer { position: relative; z-index: 1; }
 
     /* ============================ HEADER ============================
        Sticky — it stays pinned to the top of the viewport while the page
@@ -851,6 +927,16 @@
 <body>
 
 <div class="aurora" aria-hidden="true"><span class="a1"></span><span class="a2"></span><span class="a3"></span></div>
+
+<!-- Full-page background: hairline grid + two ambient colour pools + a top
+     light sweep. Fixed, non-interactive, purely decorative. -->
+<div class="page-bg" aria-hidden="true">
+  <div class="page-bg__grid"></div>
+  <div class="page-bg__grid page-bg__grid--soft"></div>
+  <div class="page-bg__glow page-bg__glow--a"></div>
+  <div class="page-bg__glow page-bg__glow--b"></div>
+  <div class="page-bg__beam"></div>
+</div>
 
 <!-- ============================== HEADER ==============================
      Sits in normal document flow — it scrolls away with the page. -->
