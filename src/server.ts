@@ -132,7 +132,7 @@ db.testConnection()
       }
     }
     console.log('  ✅ Database schema initialized.');
-    
+
     app.listen(PORT, HOST, () => {
       console.log('================================================================');
       console.log('  🌟 MILLENNIUM SMARTBOARD MANAGEMENT SYSTEM');
@@ -148,6 +148,7 @@ db.testConnection()
       console.log(`  👥 Multi-User:         ✅ All users share same database`);
       console.log(`  💾 Data Persistence:   ✅ Saved permanently`);
       console.log('  * Local URL:          http://localhost:3000');
+
       console.log('================================================================');
 
       // Password-reset mail is easy to leave unconfigured and impossible to

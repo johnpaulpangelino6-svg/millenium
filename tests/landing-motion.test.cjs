@@ -195,8 +195,16 @@ const translateX = (m) => (matrixOf(m) ? matrixOf(m).e : null);
       at25.auroraSy && Number(at25.auroraSy) > 0, `--sy=${at25.auroraSy}`);
 
     // Reveals must actually settle.
+    // Landing on one section is no longer enough to reveal every `.feat`:
+    // three of them live in Booking, far below Features, so the old
+    // "scroll #features into the middle" step skipped them and reported them
+    // stuck at opacity 0. Walk the page the way a reader would instead.
     const settled = await page.evaluate(async () => {
-      document.getElementById('features').scrollIntoView({ behavior: 'instant', block: 'center' });
+      const max = document.documentElement.scrollHeight;
+      for (let y = 0; y <= max; y += 500) {
+        window.scrollTo({ top: y, behavior: 'instant' });
+        await new Promise((r) => setTimeout(r, 50));
+      }
       await new Promise((r) => setTimeout(r, 1800));
       const cards = Array.from(document.querySelectorAll('.feat'));
       return {
@@ -212,6 +220,9 @@ const translateX = (m) => (matrixOf(m) ? matrixOf(m).e : null);
       settled.transforms.every((t) => t === 'none'), settled.transforms.join(' | '));
     check('the section heading reveals too', settled.headOpacity === 1, String(settled.headOpacity));
 
+    await page.evaluate(() => document.getElementById('features')
+      .scrollIntoView({ behavior: 'instant', block: 'center' }));
+    await new Promise((r) => setTimeout(r, 500));
     await page.screenshot({ path: path.join(OUT, 'scrolled-features.png') });
 
     // Nothing may be left invisible anywhere on the page after a full pass.
