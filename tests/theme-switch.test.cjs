@@ -323,28 +323,30 @@ const isLight = (rgb) => {
     r.worst.slice(0, 3).forEach((w) => console.log(`      ${w.ratio}:1  ${w.sel}  "${w.text}"  fg=${w.fg} bg=${w.bg}`));
   });
 
-  // =============================================== 5. sign-in portal stays dark
-  console.log('\n=== 5. SIGN-IN PORTAL STAYS DARK IN BOTH THEMES ===');
-  {
+  // =============================================== 5. sign-in screen keeps its own colours
+  // The sign-in screen is a fixed split: dark product showcase on the left,
+  // white sign-in card on the right. It is a branded screen, not part of the
+  // themed app shell, so it must look the same whichever theme is stored.
+  console.log('\n=== 5. SIGN-IN SPLIT KEEPS ITS OWN COLOURS IN BOTH THEMES ===');
+  for (const theme of ['light', 'dark']) {
     const pctx = await browser.createBrowserContext();
     const pp = await pctx.newPage();
     await pp.setCacheEnabled(false);
-    await pp.evaluateOnNewDocument(() => localStorage.setItem('millennium-theme', 'light'));
+    await pp.evaluateOnNewDocument((t) => localStorage.setItem('millennium-theme', t), theme);
     await pp.goto(APP, { waitUntil: 'networkidle0' });
     await sleep(400);
     const portal = await pp.evaluate(() => {
-      const ov = document.getElementById('authPortalOverlay');
-      const cs = getComputedStyle(ov);
+      const panel = document.querySelector('.auth-showcase-panel');
       const card = document.querySelector('.auth-portal-card');
       return {
-        overlay: cs.backgroundColor,
+        panel: panel ? getComputedStyle(panel).backgroundColor : null,
         card: card ? getComputedStyle(card).backgroundColor : null,
         signInBtnVisible: !!document.getElementById('loginSubmitBtn')?.offsetParent,
       };
     });
-    check('portal overlay is still dark in light theme', !isLight(portal.overlay), portal.overlay);
-    check('portal card is still dark', portal.card ? !isLight(portal.card) : false, portal.card);
-    check('sign-in form is still usable', portal.signInBtnVisible === true);
+    check(`showcase panel stays dark in ${theme} theme`, portal.panel ? !isLight(portal.panel) : false, portal.panel);
+    check(`sign-in card stays light in ${theme} theme`, portal.card ? isLight(portal.card) : false, portal.card);
+    check(`sign-in form is still usable in ${theme} theme`, portal.signInBtnVisible === true);
     await pctx.close();
   }
 

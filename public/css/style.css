@@ -16123,3 +16123,2190 @@ html:not([data-theme="dark"]) .dash-empty {
   .dash-links { grid-template-columns: minmax(0, 1fr); }
   .hero-quick-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ==========================================================================
+   SIGN-IN SCREEN — split layout (dark showcase / light sign-in card)
+   ==========================================================================
+   Replaces the old photographic full-bleed portal. Everything is scoped under
+   `.lg-screen` (the class on the overlay) so none of it can leak into the app
+   shell, and so it outranks the older single-class `.auth-*` rules that are
+   still used by the register card.
+   ========================================================================== */
+
+.auth-portal-overlay.lg-screen {
+  display: block;
+  padding: 0;
+  background: #eef1f8;
+  background-image: none;
+  background-attachment: scroll;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.lg-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1.06fr) minmax(0, 0.94fr);
+  width: 100%;
+  min-height: 100vh;
+}
+
+/* ---- LEFT: showcase ---------------------------------------------------- */
+.lg-screen .lg-left {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: auto;
+  max-width: none;
+  height: auto;
+  min-height: 100%;
+  padding: 34px 46px 30px;
+  box-sizing: border-box;
+  background-color: #0a1020;
+  background-image:
+    radial-gradient(circle at 10% 4%, rgba(34, 211, 238, 0.16), transparent 42%),
+    radial-gradient(circle at 82% 88%, rgba(124, 58, 237, 0.20), transparent 46%),
+    linear-gradient(rgba(148, 163, 184, 0.075) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.075) 1px, transparent 1px);
+  background-size: auto, auto, 46px 46px, 46px 46px;
+  overflow: hidden;
+  animation: none;
+}
+
+.lg-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lg-brand-logo {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  box-shadow: 0 0 20px rgba(34, 211, 238, 0.16);
+}
+
+.lg-brand-logo img {
+  width: 23px;
+  height: 23px;
+  object-fit: contain;
+  display: block;
+}
+
+.lg-brand-line {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+/* The wordmark is the app's own .millennium-word — Cinzel with the
+   brushed-silver gradient — only the size is tuned for this header. The panel
+   is always dark, so the bright gradient is pinned here even when the app
+   itself is in light mode (where .millennium-word turns charcoal). */
+.lg-screen .lg-wordmark,
+.lg-screen .lg-monitor-word {
+  background: linear-gradient(90deg,
+    #737373 0%,
+    #9c9c9c 10%,
+    #dbdbdb 22%,
+    #f2f2f2 30%,
+    #d8d8d8 38%,
+    #787878 58%,
+    #999999 67%,
+    #c4c4c4 78%,
+    #9b9b9b 89%,
+    #737373 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.lg-screen .lg-wordmark {
+  font-size: 1.16rem;
+  letter-spacing: 0.06em;
+}
+
+.lg-screen .smartboard-badge {
+  display: inline-block;
+  font-size: 0.58rem;
+  padding: 2px 6px;
+  letter-spacing: 0.13em;
+}
+
+.lg-brand-text small {
+  display: block;
+  margin-top: 3px;
+  font-size: 0.72rem;
+  color: #8ea0bd;
+  letter-spacing: 0.01em;
+}
+
+.lg-headline {
+  margin: 4px 0 0;
+  font-family: 'Outfit', sans-serif;
+  font-size: clamp(1.7rem, 2.5vw, 2.35rem);
+  line-height: 1.16;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #ffffff;
+  max-width: 22ch;
+}
+
+.lg-grad {
+  background: linear-gradient(92deg, #22d3ee 0%, #38bdf8 45%, #818cf8 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.lg-sub {
+  margin: 0;
+  max-width: 44ch;
+  font-size: 0.87rem;
+  line-height: 1.6;
+  color: #9aa9c2;
+}
+
+/* ---- Monitor mock-up ---- */
+.lg-monitor {
+  flex: 1 1 auto;
+  margin: 6px auto 0;
+  width: min(100%, 500px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.lg-monitor-screen {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  border: 3px solid #131c2c;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 50% 125%, rgba(56, 189, 248, 0.12), transparent 62%),
+    linear-gradient(160deg, #0d1420 0%, #05070d 55%, #070c15 100%);
+  box-shadow:
+    0 30px 60px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(148, 163, 184, 0.08),
+    inset 0 0 70px rgba(0, 0, 0, 0.9);
+}
+
+.lg-monitor-screen::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, rgba(255, 255, 255, 0.06) 0%, transparent 42%);
+  pointer-events: none;
+}
+
+.lg-screen .lg-monitor-word {
+  font-size: clamp(1.3rem, 2.9vw, 2.35rem);
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-indent: 0.18em;
+  line-height: 1.1;
+  text-align: center;
+  filter: drop-shadow(0 0 26px rgba(148, 163, 184, 0.4));
+}
+
+.lg-monitor-word::after {
+  content: '';
+  display: block;
+  height: 1px;
+  margin-top: 14px;
+  background: linear-gradient(90deg, transparent, rgba(56, 189, 248, 0.85), transparent);
+}
+
+.lg-monitor-stand {
+  width: 118px;
+  height: 26px;
+  background: linear-gradient(180deg, #121b2a, #0a0f19);
+  clip-path: polygon(22% 0, 78% 0, 100% 100%, 0 100%);
+}
+
+.lg-monitor-base {
+  width: 210px;
+  height: 7px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #16202f, #0a0f19);
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.5);
+}
+
+/* ---- Feature pills ---- */
+.lg-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: auto;
+  padding-top: 4px;
+}
+
+.lg-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(255, 255, 255, 0.035);
+  color: #b9c6da;
+  font-size: 0.76rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.lg-tag svg {
+  flex-shrink: 0;
+  color: #38bdf8;
+}
+
+/* ---- RIGHT: sign-in card ---------------------------------------------- */
+.lg-right {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 40px 34px;
+  overflow-y: auto;
+  background: linear-gradient(180deg, #f5f6fb 0%, #eef0f8 100%);
+}
+
+.lg-screen .auth-portal-card {
+  width: min(432px, 100%);
+  max-height: none;
+  align-self: center;
+  align-items: stretch;
+  margin: auto 0;
+  padding: 28px 28px 22px;
+  border: 1px solid #ececf4;
+  border-radius: 18px;
+  background: #ffffff;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: 0 20px 55px rgba(23, 37, 84, 0.10);
+  overflow: visible;
+  animation: cardFadeIn 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.lg-screen .auth-welcome-heading {
+  margin: 0 0 6px;
+  font-size: 1.65rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #0f172a;
+  text-align: left;
+}
+
+.lg-screen .auth-welcome-sub {
+  margin: 0 0 16px;
+  font-size: 0.79rem;
+  line-height: 1.55;
+  color: #64748b;
+  text-align: left;
+}
+
+/* Role tabs — segmented control */
+.lg-screen .auth-role-tabs {
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 16px;
+  border: 1px solid #e9ebf3;
+  border-radius: 10px;
+  background: #f2f3f9;
+}
+
+.lg-screen .auth-role-tab {
+  padding: 8px 6px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #6b7691;
+  font-size: 0.77rem;
+  font-weight: 700;
+  transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.lg-screen .auth-role-tab svg {
+  width: 13px;
+  height: 13px;
+}
+
+.lg-screen .auth-role-tab:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.75);
+  color: #334155;
+}
+
+.lg-screen .auth-role-tab.active {
+  background: #ffffff;
+  color: #111827;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.14);
+}
+
+/* Fields */
+.lg-screen .auth-field-group {
+  gap: 5px;
+  margin-bottom: 12px;
+}
+
+.lg-screen .auth-field-label {
+  font-size: 0.73rem;
+  font-weight: 700;
+  color: #3f4a60;
+}
+
+.lg-screen .auth-field-icon {
+  left: 12px;
+  color: #94a3b8;
+}
+
+.lg-screen .auth-field-input {
+  height: 42px;
+  padding: 0 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fbfcfe;
+  color: #0f172a;
+  font-size: 0.84rem;
+  box-shadow: none;
+}
+
+.lg-screen .auth-field-wrap .auth-field-input {
+  padding-left: 38px;
+  padding-right: 40px;
+}
+
+.lg-screen .auth-field-input::placeholder {
+  color: #a8b3c5;
+}
+
+.lg-screen .auth-field-input:focus {
+  border-color: #6366f1;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.13);
+}
+
+.lg-screen .auth-field-select {
+  height: 42px;
+  padding: 0 36px 0 14px;
+}
+
+.lg-screen .auth-field-select option {
+  background: #ffffff;
+  color: #0f172a;
+}
+
+.lg-screen .auth-eye-btn {
+  right: 10px;
+  color: #94a3b8;
+}
+
+.lg-screen .auth-eye-btn:hover {
+  color: #4f46e5;
+}
+
+/* Remember me / forgot */
+.lg-screen .auth-options-row {
+  margin: 2px 0 16px;
+}
+
+.lg-screen .auth-checkbox-label {
+  font-size: 0.76rem;
+  color: #5b6779;
+}
+
+.lg-screen .auth-checkbox-custom {
+  width: 15px;
+  height: 15px;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 4px;
+  background: #ffffff;
+}
+
+.lg-screen .auth-checkbox:checked + .auth-checkbox-custom {
+  background: linear-gradient(135deg, #0ea5a4, #4f46e5);
+  border-color: transparent;
+}
+
+.lg-screen .auth-forgot-link {
+  color: #4f46e5;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.lg-screen .auth-forgot-link:hover {
+  color: #4338ca;
+}
+
+/* Primary button */
+.lg-screen .auth-signin-btn {
+  height: 46px;
+  padding: 0 18px;
+  border-radius: 10px;
+  background: linear-gradient(90deg, #0f9b9b 0%, #2563eb 55%, #4f46e5 100%);
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.24);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.lg-screen .auth-signin-btn::before {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent 55%);
+}
+
+.lg-screen .auth-signin-btn:hover {
+  transform: translateY(-1px);
+  filter: none;
+  box-shadow: 0 14px 30px rgba(37, 99, 235, 0.32);
+}
+
+/* Divider + demo autofill */
+.lg-screen .auth-divider {
+  margin: 14px 0 10px;
+  color: #8b96a9;
+  font-size: 0.73rem;
+  font-weight: 600;
+}
+
+.lg-screen .auth-divider::before,
+.lg-screen .auth-divider::after {
+  background: #e8ebf2;
+}
+
+.lg-screen .auth-demo-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 0;
+}
+
+.lg-screen .auth-demo-btn {
+  width: 100%;
+  height: 42px;
+  justify-content: center;
+  padding: 0 14px;
+  border: 1px solid #d8dcea;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #4338ca;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.lg-screen .auth-demo-btn:hover {
+  background: #f6f7fd;
+  border-color: #c3c9e4;
+  color: #3730a3;
+}
+
+/* Links + messages */
+.lg-screen .auth-register-link {
+  margin: 14px 0 0;
+  font-size: 0.78rem;
+  color: #64748b;
+}
+
+.lg-screen .auth-register-link a {
+  color: #4f46e5;
+}
+
+.lg-screen .auth-register-link a:hover {
+  color: #4338ca;
+}
+
+.lg-screen .auth-guide-link {
+  margin-top: 6px;
+  font-size: 0.74rem;
+  color: #94a3b8;
+}
+
+.lg-screen .auth-note {
+  font-size: 0.72rem;
+  color: #8b96a9;
+}
+
+.lg-screen .auth-error-msg {
+  border: 1px solid #fecaca;
+  border-radius: 9px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 0.78rem;
+}
+
+.lg-screen .auth-success-msg {
+  border: 1px solid #a7f3d0;
+  border-radius: 9px;
+  background: #ecfdf5;
+  color: #047857;
+  font-size: 0.78rem;
+}
+
+.lg-screen .auth-form-row-2 {
+  gap: 10px;
+}
+
+/* ---- Responsive -------------------------------------------------------- */
+@media (max-width: 900px) {
+  .lg-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .lg-screen .lg-left {
+    align-items: flex-start;
+    text-align: left;
+    min-height: auto;
+    gap: 12px;
+    padding: 18px 20px 22px;
+  }
+
+  .lg-screen .lg-sub,
+  .lg-screen .lg-monitor,
+  .lg-screen .lg-tags {
+    display: none;
+  }
+
+  .lg-headline {
+    font-size: 1.35rem;
+    max-width: none;
+  }
+
+  .lg-right {
+    justify-content: flex-start;
+    padding: 22px 16px 32px;
+  }
+
+  .lg-screen .auth-portal-card {
+    width: 100%;
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 22px 18px 18px;
+  }
+
+  .lg-screen .auth-form-row-2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 420px) {
+  .lg-screen .lg-wordmark {
+    font-size: 0.94rem;
+  }
+
+  .lg-screen .auth-role-tab {
+    font-size: 0.72rem;
+    gap: 4px;
+  }
+
+  .lg-screen .auth-role-tab svg {
+    display: none;
+  }
+}
+
+/* ==========================================================================
+   SIGN-IN SCREEN — polish layer
+   Depth, focus states and hover affordances on top of the split layout above.
+   ========================================================================== */
+
+/* ---- Left panel: vignette so the pills and copy stay legible ---- */
+.lg-screen .lg-left::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(6, 10, 22, 0) 72%, rgba(6, 10, 22, 0.42) 100%);
+}
+
+.lg-screen .lg-left > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Brand block */
+.lg-brand-logo {
+  position: relative;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.lg-brand-logo::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  pointer-events: none;
+}
+
+.lg-brand:hover .lg-brand-logo {
+  border-color: rgba(56, 189, 248, 0.6);
+  box-shadow: 0 0 26px rgba(34, 211, 238, 0.28);
+}
+
+/* Monitor: soft light pool behind the panel, plus a screen reflection */
+.lg-screen .lg-monitor::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 44%;
+  width: 82%;
+  height: 66%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center,
+    rgba(56, 189, 248, 0.20) 0%,
+    rgba(124, 58, 237, 0.14) 45%,
+    transparent 72%);
+  filter: blur(34px);
+  pointer-events: none;
+}
+
+.lg-screen .lg-monitor-screen {
+  z-index: 1;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s ease;
+}
+
+.lg-screen .lg-monitor:hover .lg-monitor-screen {
+  transform: translateY(-3px);
+  box-shadow:
+    0 36px 70px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(56, 189, 248, 0.18),
+    inset 0 0 70px rgba(0, 0, 0, 0.9);
+}
+
+.lg-screen .lg-monitor-stand,
+.lg-screen .lg-monitor-base {
+  z-index: 1;
+}
+
+/* Feature pills */
+.lg-tag {
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease, color 0.18s ease;
+}
+
+.lg-tag:hover {
+  transform: translateY(-2px);
+  border-color: rgba(56, 189, 248, 0.45);
+  background: rgba(56, 189, 248, 0.08);
+  color: #e6edf8;
+}
+
+/* ---- Right panel: light wash + card depth ---- */
+.lg-right {
+  background:
+    radial-gradient(circle at 82% 6%, rgba(99, 102, 241, 0.10), transparent 44%),
+    radial-gradient(circle at 8% 94%, rgba(13, 148, 136, 0.08), transparent 46%),
+    linear-gradient(180deg, #f7f8fc 0%, #eceef7 100%);
+}
+
+.lg-screen .auth-portal-card {
+  box-shadow:
+    0 1px 2px rgba(23, 37, 84, 0.05),
+    0 14px 28px rgba(23, 37, 84, 0.07),
+    0 32px 64px -12px rgba(23, 37, 84, 0.16);
+}
+
+/* Inner top highlight instead of a hard accent bar — reads as a lit edge. */
+.lg-screen .auth-portal-card {
+  box-shadow:
+    inset 0 1px 0 #ffffff,
+    0 1px 2px rgba(23, 37, 84, 0.05),
+    0 14px 28px rgba(23, 37, 84, 0.07),
+    0 32px 64px -12px rgba(23, 37, 84, 0.16);
+}
+
+/* ---- Fields: the icon picks up the focus colour with the input ---- */
+.lg-screen .auth-field-icon {
+  transition: color 0.18s ease;
+}
+
+.lg-screen .auth-field-wrap:focus-within .auth-field-icon {
+  color: #4f46e5;
+}
+
+.lg-screen .auth-field-input:hover:not(:focus) {
+  border-color: #d3d9e6;
+  background: #ffffff;
+}
+
+/* ---- Segmented tabs: active tab gets a light top highlight ---- */
+.lg-screen .auth-role-tab.active {
+  background-image: linear-gradient(180deg, #ffffff 0%, #f7f8fd 100%);
+}
+
+/* ---- Primary button: the arrow eases forward on hover ---- */
+.lg-screen .auth-signin-btn svg {
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.lg-screen .auth-signin-btn:hover svg {
+  transform: translateX(3px);
+}
+
+.lg-screen .auth-signin-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.26);
+}
+
+.lg-screen .auth-signin-btn:focus-visible {
+  outline: 2px solid #4f46e5;
+  outline-offset: 2px;
+}
+
+.lg-screen .auth-demo-btn:focus-visible,
+.lg-screen .auth-role-tab:focus-visible {
+  outline: 2px solid #4f46e5;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lg-screen .lg-monitor:hover .lg-monitor-screen,
+  .lg-tag:hover,
+  .lg-screen .auth-signin-btn:hover svg {
+    transform: none;
+  }
+}
+
+/* ==========================================================================
+   SIGN-IN SCREEN — v3 (showcase panel with product stage + dense footer)
+   ==========================================================================
+   Supersedes the spacing/geometry of the v1 block above; the brand rules
+   (.millennium-word / .smartboard-badge) are untouched on purpose.
+   ========================================================================== */
+
+/* ---- Left panel shell -------------------------------------------------- */
+.lg-screen .lg-left {
+  gap: 13px;
+  padding: 26px 40px 16px;
+  overflow: hidden auto;
+  background-color: #070c18;
+  background-image:
+    radial-gradient(ellipse 70% 50% at 50% 62%, rgba(56, 189, 248, 0.10), transparent 70%),
+    radial-gradient(ellipse 60% 45% at 88% 6%, rgba(79, 70, 229, 0.16), transparent 70%),
+    linear-gradient(rgba(148, 163, 184, 0.042) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.042) 1px, transparent 1px);
+  background-size: auto, auto, 46px 46px, 46px 46px;
+}
+
+.lg-screen .lg-left::after {
+  background: linear-gradient(180deg, rgba(6, 10, 22, 0) 82%, rgba(6, 10, 22, 0.35) 100%);
+}
+
+/* ---- Eyebrow ----------------------------------------------------------- */
+.lg-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 6px 0 0;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+  color: #67e8f9;
+}
+
+.lg-eyebrow span {
+  display: block;
+  width: 18px;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(34, 211, 238, 0), #22d3ee);
+}
+
+/* ---- Headline ---------------------------------------------------------- */
+.lg-screen .lg-headline {
+  margin: 0;
+  font-size: clamp(1.85rem, 2.7vw, 2.5rem);
+  line-height: 1.12;
+  letter-spacing: -0.025em;
+}
+
+.lg-screen .lg-sub {
+  margin: 0;
+  max-width: 40ch;
+  font-size: 0.84rem;
+  line-height: 1.6;
+  color: #93a2bb;
+}
+
+/* ---- Product stage ----------------------------------------------------- */
+.lg-stage {
+  position: relative;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 6px 0 2px;
+  min-height: 0;
+}
+
+.lg-stage::before,
+.lg-stage::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.lg-stage::before {
+  width: 88%;
+  height: 76%;
+  border: 1px solid rgba(56, 189, 248, 0.13);
+}
+
+.lg-stage::after {
+  width: 104%;
+  height: 90%;
+  border: 1px solid rgba(99, 102, 241, 0.10);
+}
+
+.lg-stage-halo {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 74%;
+  height: 74%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center,
+    rgba(56, 189, 248, 0.22) 0%,
+    rgba(99, 102, 241, 0.16) 42%,
+    transparent 70%);
+  filter: blur(42px);
+  pointer-events: none;
+}
+
+.lg-screen .lg-monitor {
+  position: relative;
+  z-index: 1;
+  flex: 0 1 auto;
+  width: min(100%, 468px);
+  margin: 0;
+}
+
+/* The screen itself is near-black, whatever the surrounding glow does. */
+.lg-screen .lg-monitor-screen {
+  border: 3px solid #0e1727;
+  border-radius: 11px;
+  background:
+    radial-gradient(ellipse 60% 50% at 50% 44%, rgba(37, 99, 235, 0.16), transparent 72%),
+    #03050a;
+  box-shadow:
+    0 34px 64px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(148, 163, 184, 0.10),
+    inset 0 0 90px rgba(0, 0, 0, 0.95);
+}
+
+.lg-screen-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.lg-screen-tagline {
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: #55637d;
+  text-indent: 0.34em;
+}
+
+/* On-screen toolbar */
+.lg-screen-toolbar {
+  position: absolute;
+  left: 50%;
+  bottom: 11px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+  padding: 5px 7px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.lg-tool {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #7d8ba3;
+}
+
+/* ---- Shine loop on the screen wordmark ---------------------------------- */
+/* A bright band travels across the brushed-silver gradient and then rests,
+   so the loop reads as a slow polish rather than a strobe. */
+@keyframes lgWordShine {
+  0%,
+  12% {
+    background-position: 200% 50%, 0 0;
+  }
+  62%,
+  100% {
+    background-position: -100% 50%, 0 0;
+  }
+}
+
+.lg-screen .lg-monitor-word {
+  /* Two clipped layers: the brand's own brushed-silver gradient underneath,
+     plus a narrow white glint that sweeps across it. The base gradient is the
+     same one .millennium-word uses, so the brand colour is unchanged. */
+  background-image:
+    linear-gradient(100deg,
+      rgba(255, 255, 255, 0) 40%,
+      rgba(255, 255, 255, 0.92) 50%,
+      rgba(255, 255, 255, 0) 60%),
+    linear-gradient(90deg,
+      #51565c 0%,
+      #6d7278 10%,
+      #999ea4 22%,
+      #a9aeb4 30%,
+      #979ba1 38%,
+      #545961 58%,
+      #6b7077 67%,
+      #8b9096 78%,
+      #6d7278 89%,
+      #51565c 100%);
+  background-size: 220% 100%, 100% 100%;
+  background-repeat: no-repeat, no-repeat;
+  background-position: 200% 50%, 0 0;
+  animation: lgWordShine 7s cubic-bezier(0.42, 0, 0.58, 1) infinite;
+  filter: drop-shadow(0 0 26px rgba(148, 163, 184, 0.35));
+}
+
+/* ---- Floating chips ---------------------------------------------------- */
+.lg-chip {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.20);
+  border-radius: 10px;
+  background: rgba(10, 16, 30, 0.86);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #dbe3f0;
+  white-space: nowrap;
+}
+
+.lg-chip-cloud {
+  left: 6px;
+  top: 20%;
+}
+
+.lg-chip-status {
+  right: 2px;
+  bottom: 15%;
+}
+
+.lg-chip-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #22d3ee;
+  box-shadow: 0 0 0 4px rgba(34, 211, 238, 0.16);
+}
+
+.lg-chip-ico {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  background: rgba(34, 211, 238, 0.12);
+  color: #67e8f9;
+}
+
+.lg-chip-text b {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #e8eefb;
+}
+
+.lg-chip-text small {
+  display: block;
+  font-size: 0.66rem;
+  color: #8ea0bd;
+}
+
+/* ---- Feature columns --------------------------------------------------- */
+.lg-feats {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin: 0;
+  padding: 14px 0 0;
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.lg-feats li {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.lg-feat-ico {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 3px;
+  border-radius: 8px;
+  background: rgba(56, 189, 248, 0.10);
+  border: 1px solid rgba(56, 189, 248, 0.18);
+  color: #38bdf8;
+}
+
+.lg-feats b {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #dbe4f2;
+}
+
+.lg-feats small {
+  font-size: 0.68rem;
+  line-height: 1.45;
+  color: #8496b1;
+}
+
+/* ---- Panel footer ------------------------------------------------------ */
+.lg-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  font-size: 0.66rem;
+  color: #5f6f88;
+}
+
+.lg-foot-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #7f8ea6;
+}
+
+.lg-foot-status i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.16);
+}
+
+/* ---- Right column: support bar, card, legal footer --------------------- */
+.lg-right {
+  justify-content: flex-start;
+  padding: 22px 36px 16px;
+  background: linear-gradient(180deg, #ffffff 0%, #f7f8fd 100%);
+}
+
+.lg-support {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  font-size: 0.74rem;
+  color: #8b96a9;
+}
+
+.lg-support a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #4f46e5;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.lg-support a:hover {
+  color: #3730a3;
+}
+
+.lg-right-main {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 10px 0;
+}
+
+.lg-screen .auth-portal-card {
+  width: min(452px, 100%);
+}
+
+.lg-role-label {
+  margin: 0 0 7px;
+  font-size: 0.73rem;
+  font-weight: 700;
+  color: #3f4a60;
+}
+
+/* "New here?" card linking to the landing page */
+.lg-newhere {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid #e6e9f2;
+  border-radius: 12px;
+  background: #f8f9fd;
+  text-decoration: none;
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+
+.lg-newhere:hover {
+  border-color: #c9cfe6;
+  background: #f3f5fc;
+}
+
+.lg-newhere-ico {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: rgba(79, 70, 229, 0.10);
+  color: #4f46e5;
+}
+
+.lg-newhere-text b {
+  display: block;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #1f2a44;
+}
+
+.lg-newhere-text small {
+  display: block;
+  font-size: 0.7rem;
+  color: #77839a;
+}
+
+.lg-newhere-arrow {
+  margin-left: auto;
+  color: #4f46e5;
+  transition: transform 0.18s ease;
+}
+
+.lg-newhere:hover .lg-newhere-arrow {
+  transform: translateX(3px);
+}
+
+.lg-right-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.68rem;
+  color: #8b96a9;
+}
+
+.lg-foot-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lg-foot-links {
+  display: flex;
+  gap: 14px;
+}
+
+.lg-foot-links a {
+  color: #8b96a9;
+  text-decoration: none;
+}
+
+.lg-foot-links a:hover {
+  color: #4f46e5;
+}
+
+/* ---- Responsive -------------------------------------------------------- */
+@media (max-width: 1180px) {
+  .lg-chip-cloud {
+    left: 0;
+  }
+
+  .lg-chip-status {
+    right: 0;
+  }
+}
+
+@media (max-width: 900px) {
+  .lg-screen .lg-left {
+    gap: 10px;
+    padding: 16px 20px 18px;
+  }
+
+  .lg-screen .lg-stage,
+  .lg-screen .lg-feats,
+  .lg-screen .lg-foot {
+    display: none;
+  }
+
+  .lg-screen .lg-headline {
+    font-size: 1.5rem;
+  }
+
+  .lg-screen .lg-sub {
+    display: none;
+  }
+
+  .lg-right {
+    padding: 14px 16px 16px;
+  }
+
+  .lg-support {
+    font-size: 0.7rem;
+  }
+
+  .lg-right-foot {
+    padding-top: 6px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lg-screen .lg-monitor-word {
+    animation: none;
+    background-position: 50% 50%;
+  }
+}
+
+/* ==========================================================================
+   SIGN-IN SCREEN — the form column as a right-hand rail
+   ==========================================================================
+   The form is no longer a floating card: the right column is a full-height
+   rail with a hairline edge, and the form fills it. Support link and legal
+   footer live inside the rail, above and below the form.
+   ========================================================================== */
+
+.lg-shell {
+  grid-template-columns: minmax(0, 1fr) clamp(392px, 30vw, 460px);
+}
+
+.lg-right {
+  padding: 0;
+  background: #ffffff;
+  border-left: 1px solid #e9ebf3;
+}
+
+.lg-support {
+  padding: 18px 30px 0;
+}
+
+.lg-right-main {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: stretch;
+  width: 100%;
+  min-height: 0;
+  padding: 10px 0;
+  overflow-y: auto;
+}
+
+.lg-screen .auth-portal-card {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 18px 30px 20px;
+  border: 0;
+  border-radius: 0;
+  background: #ffffff;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.lg-right-foot {
+  padding: 0 30px 18px;
+}
+
+/* The rail is a plain sheet, so the divider under the tabs and the fields
+   need slightly tighter rhythm than the floating card had. */
+.lg-screen .auth-role-tabs {
+  margin-bottom: 18px;
+}
+
+@media (max-width: 1100px) {
+  .lg-shell {
+    grid-template-columns: minmax(0, 1fr) clamp(360px, 38vw, 420px);
+  }
+
+  .lg-support,
+  .lg-right-foot {
+    padding-left: 22px;
+    padding-right: 22px;
+  }
+
+  .lg-screen .auth-portal-card {
+    padding-left: 22px;
+    padding-right: 22px;
+  }
+}
+
+@media (max-width: 900px) {
+  .lg-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .lg-right {
+    border-left: 0;
+    border-top: 1px solid #e9ebf3;
+  }
+
+  .lg-right-main {
+    justify-content: flex-start;
+    padding: 6px 0 0;
+    overflow: visible;
+  }
+
+  .lg-screen .auth-portal-card {
+    padding: 14px 18px 16px;
+  }
+
+  .lg-support,
+  .lg-right-foot {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+}
+
+/* ==========================================================================
+   SIGN-IN SCREEN — v4 (no product mock-up; copy-led panel)
+   ==========================================================================
+   The TV stage is gone. The left panel is now brand / hero copy / feature
+   list / footer, with the hero centred in the leftover height. Brand type and
+   colours are untouched.
+   ========================================================================== */
+
+.lg-screen .lg-left {
+  justify-content: flex-start;
+  gap: 0;
+}
+
+.lg-hero {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 14px;
+  min-height: 0;
+  padding: 18px 0;
+}
+
+.lg-screen .lg-hero .lg-eyebrow {
+  margin: 0;
+}
+
+.lg-screen .lg-hero .lg-headline {
+  font-size: clamp(2rem, 2.9vw, 2.9rem);
+  max-width: 18ch;
+}
+
+.lg-screen .lg-hero .lg-sub {
+  max-width: 42ch;
+}
+
+/* Feature list — three rows, icon on the left */
+.lg-screen .lg-feats {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding: 16px 0 0;
+}
+
+.lg-screen .lg-feats li {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  column-gap: 12px;
+  row-gap: 1px;
+  align-items: center;
+}
+
+.lg-screen .lg-feat-ico {
+  grid-row: 1 / span 2;
+  margin-bottom: 0;
+}
+
+.lg-screen .lg-feats b {
+  font-size: 0.78rem;
+}
+
+.lg-screen .lg-feats small {
+  font-size: 0.7rem;
+}
+
+@media (max-width: 900px) {
+  .lg-screen .lg-hero {
+    padding: 6px 0 2px;
+  }
+
+  .lg-screen .lg-hero .lg-headline {
+    font-size: 1.55rem;
+    max-width: none;
+  }
+
+  /* Keep the phone header short: the form should start above the fold. */
+  .lg-screen .lg-feats {
+    display: none;
+  }
+}
+
+/* Group the hero copy and the feature list so they centre as one block
+   between the brand (top) and the footer (bottom) instead of leaving a gap
+   in the middle of the panel. */
+.lg-body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 30px;
+  min-height: 0;
+  padding: 20px 0;
+}
+
+.lg-screen .lg-body .lg-hero {
+  flex: 0 0 auto;
+  padding: 0;
+}
+
+@media (max-width: 900px) {
+  .lg-screen .lg-body {
+    gap: 0;
+    padding: 6px 0 2px;
+  }
+}
+
+/* ==========================================================================
+   SIGN-IN SCREEN — v5 (vertical rhythm + rebuilt panel background)
+   ==========================================================================
+   Fixes two things: the dead band of empty space in the showcase panel, and
+   the patchy background (a masked grid layer instead of stacked glows plus a
+   hard bottom fade).
+   ========================================================================== */
+
+/* ---- Panel background: one clean stack, no banding ---- */
+.lg-screen .lg-left {
+  padding: clamp(16px, 2.6vh, 28px) clamp(28px, 3vw, 44px) clamp(12px, 2vh, 20px);
+  background-color: #070b15;
+  background-image:
+    radial-gradient(120% 85% at 6% -10%, rgba(56, 189, 248, 0.10) 0%, transparent 58%),
+    radial-gradient(110% 90% at 96% 108%, rgba(79, 70, 229, 0.13) 0%, transparent 60%),
+    linear-gradient(180deg, #0a1120 0%, #070b15 45%, #05080f 100%);
+  background-size: auto;
+  overflow: hidden;
+}
+
+/* Grid drawn on its own layer and faded out radially, so it never shows a
+   hard edge or a horizontal seam. */
+.lg-screen .lg-left::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.055) 1px, transparent 1px);
+  background-size: 46px 46px;
+  -webkit-mask-image: radial-gradient(ellipse 95% 85% at 22% 18%, #000 0%, rgba(0, 0, 0, 0.35) 55%, transparent 85%);
+  mask-image: radial-gradient(ellipse 95% 85% at 22% 18%, #000 0%, rgba(0, 0, 0, 0.35) 55%, transparent 85%);
+}
+
+/* The old bottom fade is what produced the visible band. */
+.lg-screen .lg-left::after {
+  display: none;
+}
+
+/* ---- Vertical rhythm: content fills the panel evenly ---- */
+.lg-screen .lg-left {
+  gap: 0;
+}
+
+.lg-body {
+  justify-content: space-evenly;
+  gap: clamp(12px, 2vh, 22px);
+  padding: clamp(8px, 1.6vh, 20px) 0;
+}
+
+.lg-hero {
+  gap: clamp(8px, 1.5vh, 15px);
+  padding: 0;
+}
+
+.lg-screen .lg-hero .lg-headline {
+  font-size: clamp(1.7rem, min(3vw, 4.6vh), 3rem);
+  line-height: 1.1;
+  max-width: 19ch;
+}
+
+.lg-screen .lg-hero .lg-sub {
+  max-width: 44ch;
+  font-size: 0.85rem;
+}
+
+.lg-screen .lg-feats {
+  gap: clamp(8px, 1.6vh, 15px);
+  padding-top: clamp(10px, 1.8vh, 18px);
+}
+
+.lg-screen .lg-foot {
+  margin-top: clamp(8px, 1.6vh, 16px);
+}
+
+/* Short viewports: drop the second line of each feature so the panel still
+   fits without scrolling. */
+@media (max-height: 720px) {
+  .lg-screen .lg-feats small {
+    display: none;
+  }
+
+  .lg-screen .lg-feat-ico {
+    grid-row: auto;
+  }
+
+  .lg-screen .lg-feats li {
+    grid-template-columns: 24px minmax(0, 1fr);
+    align-items: center;
+  }
+
+  .lg-screen .lg-hero .lg-sub {
+    display: none;
+  }
+}
+
+/* ==========================================================================
+   SIGN-IN SCREEN — v6 (fill the panel, stop the page from growing)
+   ==========================================================================
+   1. The shell is pinned to the viewport, so a tall form can never stretch the
+      showcase panel and push its footer off-screen — each column scrolls
+      inside itself instead.
+   2. The copy block is centred with a fixed gap, and the feature list becomes
+      a divided spec list so the panel reads as composed rather than empty.
+   ========================================================================== */
+
+@media (min-width: 901px) {
+  .lg-shell {
+    height: 100vh;
+    min-height: 0;
+  }
+
+  .lg-screen .lg-left {
+    height: 100%;
+    overflow-y: auto;
+  }
+
+  .lg-right {
+    height: 100%;
+    overflow-y: auto;
+  }
+}
+
+.lg-body {
+  justify-content: center;
+  gap: clamp(22px, 3.4vh, 38px);
+}
+
+.lg-screen .lg-hero .lg-headline {
+  font-size: clamp(1.85rem, min(3.4vw, 5.4vh), 3.4rem);
+  max-width: 17ch;
+}
+
+/* Feature list as a divided spec list */
+.lg-screen .lg-feats {
+  gap: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.lg-screen .lg-feats li {
+  padding: 13px 0;
+}
+
+.lg-screen .lg-feats li:first-child {
+  padding-top: 0;
+}
+
+.lg-screen .lg-feats li:last-child {
+  padding-bottom: 0;
+}
+
+.lg-screen .lg-feats li + li {
+  border-top: 1px solid rgba(148, 163, 184, 0.10);
+}
+
+.lg-screen .lg-feat-ico {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+}
+
+/* Slightly tighter form so it fits a 700px-tall window without scrolling */
+.lg-screen .auth-field-group {
+  margin-bottom: 10px;
+}
+
+.lg-screen .auth-role-tabs {
+  margin-bottom: 14px;
+}
+
+.lg-screen .auth-welcome-sub {
+  margin-bottom: 14px;
+}
+
+.lg-screen .auth-options-row {
+  margin-bottom: 14px;
+}
+
+.lg-screen .lg-newhere {
+  margin-top: 10px;
+}
+
+/* Even margins above and below the centred copy block, and taller feature
+   rows, so the panel reads as a composition instead of a small block floating
+   in a large void. */
+.lg-body {
+  padding: 0;
+  gap: clamp(20px, 3vh, 34px);
+}
+
+.lg-screen .lg-feats li {
+  padding: 15px 0;
+}
+
+.lg-screen .lg-feats b {
+  font-size: 0.8rem;
+}
+
+.lg-screen .lg-feats small {
+  font-size: 0.72rem;
+}
+
+.lg-screen .lg-hero .lg-headline {
+  line-height: 1.08;
+}
+
+/* Short desktop windows (laptops at 125–150% zoom land here): compact the
+   form so the rail still shows its footer without clipping. */
+@media (min-width: 901px) and (max-height: 780px) {
+  .lg-screen .auth-welcome-heading {
+    font-size: 1.4rem;
+    margin-bottom: 4px;
+  }
+
+  .lg-screen .auth-welcome-sub {
+    margin-bottom: 10px;
+    font-size: 0.76rem;
+  }
+
+  .lg-screen .lg-role-label {
+    margin-bottom: 5px;
+  }
+
+  .lg-screen .auth-role-tabs {
+    padding: 3px;
+    margin-bottom: 12px;
+  }
+
+  .lg-screen .auth-role-tab {
+    padding: 6px 5px;
+  }
+
+  .lg-screen .auth-field-group {
+    margin-bottom: 8px;
+  }
+
+  .lg-screen .auth-field-input {
+    height: 40px;
+  }
+
+  .lg-screen .auth-options-row {
+    margin: 0 0 11px;
+  }
+
+  .lg-screen .auth-signin-btn {
+    height: 42px;
+  }
+
+  .lg-screen .auth-divider {
+    margin: 10px 0 8px;
+  }
+
+  .lg-screen .auth-demo-btn {
+    height: 38px;
+  }
+
+  .lg-screen .auth-register-link {
+    margin-top: 10px;
+  }
+
+  .lg-screen .lg-newhere {
+    margin-top: 8px;
+    padding: 8px 12px;
+  }
+
+  .lg-support {
+    padding-top: 12px;
+  }
+
+  .lg-right-foot {
+    padding-bottom: 12px;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Safe centring.
+   `justify-content: center` clips the top of a column that is taller than its
+   box (visible on short laptop windows). Auto margins centre when there is
+   room and collapse to 0 when there is not, so the top stays reachable and the
+   column simply scrolls.
+   -------------------------------------------------------------------------- */
+.lg-right-main {
+  justify-content: flex-start;
+}
+
+.lg-screen .auth-portal-card {
+  margin: auto 0;
+}
+
+.lg-body {
+  justify-content: flex-start;
+}
+
+.lg-body > .lg-hero {
+  margin-top: auto;
+}
+
+/* No auto bottom margin here: the hero and the tiles read as one block sitting
+   just above the panel footer, with the photo carrying the space above. */
+.lg-body > .lg-feats {
+  margin-bottom: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Let the page scroll on very short windows instead of giving each column its
+   own scrollbar. Pinning the shell to 100vh was producing a nested scroll area
+   that cut the bottom of the form on ~560px-tall windows.
+   -------------------------------------------------------------------------- */
+@media (min-width: 901px) {
+  .lg-shell {
+    height: auto;
+    min-height: 100vh;
+  }
+
+  .lg-screen .lg-left {
+    height: auto;
+    min-height: 100%;
+    overflow: hidden;
+  }
+
+  .lg-right {
+    height: auto;
+    min-height: 100%;
+    overflow: visible;
+  }
+
+  .lg-right-main {
+    overflow: visible;
+  }
+}
+
+/* ==========================================================================
+   SIGN-IN SCREEN — v7 (photo-led showcase panel)
+   ==========================================================================
+   The left panel is now a dimmed boardroom still with a wireframe globe, the
+   official Millennium wordmark as the hero, four glass feature tiles and a
+   single-line footer. Brand assets (.millennium-word, brains-logo.svg,
+   millennium-logo.png) are used exactly as supplied.
+   ========================================================================== */
+
+.lg-screen .lg-left {
+  position: relative;
+  background: #04091a;
+  background-image: none;
+  overflow: hidden;
+}
+
+/* the grid layer belonged to the flat design — the photo replaces it */
+.lg-screen .lg-left::before {
+  display: none;
+}
+
+/* NOTE: `.lg-screen .lg-left > *` (defined earlier) pins every child to
+   position:relative, so these three layers must out-rank it or they collapse
+   into a short block at the top of the panel instead of covering it. */
+.lg-screen .lg-scene {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.lg-scene img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 46% 46%;
+  filter: brightness(0.62) saturate(1.1);
+  transform: scale(1.04);
+}
+
+.lg-screen .lg-scene-veil {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    radial-gradient(80% 72% at 94% 8%, rgba(37, 99, 235, 0.16) 0%, transparent 64%),
+    radial-gradient(60% 50% at 4% 2%, rgba(34, 211, 238, 0.08) 0%, transparent 62%),
+    linear-gradient(180deg, rgba(4, 9, 26, 0.52) 0%, rgba(4, 9, 26, 0.76) 48%, rgba(3, 7, 20, 0.94) 100%);
+}
+
+/* Wireframe globe: one sphere plus meridian / latitude ellipses. Kept faint so
+   it reads as a line drawing over the photo, not a solid blue disc. */
+.lg-screen .lg-scene-globe {
+  position: absolute;
+  right: -15%;
+  top: 4%;
+  z-index: 1;
+  width: min(48vw, 600px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 1px solid rgba(96, 165, 250, 0.18);
+  background: radial-gradient(circle at 32% 28%, rgba(56, 189, 248, 0.09) 0%, rgba(37, 99, 235, 0.05) 46%, transparent 72%);
+  opacity: 0.8;
+}
+
+.lg-scene-globe i {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(96, 165, 250, 0.13);
+}
+
+.lg-scene-globe i:nth-child(1) {
+  transform: scaleX(0.42);
+}
+
+.lg-scene-globe i:nth-child(2) {
+  transform: scaleX(0.72);
+}
+
+.lg-scene-globe i:nth-child(3) {
+  inset: 26% 0;
+  border-radius: 50%;
+  transform: scaleY(0.5);
+  border-color: rgba(96, 165, 250, 0.12);
+}
+
+/* ---- Brand header ---- */
+.lg-screen .lg-brand {
+  position: relative;
+  z-index: 2;
+}
+
+.lg-screen .lg-brand-logo {
+  background: rgba(10, 22, 44, 0.55);
+  border-color: rgba(96, 165, 250, 0.42);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* The hero lockup below already carries the "Smartboard Management Portal"
+   line, so the header keeps just logo + wordmark instead of repeating it. */
+.lg-screen .lg-brand-text small {
+  display: none;
+}
+
+.lg-screen .lg-left .lg-body {
+  position: relative;
+  z-index: 2;
+}
+
+/* ---- Hero: official wordmark ---- */
+.lg-screen .lg-hero {
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: auto;
+  margin-bottom: 0;
+}
+
+.lg-hero-mark {
+  display: block;
+  width: min(74%, 400px);
+  height: auto;
+  filter: drop-shadow(0 8px 26px rgba(2, 8, 24, 0.75));
+}
+
+.lg-hero-portal {
+  margin: 2px 0 0;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: #bfd4f5;
+}
+
+.lg-hero-tag {
+  margin: 6px 0 0;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: #a9bcdb;
+  max-width: 34ch;
+}
+
+/* ---- Feature tiles ---- */
+.lg-screen .lg-feats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  margin-top: clamp(16px, 2.6vh, 28px);
+  padding: 0;
+  border-top: 0;
+}
+
+.lg-screen .lg-feats li {
+  display: flex;
+  flex-direction: column;
+  /* reset the old two-column grid rule, which left `align-items:center` behind
+     and centred every icon / title / description inside its tile */
+  align-items: flex-start;
+  justify-content: flex-start;
+  text-align: left;
+  grid-template-columns: none;
+  gap: 4px;
+  padding: 14px 12px 13px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 12px;
+  background: rgba(8, 16, 34, 0.55);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+
+.lg-screen .lg-feats li:hover {
+  border-color: rgba(96, 165, 250, 0.45);
+  background: rgba(12, 24, 48, 0.7);
+  transform: translateY(-2px);
+}
+
+.lg-screen .lg-feats li + li {
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+/* The old list layout stripped the first tile's top padding and the last
+   tile's bottom padding. In a bordered tile grid that pushes tile 1 fourteen
+   pixels above its siblings — pin both back to the shared padding. */
+.lg-screen .lg-feats li:first-child {
+  padding-top: 14px;
+}
+
+.lg-screen .lg-feats li:last-child {
+  padding-bottom: 13px;
+}
+
+.lg-screen .lg-feat-ico {
+  width: 30px;
+  height: 30px;
+  margin-bottom: 4px;
+  border-radius: 9px;
+  background: rgba(37, 99, 235, 0.16);
+  border: 1px solid rgba(96, 165, 250, 0.32);
+  color: #7dd3fc;
+}
+
+.lg-screen .lg-feats b {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #eaf1fd;
+  line-height: 1.3;
+}
+
+.lg-screen .lg-feats small {
+  font-size: 0.66rem;
+  line-height: 1.45;
+  color: #9db0ce;
+}
+
+/* ---- Panel footer ---- */
+.lg-screen .lg-foot {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
+  font-size: 0.68rem;
+  color: #8fa3c2;
+}
+
+.lg-foot-tags {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #8fa3c2;
+}
+
+.lg-foot-tags i {
+  font-style: normal;
+  color: rgba(148, 163, 184, 0.55);
+}
+
+/* ---- Right rail: support pills, accent heading, blue tabs + button ---- */
+.lg-support {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px 30px 0;
+}
+
+.lg-support-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid #e3e6f0;
+  border-radius: 8px;
+  background: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #4b5563;
+  text-decoration: none;
+  transition: border-color 0.18s ease, color 0.18s ease, background 0.18s ease;
+}
+
+.lg-support-btn svg {
+  color: #6b7280;
+}
+
+.lg-support-btn:hover {
+  border-color: #c7d2fe;
+  background: #f8faff;
+  color: #1d4ed8;
+}
+
+.lg-support-btn:hover svg {
+  color: #1d4ed8;
+}
+
+.lg-accent {
+  color: #2563eb;
+}
+
+.lg-screen .auth-role-tab {
+  border: 1px solid transparent;
+  color: #6b7280;
+}
+
+.lg-screen .auth-role-tab.active {
+  border-color: #2563eb;
+  color: #1d4ed8;
+  background: #ffffff;
+  background-image: none;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.14);
+}
+
+.lg-screen .auth-signin-btn {
+  background: linear-gradient(90deg, #2563eb 0%, #3b82f6 52%, #4f46e5 100%);
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.26);
+}
+
+.lg-screen .auth-signin-btn:hover {
+  box-shadow: 0 14px 30px rgba(37, 99, 235, 0.34);
+}
+
+/* On desktop the photo panel is pinned to the viewport: the right rail can be
+   taller than the window (short laptops), and without this the panel footer
+   slides below the fold and the photo stops at the shell's height. */
+@media (min-width: 901px) {
+  .lg-screen .lg-left {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    min-height: 100vh;
+  }
+}
+
+@media (max-width: 1180px) {
+  .lg-screen .lg-feats {
+    gap: 8px;
+  }
+
+  .lg-screen .lg-feats li {
+    padding: 12px 10px;
+  }
+
+  .lg-screen .lg-feats small {
+    font-size: 0.62rem;
+  }
+}
+
+@media (max-width: 900px) {
+  .lg-screen .lg-left {
+    padding: 14px 18px 16px;
+  }
+
+  .lg-scene-globe {
+    right: -30%;
+    top: -10%;
+    width: 78vw;
+  }
+
+  .lg-hero-mark {
+    width: min(70%, 300px);
+  }
+
+  .lg-hero-tag {
+    font-size: 0.82rem;
+  }
+
+  .lg-screen .lg-foot {
+    margin-top: 10px;
+    padding-top: 10px;
+    font-size: 0.64rem;
+  }
+
+  .lg-foot-tags {
+    display: none;
+  }
+}
+
+/* Short windows: the tiles run out of room for the second text line, so drop
+   the description rather than let it collide with the tile border. */
+@media (max-height: 620px) {
+  .lg-screen .lg-feats {
+    flex: 0 0 auto;
+  }
+
+  .lg-screen .lg-feats small {
+    display: none;
+  }
+}
