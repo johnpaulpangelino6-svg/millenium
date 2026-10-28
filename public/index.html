@@ -321,7 +321,7 @@
 
       <!-- Support actions, top right -->
       <div class="lg-support">
-        <a class="lg-support-btn" href="#">
+        <a class="lg-support-btn" href="#" onclick="openHelpModal(); return false;">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
             stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="9" />
@@ -467,25 +467,28 @@
           <p class="auth-register-link">Don't have an account? <a href="#"
               onclick="switchAuthTab('register'); return false;">Register</a></p>
 
-          <!-- New-user guide (opens the public landing page) -->
-          <a class="lg-newhere" href="/landing">
-            <span class="lg-newhere-ico" aria-hidden="true">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 3l1.9 4.6 4.6 1.9-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9L12 3z" />
-                <path d="M19 15l.9 2.1 2.1.9-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15z" />
+          <!-- New-user guide (opens the public landing page). The wrapper keeps
+               the `.auth-guide-link` hook the landing tests look for. -->
+          <div class="auth-guide-link">
+            <a class="lg-newhere" href="/landing">
+              <span class="lg-newhere-ico" aria-hidden="true">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 3l1.9 4.6 4.6 1.9-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9L12 3z" />
+                  <path d="M19 15l.9 2.1 2.1.9-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15z" />
+                </svg>
+              </span>
+              <span class="lg-newhere-text">
+                <b>New here?</b>
+                <small>See what every feature can do</small>
+              </span>
+              <svg class="lg-newhere-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="5" y1="12" x2="19" y2="12" />
+                <polyline points="12 5 19 12 12 19" />
               </svg>
-            </span>
-            <span class="lg-newhere-text">
-              <b>New here?</b>
-              <small>See what every feature can do</small>
-            </span>
-            <svg class="lg-newhere-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="5" y1="12" x2="19" y2="12" />
-              <polyline points="12 5 19 12 12 19" />
-            </svg>
-          </a>
+            </a>
+          </div>
 
         </div><!-- /auth-portal-card (login) -->
 
@@ -842,6 +845,23 @@
           <span class="settings-row-text">
             <span class="settings-row-title">Settings</span>
             <span class="settings-row-sub">Preferences</span>
+          </span>
+        </button>
+
+        <button class="sidebar-settings-row" id="helpBtn" type="button" onclick="openHelpModal()"
+          title="Help centre — common questions and how to fix things"
+          aria-label="Help centre — common questions and how to fix things">
+          <span class="settings-row-icon" aria-hidden="true">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M9.1 9a3 3 0 1 1 4.4 2.7c-.9.5-1.5 1.1-1.5 2.1" />
+              <line x1="12" y1="17" x2="12" y2="17.01" />
+            </svg>
+          </span>
+          <span class="settings-row-text">
+            <span class="settings-row-title">Help &amp; FAQ</span>
+            <span class="settings-row-sub">Answers &amp; fixes</span>
           </span>
         </button>
       </div>
@@ -1276,6 +1296,333 @@
           <span>Download</span>
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- ================================================================== -->
+  <!-- HELP CENTRE — questions, answers and steps for common concerns.     -->
+  <!-- Opened from the sign-in screen ("Need help?") and from the sidebar. -->
+  <!-- Uses native <details> so the accordion works without JS; the search -->
+  <!-- box only filters.                                                  -->
+  <!-- ================================================================== -->
+  <div class="help-backdrop" id="helpModal" role="dialog" aria-modal="true" aria-labelledby="helpTitle"
+    onclick="if (event.target === this) closeHelpModal()">
+    <div class="help-sheet">
+      <header class="help-head">
+        <div class="help-head-text">
+          <span class="help-eyebrow">Support centre</span>
+          <h2 id="helpTitle">Need help?</h2>
+          <p>The questions we get asked most, with the exact steps for each one.</p>
+        </div>
+        <button class="help-close" type="button" onclick="closeHelpModal()" aria-label="Close help">&times;</button>
+      </header>
+
+      <div class="help-search">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+          aria-hidden="true">
+          <circle cx="11" cy="11" r="8" />
+          <line x1="21" y1="21" x2="16.65" y2="16.65" />
+        </svg>
+        <input type="search" id="helpSearch" placeholder="Search a question or describe the problem…"
+          aria-label="Search help" oninput="filterHelp(this.value)" autocomplete="off" />
+        <button class="help-search-clear" type="button" id="helpSearchClear" onclick="clearHelpSearch()"
+          aria-label="Clear search" hidden>&times;</button>
+      </div>
+
+      <div class="help-body" id="helpBody">
+
+        <p class="help-empty" id="helpEmpty" hidden>No match for that search. Try a different word, or email
+          support below.</p>
+
+        <!-- ------------------------------------------------ Getting started -->
+        <section class="help-group" data-help-group>
+          <h3 class="help-group-title">Getting started</h3>
+
+          <details class="help-item">
+            <summary>How do I sign in?</summary>
+            <div class="help-answer">
+              <ol>
+                <li>Open the portal and pick your role: <strong>Admin</strong>, <strong>Technician</strong> or
+                  <strong>Customer</strong>.</li>
+                <li>Enter your email address and password.</li>
+                <li>Select <strong>Sign In</strong>. You land on the dashboard for your role.</li>
+              </ol>
+              <p class="help-note">No account yet? Use <strong>Register</strong> under the form, or press
+                <strong>Fill Admin credentials</strong> to look around with the demo account.</p>
+            </div>
+          </details>
+
+          <details class="help-item">
+            <summary>What can each role see?</summary>
+            <div class="help-answer">
+              <ul>
+                <li><strong>Admin</strong> — everything: devices, tickets, inventory, warranty, rentals, users and
+                  reports.</li>
+                <li><strong>Technician</strong> — the boards assigned to them, their job queue and the ticket
+                  history.</li>
+                <li><strong>Customer</strong> — only their own displays, bookings and tickets. Other customers
+                  are never visible.</li>
+              </ul>
+            </div>
+          </details>
+
+          <details class="help-item">
+            <summary>Where do I start if I am new?</summary>
+            <div class="help-answer">
+              <ol>
+                <li>Check the dashboard — the four cards show your fleet, what is online, what needs attention
+                  and open tickets.</li>
+                <li>Open <strong>Devices</strong> to see every SmartBoard and its status.</li>
+                <li>Anything flagged <em>Needs attention</em> is also listed under <strong>Tickets</strong>.</li>
+              </ol>
+            </div>
+          </details>
+        </section>
+
+        <!-- -------------------------------------------------------- Devices -->
+        <section class="help-group" data-help-group>
+          <h3 class="help-group-title">SmartBoards &amp; devices</h3>
+
+          <details class="help-item">
+            <summary>How do I register a new SmartBoard?</summary>
+            <div class="help-answer">
+              <ol>
+                <li>Go to <strong>Devices</strong>.</li>
+                <li>Select <strong>Register a SmartBoard</strong>.</li>
+                <li>Choose the model, the client type (school or company), then the customer, room and city.</li>
+                <li>Select <strong>Save</strong>. The board appears at the top of the list with a generated
+                  device ID.</li>
+              </ol>
+            </div>
+          </details>
+
+          <details class="help-item">
+            <summary>How do I hand a board over to a customer?</summary>
+            <div class="help-answer">
+              <p>Open the device row and edit it, then set <strong>Customer &amp; site</strong>. While a board has
+                no customer it stays under <strong>Unassigned</strong> and cannot be booked for rent.</p>
+            </div>
+          </details>
+
+          <details class="help-item">
+            <summary>A board says Offline — what do I check?</summary>
+            <div class="help-answer">
+              <ol>
+                <li>Confirm the board is powered on and awake.</li>
+                <li>Check it is connected to the same network as before — a changed Wi-Fi or a new router is the
+                  usual cause.</li>
+                <li>Open <strong>Devices</strong> and read the last-seen time on the device card.</li>
+                <li>If it has been offline for more than a day, raise a ticket so it is tracked.</li>
+              </ol>
+              <p class="help-note">A board that has never checked in will show Offline from the moment it is
+                registered — that is expected until its first connection.</p>
+            </div>
+          </details>
+
+          <details class="help-item">
+            <summary>How do I print the QR label for a board?</summary>
+            <div class="help-answer">
+              <p>Use the QR action on the device row. The label carries the device ID, so scanning it opens the
+                same record — useful for stock takes and for field technicians.</p>
+            </div>
+          </details>
+        </section>
+
+        <!-- -------------------------------------------------------- Tickets -->
+        <section class="help-group" data-help-group>
+          <h3 class="help-group-title">Service tickets</h3>
+
+          <details class="help-item">
+            <summary>How do I raise a service ticket?</summary>
+            <div class="help-answer">
+              <ol>
+                <li>Open <strong>Tickets</strong> and select <strong>New Ticket</strong>.</li>
+                <li>Pick the device, describe the fault and set the priority.</li>
+                <li>Submit. The ticket starts as <em>Just reported</em>.</li>
+              </ol>
+            </div>
+          </details>
+
+          <details class="help-item">
+            <summary>How do I move a ticket forward?</summary>
+            <div class="help-answer">
+              <p>Open the ticket and use the action button. The flow is:</p>
+              <ol>
+                <li><strong>Just reported</strong> → <strong>Diagnosing</strong></li>
+                <li><strong>Diagnosing</strong> → <strong>Repairing</strong></li>
+                <li><strong>Repairing</strong> → <strong>Resolved</strong></li>
+              </ol>
+              <p class="help-note">Each step records who changed it and when, so the history stays accurate.</p>
+            </div>
+          </details>
+
+          <details class="help-item">
+            <summary>Who can see the ticket I raised?</summary>
+            <div class="help-answer">
+              <p>Admins see every ticket. Technicians see the ones assigned to them. Customers see only their
+                own — tickets are filtered by account, never by what is on screen.</p>
+            </div>
+          </details>
+        </section>
+
+        <!-- -------------------------------------------------------- Rentals -->
+        <section class="help-group" data-help-group>
+          <h3 class="help-group-title">Rentals &amp; bookings</h3>
+
+          <details class="help-item">
+            <summary>How do I book a device for rent?</summary>
+            <div class="help-answer">
+              <ol>
+                <li>Open <strong>Rentals</strong> and select <strong>New Booking</strong>.</li>
+                <li>Choose the device, the customer, and the pickup and return dates.</li>
+                <li>Add the delivery address if it is being shipped, then save.</li>
+              </ol>
+              <p class="help-note">The booking starts as <em>Pending</em> until an admin approves it.</p>
+            </div>
+          </details>
+
+          <details class="help-item">
+            <summary>How does approval work?</summary>
+            <div class="help-answer">
+              <ol>
+                <li>An admin opens the booking and selects <strong>Approve</strong>.</li>
+                <li>At hand-over, <strong>Activate</strong> starts the rental period.</li>
+                <li>When the unit comes back, mark it <strong>Returned</strong> to close the booking.</li>
+              </ol>
+            </div>
+          </details>
+
+          <details class="help-item">
+            <summary>A rental is past its return date</summary>
+            <div class="help-answer">
+              <p>Overdue bookings are flagged automatically and counted on the <strong>Overdue</strong> card. Open
+                the booking to see the customer and contact details, then either extend the dates or mark it
+                overdue so it stays visible in the queue.</p>
+            </div>
+          </details>
+        </section>
+
+        <!-- ------------------------------------------------------ Inventory -->
+        <section class="help-group" data-help-group>
+          <h3 class="help-group-title">Parts &amp; stock</h3>
+
+          <details class="help-item">
+            <summary>How do I add a new part?</summary>
+            <div class="help-answer">
+              <ol>
+                <li>Open <strong>Inventory</strong>.</li>
+                <li>Select <strong>New Part Catalog</strong> and fill in the name, category and price.</li>
+                <li>Set the minimum threshold — that is the level at which the part is flagged for reorder.</li>
+              </ol>
+            </div>
+          </details>
+
+          <details class="help-item">
+            <summary>How do I add or deduct stock?</summary>
+            <div class="help-answer">
+              <p>Use <strong>Add Stock</strong> on the part to record a delivery, or <strong>Deduct</strong> when a
+                part is used on a repair. Both actions keep a running quantity, so the count always matches what
+                was booked in and out.</p>
+            </div>
+          </details>
+        </section>
+
+        <!-- --------------------------------------------------------- Account -->
+        <section class="help-group" data-help-group>
+          <h3 class="help-group-title">Account &amp; access</h3>
+
+          <details class="help-item">
+            <summary>How do I change my password?</summary>
+            <div class="help-answer">
+              <ol>
+                <li>Open <strong>Settings</strong> at the bottom of the sidebar.</li>
+                <li>Go to the security section and enter your current password.</li>
+                <li>Type the new password twice and confirm.</li>
+              </ol>
+            </div>
+          </details>
+
+          <details class="help-item">
+            <summary>Why was I signed out on my own?</summary>
+            <div class="help-answer">
+              <p>Sessions expire after a period of inactivity, and signing in on another device can end the older
+                one. Simply sign in again — nothing is lost, because every change is saved as you make it.</p>
+              <p class="help-note">Tick <strong>Remember me for 30 days</strong> on the sign-in screen to stay
+                signed in on a device you trust.</p>
+            </div>
+          </details>
+
+          <details class="help-item">
+            <summary>Can I change how the system looks?</summary>
+            <div class="help-answer">
+              <p>Yes — <strong>Settings → Appearance</strong> switches between light and dark, and changes density
+                and text size. The choice is remembered on this device.</p>
+            </div>
+          </details>
+        </section>
+
+        <!-- -------------------------------------------------- Troubleshooting -->
+        <section class="help-group" data-help-group>
+          <h3 class="help-group-title">Something is wrong</h3>
+
+          <details class="help-item">
+            <summary>I cannot sign in</summary>
+            <div class="help-answer">
+              <ol>
+                <li>Check the role tab matches your account — an admin account will not sign in from the Customer
+                  tab.</li>
+                <li>Re-type the password; the field is case sensitive.</li>
+                <li>Try <strong>Forgot Password?</strong> to reset it by email.</li>
+                <li>Still locked out? Email support and include the address you are using.</li>
+              </ol>
+            </div>
+          </details>
+
+          <details class="help-item">
+            <summary>A page is blank, stuck, or shows old data</summary>
+            <div class="help-answer">
+              <ol>
+                <li>Refresh the page once — a stale session is the usual cause.</li>
+                <li>If it stays blank, sign out and back in.</li>
+                <li>Clear the browser cache if it happens repeatedly.</li>
+                <li>If it still fails, note the page name and the time, then contact support.</li>
+              </ol>
+            </div>
+          </details>
+
+          <details class="help-item">
+            <summary>My change did not save</summary>
+            <div class="help-answer">
+              <p>A change only saves when the form closes successfully. If the dialog stayed open or showed an
+                error, nothing was written — reopen it and submit again. If it keeps failing, the session may have
+                expired: refresh, sign in, and retry.</p>
+            </div>
+          </details>
+
+          <details class="help-item">
+            <summary>How do I report a bug or ask for a change?</summary>
+            <div class="help-answer">
+              <p>Email support with three things: what you were doing, what you expected, and what happened
+                instead. A screenshot helps. Include the device ID or ticket number if the problem involves a
+                specific record.</p>
+            </div>
+          </details>
+        </section>
+
+      </div><!-- /help-body -->
+
+      <footer class="help-foot">
+        <div class="help-foot-text">
+          <strong>Still stuck?</strong>
+          <span>Send us the details and we will get back to you.</span>
+        </div>
+        <div class="help-foot-actions">
+          <a class="help-btn help-btn-ghost" href="/landing">Guided tour</a>
+          <a class="help-btn help-btn-primary" href="mailto:support@brainsinnovations.com?subject=Millennium%20Smartboard%20support">
+            Email support
+          </a>
+        </div>
+      </footer>
     </div>
   </div>
 

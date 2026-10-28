@@ -376,16 +376,40 @@ async function login(page, u, p) {
   const tbl = await pageA.evaluate(() => {
     const w = document.querySelector('.data-table-wrapper');
     if (!w) return { missing: true };
-    const cs = getComputedStyle(w);
+    const table = w.querySelector('.data-table');
+    const head = table.querySelector('thead tr');
+    const headers = head ? [...head.children].map((th) => th.textContent.trim()) : [];
+    const rows = [...table.querySelectorAll('tbody tr')].filter((tr) => tr.children.length > 1);
+    const cells = rows.flatMap((tr) => [...tr.children]);
+    const unlabelled = cells.filter((td) => !td.getAttribute('data-label')).length;
+    const clipped = cells.filter((td) => {
+      const r = td.getBoundingClientRect();
+      return r.right > window.innerWidth + 1 || r.left < -1;
+    }).length;
+    const firstRow = rows[0] ? [...rows[0].children].map((td) => td.getAttribute('data-label')) : [];
     return {
-      overflowX: cs.overflowX,
+      overflowX: getComputedStyle(w).overflowX,
       scrolls: w.scrollWidth > w.clientWidth + 1,
       wrapperRight: Math.round(w.getBoundingClientRect().right),
       innerWidth: window.innerWidth,
+      headers,
+      firstRow,
+      rows: rows.length,
+      unlabelled,
+      clipped,
+      theadHidden: head ? getComputedStyle(head.parentElement).display === 'none' : false,
     };
   });
-  check('table wrapper is horizontally scrollable', tbl.missing ? false : tbl.overflowX === 'auto',
-    JSON.stringify(tbl));
+  // Phones render each row as a stacked card: the column headers become
+  // per-cell labels, so nothing is hidden behind a sideways scroll.
+  check('table rows are converted to labelled cards',
+    !tbl.missing && tbl.rows > 0 && tbl.unlabelled === 0, JSON.stringify(tbl).slice(0, 240));
+  check('every column header is carried onto its cell',
+    !tbl.missing && tbl.firstRow.length === tbl.headers.length &&
+    tbl.firstRow.every((l, i) => l === tbl.headers[i]),
+    JSON.stringify(tbl.firstRow));
+  check('no cell is clipped by the viewport', !tbl.missing && tbl.clipped === 0,
+    JSON.stringify(tbl).slice(0, 240));
   check('table wrapper stays inside the viewport',
     !tbl.missing && tbl.wrapperRight <= d390.w + 1, JSON.stringify(tbl));
 

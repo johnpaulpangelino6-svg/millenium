@@ -10668,3 +10668,126 @@ window.addEventListener('resize', () => {
     'desktop-device'
   );
 });
+
+/* ==========================================================================
+   Mobile tables — label every cell with its column header so the stylesheet
+   can render each row as a stacked card on phones (<=640px). Runs after every
+   re-render via a MutationObserver, because each view rebuilds its own table.
+   ========================================================================== */
+(function labelTableCells() {
+  const label = (table) => {
+    const head = table.querySelector('thead tr');
+    if (!head) return;
+    const headers = [...head.children].map((th) => (th.textContent || '').trim());
+    table.querySelectorAll('tbody tr').forEach((tr) => {
+      const cells = [...tr.children];
+      // empty-state rows use a single colspan cell and must not be labelled
+      if (cells.length < 2 || cells.length !== headers.length) return;
+      cells.forEach((td, i) => {
+        if (!headers[i]) return;
+        if (td.getAttribute('data-label') !== headers[i]) td.setAttribute('data-label', headers[i]);
+      });
+    });
+  };
+
+  const labelAll = () => document.querySelectorAll('.data-table').forEach(label);
+
+  const start = () => {
+    labelAll();
+    // Observe the body: logging in and switching tabs both replace #mainContent
+    // itself, so observing that node leaves the observer attached to a detached
+    // element and the tables never get labelled.
+    let queued = false;
+    new MutationObserver(() => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => {
+        queued = false;
+        labelAll();
+      });
+    }).observe(document.body, { childList: true, subtree: true });
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', start);
+  } else {
+    start();
+  }
+})();
+
+/* ==========================================================================
+   HELP CENTRE
+   Accordion content lives in the markup as native <details>; this only opens
+   and closes the sheet, filters the questions, and keeps focus sensible.
+   ========================================================================== */
+function openHelpModal() {
+  const modal = document.getElementById('helpModal');
+  if (!modal) return;
+  modal.classList.add('show');
+  document.body.classList.add('help-open');
+  const input = document.getElementById('helpSearch');
+  if (input) {
+    input.value = '';
+    filterHelp('');
+  }
+  // focus the search box so typing works immediately, but do not scroll the
+  // sheet on small screens
+  if (input && window.innerWidth > 640) {
+    setTimeout(() => input.focus({ preventScroll: true }), 60);
+  }
+  const sheet = modal.querySelector('.help-sheet');
+  if (sheet) sheet.scrollTop = 0;
+}
+
+function closeHelpModal() {
+  const modal = document.getElementById('helpModal');
+  if (!modal) return;
+  modal.classList.remove('show');
+  document.body.classList.remove('help-open');
+  // close every open answer so the next visit starts tidy
+  modal.querySelectorAll('details.help-item[open]').forEach((d) => d.removeAttribute('open'));
+}
+
+function filterHelp(term) {
+  const modal = document.getElementById('helpModal');
+  if (!modal) return;
+  const q = (term || '').trim().toLowerCase();
+  const clearBtn = document.getElementById('helpSearchClear');
+  if (clearBtn) clearBtn.hidden = q.length === 0;
+
+  let visible = 0;
+  modal.querySelectorAll('[data-help-group]').forEach((group) => {
+    let groupVisible = 0;
+    group.querySelectorAll('.help-item').forEach((item) => {
+      const haystack = item.textContent.toLowerCase();
+      const match = q === '' || haystack.includes(q);
+      item.hidden = !match;
+      if (match) {
+        groupVisible += 1;
+        visible += 1;
+        // open the matching answers so the result is readable straight away
+        if (q !== '') item.setAttribute('open', '');
+      } else {
+        item.removeAttribute('open');
+      }
+    });
+    group.hidden = groupVisible === 0;
+  });
+
+  const empty = document.getElementById('helpEmpty');
+  if (empty) empty.hidden = visible !== 0;
+}
+
+function clearHelpSearch() {
+  const input = document.getElementById('helpSearch');
+  if (!input) return;
+  input.value = '';
+  filterHelp('');
+  input.focus({ preventScroll: true });
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  const modal = document.getElementById('helpModal');
+  if (modal && modal.classList.contains('show')) closeHelpModal();
+});

@@ -18310,3 +18310,959 @@ html:not([data-theme="dark"]) .dash-empty {
     display: none;
   }
 }
+
+/* ==========================================================================
+   SIGN-IN SCREEN — v8 (phone + tablet)
+   ==========================================================================
+   The v7 panel was laid out for a wide window. On a 360-430px phone the four
+   feature tiles collapsed to ~83px columns, the copy fell back to 8px (the
+   root font-size drops to 13px under 640px) and the panel ate the whole first
+   screen before the form. This block rebuilds the panel for narrow widths:
+   2x2 tiles, readable type, and a panel short enough that the email field is
+   already visible when the page opens.
+   ========================================================================== */
+
+@media (max-width: 900px) {
+  .lg-screen .lg-left {
+    padding: 16px 18px 18px;
+    min-height: 0;
+  }
+
+  /* 2x2 instead of 4-across */
+  .lg-screen .lg-feats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 18px;
+  }
+
+  .lg-screen .lg-feats li,
+  .lg-screen .lg-feats li:first-child,
+  .lg-screen .lg-feats li:last-child {
+    padding: 13px 14px 12px;
+  }
+
+  /* readable at the 13px root */
+  .lg-screen .lg-feats b {
+    font-size: 0.95rem;
+    line-height: 1.35;
+  }
+
+  .lg-screen .lg-feats small {
+    font-size: 0.86rem;
+    line-height: 1.5;
+  }
+
+  .lg-screen .lg-feat-ico {
+    width: 28px;
+    height: 28px;
+    margin-bottom: 2px;
+  }
+
+  .lg-screen .lg-hero-portal {
+    font-size: 0.8rem;
+    letter-spacing: 0.2em;
+  }
+
+  .lg-screen .lg-hero-tag {
+    font-size: 0.95rem;
+    line-height: 1.5;
+    max-width: 30ch;
+  }
+
+  .lg-screen .lg-hero {
+    gap: 7px;
+  }
+
+  .lg-hero-mark {
+    width: min(82%, 320px);
+  }
+
+  .lg-screen .lg-foot {
+    margin-top: 14px;
+    padding-top: 11px;
+    font-size: 0.78rem;
+  }
+}
+
+/* Tablets: the stacked rail goes full-width, which stretched the fields to
+   768px. Centre the form column at a comfortable measure instead. */
+@media (min-width: 641px) and (max-width: 900px) {
+  .lg-screen .lg-support,
+  .lg-screen .lg-right-main,
+  .lg-screen .lg-right-foot {
+    width: 100%;
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .lg-screen .auth-portal-card {
+    width: 100%;
+  }
+}
+
+/* Phones: keep the showcase short so the form starts within the first screen */
+@media (max-width: 640px) {
+  .lg-screen .lg-left {
+    padding: 14px 16px 14px;
+  }
+
+  .lg-screen .lg-feats {
+    margin-top: 14px;
+    gap: 8px;
+  }
+
+  .lg-screen .lg-feats li,
+  .lg-screen .lg-feats li:first-child,
+  .lg-screen .lg-feats li:last-child {
+    padding: 11px 12px 10px;
+    border-radius: 10px;
+  }
+
+  .lg-screen .lg-feats b {
+    font-size: 0.86rem;
+  }
+
+  .lg-screen .lg-feats small {
+    font-size: 0.78rem;
+    line-height: 1.45;
+  }
+
+  .lg-screen .lg-brand-text small {
+    display: none;
+  }
+
+  /* support links line up with the form's left edge instead of floating right */
+  .lg-support {
+    justify-content: flex-start;
+    padding: 14px 16px 0;
+  }
+
+  .lg-support-btn {
+    padding: 6px 10px;
+    font-size: 0.78rem;
+  }
+
+  .lg-screen .lg-right-main {
+    padding: 4px 0 0;
+  }
+
+  .lg-screen .auth-portal-card {
+    padding: 14px 16px 18px;
+  }
+
+  .lg-right-foot {
+    padding: 0 16px 14px;
+    font-size: 0.72rem;
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+
+  /* the rail has no bottom padding of its own; without this the legal line
+     sits half-clipped against the last pixel of the scroll */
+  .lg-screen .lg-right {
+    padding-bottom: 6px;
+  }
+
+  /* the desktop glow reads as a grey band under the button at phone width */
+  .lg-screen .auth-signin-btn {
+    box-shadow: 0 6px 14px rgba(37, 99, 235, 0.22);
+  }
+}
+
+/* Very narrow phones (320-400px): drop the secondary copy line */
+@media (max-width: 400px) {
+  .lg-screen .lg-feats small {
+    font-size: 0.74rem;
+  }
+
+  .lg-screen .lg-hero-tag {
+    font-size: 0.86rem;
+  }
+
+  .lg-screen .lg-foot {
+    display: none;
+  }
+}
+
+/* Landscape phones (e.g. 844x390): a stacked showcase panel taller than the
+   window hides the form completely. Keep the brand lockup, drop the marketing
+   block, and let the form start near the top of the scroll. */
+@media (max-width: 900px) and (max-height: 520px) {
+  .lg-screen .lg-left {
+    padding: 12px 16px 14px;
+  }
+
+  .lg-screen .lg-feats,
+  .lg-screen .lg-foot,
+  .lg-screen .lg-hero-tag {
+    display: none;
+  }
+
+  .lg-screen .lg-hero {
+    margin-top: 14px;
+    gap: 6px;
+  }
+
+  .lg-hero-mark {
+    width: min(56%, 240px);
+  }
+
+  .lg-support {
+    padding-top: 10px;
+  }
+}
+
+/* ==========================================================================
+   MOBILE — data tables become stacked cards (<=640px)
+   ==========================================================================
+   Every `.data-table` row is rebuilt as a card: the first cell is the title,
+   the rest are label/value pairs fed by the `data-label` attribute that
+   app.js writes from the column headers. No horizontal scrolling, no clipped
+   columns.
+   ========================================================================== */
+
+@media (max-width: 640px) {
+  .data-table-wrapper,
+  .table-container,
+  .table-responsive {
+    overflow-x: visible;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .data-table {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    border: 0;
+    font-size: 0.84rem;
+  }
+
+  .data-table thead {
+    display: none;
+  }
+
+  .data-table tbody {
+    display: block;
+    width: 100%;
+  }
+
+  .data-table tbody tr {
+    display: block;
+    margin: 0 0 10px;
+    padding: 12px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    background: var(--bg-surface);
+  }
+
+  .data-table tbody tr:last-child {
+    margin-bottom: 0;
+  }
+
+  .data-table tbody td,
+  .dm-table td,
+  .devices-table td {
+    /* grid, not flex: a cell can hold two or three child elements and they all
+       need to stack in the value column while the label stays on the left */
+    display: grid;
+    grid-template-columns: 38% minmax(0, 1fr);
+    column-gap: 12px;
+    row-gap: 2px;
+    align-items: start;
+    justify-items: end;
+    padding: 6px 0;
+    border: 0;
+    white-space: normal;
+    text-align: right;
+    overflow-wrap: anywhere;
+  }
+
+  .data-table tbody td::before {
+    content: attr(data-label);
+    grid-column: 1;
+    grid-row: 1 / span 6;
+    justify-self: start;
+    text-align: left;
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    padding-top: 3px;
+  }
+
+  /* first cell becomes the card heading */
+  .data-table tbody td:first-child,
+  .dm-table td:first-child,
+  .devices-table td:first-child {
+    display: block;
+    /* Chrome applies justify-items to block containers as well, so the
+       heading would shrink to fit-content and sit on the right without this */
+    justify-items: normal;
+    padding: 0 0 9px;
+    margin-bottom: 7px;
+    border-bottom: 1px solid var(--border-subtle);
+    text-align: left;
+    font-size: 0.95rem;
+  }
+
+  .data-table tbody td:first-child::before {
+    display: none;
+  }
+
+  /* empty-state rows use a single colspan cell */
+  .data-table tbody td[colspan] {
+    display: block;
+    text-align: center;
+    padding: 26px 10px;
+    color: var(--text-muted);
+  }
+
+  .data-table tbody td[colspan]::before {
+    display: none;
+  }
+}
+
+/* ==========================================================================
+   MOBILE — dashboard + rentals polish
+   ========================================================================== */
+
+/* The date chip held the date and the weekday/time as two inline children, so
+   they ran together ("Oct 28, 2026Wednesday, 12:10 PM"). Stack them. */
+.hero-date-chip > div {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  line-height: 1.25;
+}
+
+.hero-date-chip strong {
+  font-weight: 700;
+}
+
+.hero-date-chip small {
+  font-size: 0.92em;
+  color: rgba(226, 232, 240, 0.72);
+}
+
+@media (max-width: 640px) {
+  /* Five KPI cards stacked full-width meant ~550px of scrolling before any
+     rental data. Two per row; an odd last card spans the row. */
+  .rentals-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .rentals-stats > .stat-card:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+
+  .rentals-stats .stat-card {
+    padding: 12px 13px;
+  }
+
+  .rentals-stats .stat-header {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .rental-kpi-value {
+    font-size: 1.5rem;
+    margin: 6px 0 2px;
+  }
+
+  .rental-kpi-label {
+    font-size: 0.72rem;
+    line-height: 1.35;
+  }
+}
+
+/* Dashboard KPI cards at phone width: the 44px icon plus a 12px gap left the
+   label column ~110px wide, so "Total Devices" wrapped and the value dropped
+   out of line. Smaller icon and tighter type keep label + value on one line. */
+@media (max-width: 640px) {
+  .kpi-card-v2 {
+    padding: 12px 12px 12px 14px;
+    border-radius: 14px;
+  }
+
+  .kpi-v2-header {
+    gap: 9px;
+    align-items: flex-start;
+  }
+
+  .kpi-v2-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    font-size: 0.95rem;
+  }
+
+  .kpi-v2-label {
+    font-size: 0.7rem;
+    line-height: 1.25;
+  }
+
+  .kpi-v2-value {
+    font-size: 1.45rem;
+    line-height: 1.15;
+  }
+
+  .kpi-v2-detail {
+    font-size: 0.66rem;
+    line-height: 1.35;
+    align-items: flex-start;
+  }
+
+  .kpi-v2-detail-dot {
+    flex: none;
+    margin-top: 5px;
+  }
+}
+
+/* ==========================================================================
+   PHONES — form only
+   ==========================================================================
+   On a phone the showcase panel pushed the actual form a full screen down. It
+   is now dropped entirely below 640px: the screen opens on the support links
+   and "Welcome back", with the form filling the viewport.
+   ========================================================================== */
+
+@media (max-width: 640px) {
+  .lg-screen .lg-left {
+    display: none;
+  }
+
+  .lg-screen .lg-shell {
+    display: block;
+    min-height: 100vh;
+  }
+
+  .lg-screen .lg-right {
+    border-top: 0;
+    min-height: 100vh;
+    padding-bottom: 0;
+  }
+
+  .lg-screen .lg-support {
+    padding: 18px 16px 0;
+  }
+
+  .lg-screen .lg-right-main {
+    padding: 10px 0 0;
+  }
+
+  .lg-screen .lg-right-foot {
+    padding: 10px 16px 18px;
+  }
+}
+
+/* With the showcase panel gone the card was still vertically centred, leaving
+   an ~80px void between the support links and "Welcome back". Pin it under the
+   support row and let the legal footer take the remaining space at the bottom. */
+@media (max-width: 640px) {
+  .lg-screen .auth-portal-card {
+    margin: 0;
+  }
+
+  .lg-screen .lg-right-main {
+    justify-content: flex-start;
+    align-items: stretch;
+  }
+}
+
+/* ==========================================================================
+   MOBILE — notification dropdown
+   ==========================================================================
+   The dropdown is anchored `right: 0` to the bell, which sits at x=298 (the
+   avatar is to its right). A 362px-wide panel then started at -64px, so the
+   left third of every notification was off-screen. On phones it now spans the
+   viewport with a 12px gutter, pinned under the header.
+   ========================================================================== */
+
+@media (max-width: 640px) {
+  .notif-dropdown {
+    position: fixed;
+    top: 62px;
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-width: none;
+    max-height: calc(100vh - 80px);
+    max-height: calc(100dvh - 80px);
+    border-radius: 12px;
+  }
+
+  /* let the list shrink inside the capped panel instead of overflowing it */
+  .notif-dropdown-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+  }
+
+  .notif-dropdown-header {
+    flex: none;
+  }
+
+  .notif-item {
+    padding: 12px 14px;
+  }
+}
+
+/* ==========================================================================
+   HELP CENTRE
+   ==========================================================================
+   Opened from "Need help?" on the sign-in screen and from Help & FAQ in the
+   sidebar. Native <details> handles the accordion; this is presentation plus
+   the phone layout (full-screen sheet).
+   ========================================================================== */
+
+.help-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100001;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(3, 7, 18, 0.62);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+
+.help-backdrop.show {
+  display: flex;
+}
+
+body.help-open {
+  overflow: hidden;
+}
+
+.help-sheet {
+  display: flex;
+  flex-direction: column;
+  width: min(760px, 100%);
+  max-height: min(86vh, 880px);
+  background: #ffffff;
+  color: #0f172a;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  box-shadow: 0 30px 80px rgba(2, 8, 24, 0.45);
+  overflow: hidden;
+  animation: helpSheetIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes helpSheetIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.985); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ---- Header ---- */
+.help-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 22px 14px;
+  border-bottom: 1px solid #eef1f7;
+}
+
+.help-eyebrow {
+  display: block;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #2563eb;
+  margin-bottom: 4px;
+}
+
+.help-head h2 {
+  margin: 0;
+  font-size: 1.32rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.help-head p {
+  margin: 4px 0 0;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: #64748b;
+}
+
+.help-close {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #e6e9f2;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #64748b;
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+}
+
+.help-close:hover {
+  background: #f4f6fb;
+  border-color: #cfd6e6;
+  color: #0f172a;
+}
+
+/* ---- Search ---- */
+.help-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 14px 22px 6px;
+  padding: 0 12px;
+  height: 42px;
+  border: 1px solid #e2e8f0;
+  border-radius: 11px;
+  background: #f8fafc;
+  color: #94a3b8;
+}
+
+.help-search:focus-within {
+  border-color: #2563eb;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.help-search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 0.88rem;
+  color: #0f172a;
+}
+
+.help-search input::placeholder {
+  color: #94a3b8;
+}
+
+.help-search-clear {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 50%;
+  background: #e6eaf3;
+  color: #475569;
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* ---- Body ---- */
+.help-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px 22px 20px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.help-group {
+  padding-top: 12px;
+}
+
+.help-group-title {
+  margin: 8px 0 2px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.help-item {
+  border-bottom: 1px solid #eef1f7;
+}
+
+.help-item summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 13px 2px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 650;
+  line-height: 1.4;
+  list-style: none;
+  color: #16233d;
+}
+
+.help-item summary::-webkit-details-marker {
+  display: none;
+}
+
+.help-item summary:hover {
+  color: #1d4ed8;
+}
+
+.help-item summary::after {
+  content: '';
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-top: 6px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+  opacity: 0.45;
+  transition: transform 0.18s ease;
+}
+
+.help-item[open] summary::after {
+  transform: rotate(-135deg);
+}
+
+.help-answer {
+  padding: 0 2px 16px;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: #475569;
+}
+
+.help-answer p {
+  margin: 0 0 10px;
+}
+
+.help-answer p:last-child,
+.help-answer ol:last-child,
+.help-answer ul:last-child {
+  margin-bottom: 0;
+}
+
+.help-answer ol,
+.help-answer ul {
+  margin: 0 0 10px;
+  padding-left: 20px;
+}
+
+.help-answer li {
+  margin-bottom: 6px;
+}
+
+.help-answer li:last-child {
+  margin-bottom: 0;
+}
+
+.help-answer strong {
+  color: #16233d;
+  font-weight: 700;
+}
+
+.help-note {
+  padding: 9px 12px;
+  border-left: 3px solid #bfdbfe;
+  border-radius: 0 8px 8px 0;
+  background: #f5f9ff;
+  color: #475569;
+  font-size: 0.81rem;
+}
+
+.help-empty {
+  margin: 22px 2px;
+  font-size: 0.86rem;
+  color: #64748b;
+}
+
+/* ---- Footer ---- */
+.help-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 14px 22px;
+  border-top: 1px solid #eef1f7;
+  background: #fbfcff;
+}
+
+.help-foot-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.78rem;
+  color: #64748b;
+}
+
+.help-foot-text strong {
+  font-size: 0.86rem;
+  color: #16233d;
+}
+
+.help-foot-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.help-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 9px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-decoration: none;
+  transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+.help-btn-ghost {
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #475569;
+}
+
+.help-btn-ghost:hover {
+  border-color: #c7d2fe;
+  color: #1d4ed8;
+}
+
+.help-btn-primary {
+  border: 1px solid transparent;
+  background: linear-gradient(90deg, #2563eb, #3b82f6 55%, #4f46e5);
+  color: #ffffff;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.25);
+}
+
+.help-btn-primary:hover {
+  box-shadow: 0 10px 22px rgba(37, 99, 235, 0.32);
+}
+
+/* ---- Dark theme ---- */
+[data-theme="dark"] .help-sheet {
+  background: #0b1224;
+  color: #e8eefc;
+  border-color: rgba(148, 163, 184, 0.18);
+}
+
+[data-theme="dark"] .help-head,
+[data-theme="dark"] .help-foot {
+  border-color: rgba(148, 163, 184, 0.14);
+}
+
+[data-theme="dark"] .help-foot {
+  background: #0d1526;
+}
+
+[data-theme="dark"] .help-head p,
+[data-theme="dark"] .help-foot-text,
+[data-theme="dark"] .help-answer,
+[data-theme="dark"] .help-empty {
+  color: #a9b8d4;
+}
+
+[data-theme="dark"] .help-item summary,
+[data-theme="dark"] .help-answer strong,
+[data-theme="dark"] .help-foot-text strong {
+  color: #eaf1fd;
+}
+
+[data-theme="dark"] .help-item,
+[data-theme="dark"] .help-item summary {
+  border-color: rgba(148, 163, 184, 0.12);
+}
+
+[data-theme="dark"] .help-search {
+  background: rgba(15, 24, 44, 0.9);
+  border-color: rgba(148, 163, 184, 0.2);
+  color: #7f8fb0;
+}
+
+[data-theme="dark"] .help-search input {
+  color: #e8eefc;
+}
+
+[data-theme="dark"] .help-search-clear {
+  background: rgba(148, 163, 184, 0.22);
+  color: #dbe6f8;
+}
+
+[data-theme="dark"] .help-close,
+[data-theme="dark"] .help-btn-ghost {
+  background: rgba(16, 26, 48, 0.9);
+  border-color: rgba(148, 163, 184, 0.2);
+  color: #c7d4ea;
+}
+
+[data-theme="dark"] .help-close:hover,
+[data-theme="dark"] .help-btn-ghost:hover {
+  background: rgba(26, 41, 74, 0.9);
+  color: #ffffff;
+}
+
+[data-theme="dark"] .help-note {
+  background: rgba(37, 99, 235, 0.12);
+  border-left-color: rgba(96, 165, 250, 0.5);
+  color: #a9b8d4;
+}
+
+/* ---- Phones: full-screen sheet ---- */
+@media (max-width: 640px) {
+  .help-backdrop {
+    padding: 0;
+    align-items: stretch;
+  }
+
+  .help-sheet {
+    width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .help-head {
+    padding: 16px 16px 12px;
+  }
+
+  .help-head h2 {
+    font-size: 1.18rem;
+  }
+
+  .help-search {
+    margin: 12px 16px 4px;
+    height: 40px;
+  }
+
+  .help-body {
+    padding: 4px 16px 18px;
+  }
+
+  .help-item summary {
+    padding: 13px 0;
+    font-size: 0.88rem;
+  }
+
+  .help-foot {
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+    gap: 10px;
+  }
+
+  .help-foot-actions {
+    width: 100%;
+  }
+
+  .help-btn {
+    flex: 1 1 0;
+  }
+}

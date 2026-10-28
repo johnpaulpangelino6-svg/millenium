@@ -1635,6 +1635,33 @@
         display: none;
       }
 
+      /* Below ~520px five links cannot fit on one row; scrolling left the last
+         item half-cut, which reads as a broken layout. Wrap them instead. */
+      @media (max-width: 520px) {
+        .nav-links {
+          overflow-x: visible;
+          flex-wrap: wrap;
+          row-gap: 2px;
+          padding-bottom: 2px;
+          max-height: 90px;
+          transition: max-height .22s var(--ease), opacity .18s var(--ease);
+        }
+
+        .nav-links a {
+          padding: 6px 10px;
+          font-size: .82rem;
+        }
+
+        /* Two rows of links plus the brand row is ~145px of permanently pinned
+           header on a phone. Once the page is scrolled, collapse the link row
+           and keep just the brand + CTA. */
+        .site-head.is-stuck .nav-links {
+          max-height: 0;
+          opacity: 0;
+          pointer-events: none;
+        }
+      }
+
       .nav-links a {
         padding: 8px 12px;
         font-size: .85rem;
